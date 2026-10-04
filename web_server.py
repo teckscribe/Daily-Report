@@ -40,6 +40,7 @@ from report_image_generator import generate_report_images, generate_acso_report_
 from whatsapp_sender import flash_report_image
 from data_processor import filter_adl, filter_adtv, filter_prepaid, write_working_copy
 from crm_downloader import download_from_crm
+import whatsapp_auth_manager
 
 app = FastAPI(
     title="Asianet Kerala Network Tracker - Regional Operations Manager",
@@ -625,6 +626,32 @@ def run_automated_cycle_now(payload: Optional[CycleRunPayload] = None, region_id
     elif region_id:
         target_region = region_id
     return execute_automated_cycle(target_region)
+
+
+# --- WhatsApp Web Session & Authentication Endpoints ---
+
+@app.get("/api/whatsapp/status")
+def get_whatsapp_auth_status():
+    """Returns current WhatsApp Web login and QR scan state."""
+    return whatsapp_auth_manager.get_whatsapp_status()
+
+
+@app.post("/api/whatsapp/start-login")
+def start_whatsapp_login():
+    """Launches background Chromium to fetch WhatsApp Web QR code."""
+    return whatsapp_auth_manager.start_login_flow()
+
+
+@app.post("/api/whatsapp/cancel-login")
+def cancel_whatsapp_login():
+    """Cancels active QR scan browser session."""
+    return whatsapp_auth_manager.cancel_login()
+
+
+@app.post("/api/whatsapp/logout")
+def logout_whatsapp_session():
+    """Wipes WhatsApp Web profile and session cache to allow pairing a new phone."""
+    return whatsapp_auth_manager.logout_session()
 
 
 # --- Background Scheduler Loop ---

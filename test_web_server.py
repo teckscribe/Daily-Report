@@ -224,6 +224,23 @@ def test_routes():
     assert "region = 'Kollam'" in q_adtv
     print("   [OK] Dynamic multi-region SQL queries verified.")
 
+    print("\n14. Testing WhatsApp Web Authentication Endpoints...")
+    res = client.get("/api/whatsapp/status")
+    assert res.status_code == 200
+    status_data = res.json()
+    assert "status" in status_data
+    print(f"   [OK] WhatsApp session status: {status_data['status']}")
+
+    res = client.post("/api/whatsapp/cancel-login")
+    assert res.status_code == 200
+    assert res.json()["status"] == "OK"
+    print("   [OK] WhatsApp cancel-login endpoint verified.")
+
+    res = client.post("/api/whatsapp/logout")
+    assert res.status_code == 200
+    assert res.json()["status"] == "OK"
+    print("   [OK] WhatsApp session logout and wipe verified.")
+
     print("\nALL TEST SUITE CHECKS PASSED PERFECTLY!")
 
 if __name__ == "__main__":
