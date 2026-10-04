@@ -73,21 +73,14 @@ def dismiss_active_dialogs(page):
 
 def attach_and_prepare_photo(page, file_path: str, img_name: str, max_retries: int = 3) -> bool:
     """
-    Robustly attaches a single photo message into the active conversation.
-    Uses direct input file injection first, with fallback to Photos & videos menu.
+    Attaches an image specifically as a full-resolution PHOTO message (never a sticker).
+    Targets the Photos & videos menuitem and its dedicated input[accept*='video/mp4'].
     """
     abs_path = str(Path(file_path).resolve())
 
     for attempt in range(1, max_retries + 1):
         try:
-            # 1. Check if file input is already present in DOM
-            file_input = page.locator("input[type='file'][accept*='image'], input[type='file']").first
-            if file_input.count() > 0:
-                file_input.set_input_files(abs_path)
-                print(f"[WhatsApp Web] Photo '{img_name}' loaded via existing file input (attempt {attempt}).")
-                return True
-
-            # 2. Click Attach button (+) in footer
+            # 1. Click Attach button (+) in footer
             attach_btn = page.locator(
                 "footer button[aria-label='Attach'], footer button[title='Attach'], "
                 "footer span[data-icon='plus'], footer span[data-icon='attach-menu-plus'], "
@@ -97,23 +90,31 @@ def attach_and_prepare_photo(page, file_path: str, img_name: str, max_retries: i
             attach_btn.click(force=True)
             time.sleep(1.0)
 
-            # 3. Check for file input now that Attach menu has rendered
-            file_input = page.locator("input[type='file'][accept*='image'], input[type='file']").first
-            if file_input.count() > 0:
-                file_input.set_input_files(abs_path)
-                print(f"[WhatsApp Web] Photo '{img_name}' loaded via direct file input (attempt {attempt}).")
+            # 2. Specifically target the Photos & Videos file input (accept*='video/mp4')
+            # In WhatsApp Web, ONLY Photos & Videos accepts video/mp4 (Stickers accept only images, never mp4).
+            photos_input = page.locator("input[type='file'][accept*='video/mp4']").first
+            if photos_input.count() > 0:
+                photos_input.set_input_files(abs_path)
+                print(f"[WhatsApp Web] Photo '{img_name}' loaded via Photos & videos input (attempt {attempt}).")
                 return True
 
-            # 4. Fallback: file chooser via Photos & videos button
+            # 3. Fallback: file chooser via the 'Photos & videos' menuitem
             photo_btn = page.locator(
                 "button[aria-label*='Photos'], [role='menuitem']:has-text('Photos'), "
-                "li button:has-text('Photos'), button[aria-label*='photos']"
+                "li button:has-text('Photos'), [data-animate-dropdown-item]:has-text('Photos')"
             ).first
             photo_btn.wait_for(state="visible", timeout=5000)
+
+            inner_input = photo_btn.locator("input[type='file']").first
+            if inner_input.count() > 0:
+                inner_input.set_input_files(abs_path)
+                print(f"[WhatsApp Web] Photo '{img_name}' loaded via inner Photos input (attempt {attempt}).")
+                return True
+
             with page.expect_file_chooser(timeout=7000) as fc:
                 photo_btn.click(force=True)
             fc.value.set_files(abs_path)
-            print(f"[WhatsApp Web] Photo '{img_name}' loaded via file chooser (attempt {attempt}).")
+            print(f"[WhatsApp Web] Photo '{img_name}' loaded via Photos & videos file chooser (attempt {attempt}).")
             return True
 
         except Exception as e_att:
