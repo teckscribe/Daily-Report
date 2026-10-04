@@ -773,7 +773,7 @@ def restore_backup(data: Dict[str, Any], target_region: Optional[str] = None, cl
 
     # Determine region scope
     meta_reg = data.get("_meta", {}).get("region_id")
-    reg_id = target_region or (meta_reg if meta_reg != "all" else None)
+    is_full_backup = (meta_reg == "all")
 
     scoped_tables = ["centers", "acsos", "team_leaders", "employees", "schedule_times", "dispatch_rules"]
     for t in scoped_tables:
@@ -781,13 +781,19 @@ def restore_backup(data: Dict[str, Any], target_region: Optional[str] = None, cl
             continue
         rows = tables[t]
         if clear_existing:
-            if reg_id:
-                c.execute(f'DELETE FROM "{t}" WHERE region_id = ?', (reg_id,))
-            else:
+            if target_region and not is_full_backup:
+                c.execute(f'DELETE FROM "{t}" WHERE region_id = ?', (target_region,))
+            elif is_full_backup and not target_region:
                 c.execute(f'DELETE FROM "{t}"')
+            elif target_region and is_full_backup:
+                c.execute(f'DELETE FROM "{t}" WHERE region_id = ?', (target_region,))
 
         for r in rows:
-            dest_reg = target_region or r.get("region_id", reg_id or "thrissur")
+            if target_region and not is_full_backup:
+                dest_reg = target_region
+            else:
+                dest_reg = r.get("region_id", target_region or "thrissur")
+
             r_copy = dict(r)
             r_copy["region_id"] = dest_reg
 

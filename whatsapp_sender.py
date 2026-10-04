@@ -50,33 +50,23 @@ def cleanup_stale_locks(session_dir: Path):
 
 
 def dismiss_active_dialogs(page):
-    """Dismisses WhatsApp Web startup modals, notification banners, and update popups."""
+    """Safely closes popup dialogs only if an actual dialog overlay is present."""
     try:
-        # Press Escape to dismiss soft overlays
-        for _ in range(2):
-            page.keyboard.press("Escape")
-            time.sleep(0.3)
-
-        # Check for any modal dialogs intercepting pointer events
         dialogs = page.locator("div[role='dialog']")
-        count = dialogs.count()
-        if count > 0:
-            for idx in range(count):
-                d = dialogs.nth(idx)
-                try:
-                    if d.is_visible():
-                        btn = d.locator(
-                            "button[aria-label*='Close'], button[aria-label*='Cancel'], [data-icon='x'], "
-                            "button:has-text('Not now'), button:has-text('Cancel'), button:has-text('OK'), "
-                            "button:has-text('Continue'), button:has-text('Dismiss')"
-                        ).first
-                        if btn.count() > 0 and btn.is_visible():
-                            btn.click(force=True, timeout=2000)
-                            time.sleep(0.5)
-                except Exception:
-                    pass
-            page.keyboard.press("Escape")
-            time.sleep(0.3)
+        for idx in range(dialogs.count()):
+            d = dialogs.nth(idx)
+            try:
+                if d.is_visible():
+                    btn = d.locator(
+                        "button[aria-label*='Close'], button[aria-label*='Cancel'], [data-icon='x'], "
+                        "button:has-text('Not now'), button:has-text('Cancel'), button:has-text('OK'), "
+                        "button:has-text('Continue'), button:has-text('Dismiss')"
+                    ).first
+                    if btn.count() > 0 and btn.is_visible():
+                        btn.click(force=True, timeout=1500)
+                        time.sleep(0.5)
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -84,49 +74,51 @@ def dismiss_active_dialogs(page):
 def attach_and_prepare_photo(page, file_path: str, img_name: str, max_retries: int = 3) -> bool:
     """
     Robustly attaches a single photo message into the active conversation.
-    Handles popup menu animations, direct file input injection, and retries on DOM instability.
+    Uses direct input file injection first, with fallback to Photos & videos menu.
     """
     abs_path = str(Path(file_path).resolve())
 
     for attempt in range(1, max_retries + 1):
         try:
-            # Ensure previous state is clear
-            page.keyboard.press("Escape")
-            time.sleep(0.5)
+            # 1. Check if file input is already present in DOM
+            file_input = page.locator("input[type='file'][accept*='image'], input[type='file']").first
+            if file_input.count() > 0:
+                file_input.set_input_files(abs_path)
+                print(f"[WhatsApp Web] Photo '{img_name}' loaded via existing file input (attempt {attempt}).")
+                return True
 
-            # 1. Click Attach button (+) in footer
+            # 2. Click Attach button (+) in footer
             attach_btn = page.locator(
                 "footer button[aria-label='Attach'], footer button[title='Attach'], "
                 "footer span[data-icon='plus'], footer span[data-icon='attach-menu-plus'], "
                 "footer div[aria-label='Attach'], footer button:has([data-icon='plus'])"
             ).first
-            attach_btn.wait_for(state="visible", timeout=10000)
+            attach_btn.wait_for(state="visible", timeout=8000)
             attach_btn.click(force=True)
             time.sleep(1.0)
 
-            # 2. Try direct file input (fastest, immune to popup animation instability)
+            # 3. Check for file input now that Attach menu has rendered
             file_input = page.locator("input[type='file'][accept*='image'], input[type='file']").first
             if file_input.count() > 0:
                 file_input.set_input_files(abs_path)
                 print(f"[WhatsApp Web] Photo '{img_name}' loaded via direct file input (attempt {attempt}).")
                 return True
 
-            # 3. Fallback: file chooser via Photos & videos button with force=True
+            # 4. Fallback: file chooser via Photos & videos button
             photo_btn = page.locator(
                 "button[aria-label*='Photos'], [role='menuitem']:has-text('Photos'), "
                 "li button:has-text('Photos'), button[aria-label*='photos']"
             ).first
             photo_btn.wait_for(state="visible", timeout=5000)
-            with page.expect_file_chooser(timeout=8000) as fc:
+            with page.expect_file_chooser(timeout=7000) as fc:
                 photo_btn.click(force=True)
             fc.value.set_files(abs_path)
             print(f"[WhatsApp Web] Photo '{img_name}' loaded via file chooser (attempt {attempt}).")
             return True
 
         except Exception as e_att:
-            print(f"[WhatsApp Web] Attach attempt {attempt}/{max_retries} notice: {e_att}. Retrying in 1.5s...")
-            page.keyboard.press("Escape")
-            time.sleep(1.5)
+            print(f"[WhatsApp Web] Attach attempt {attempt}/{max_retries} notice: {e_att}. Retrying in 1s...")
+            time.sleep(1.0)
 
     return False
 
@@ -213,7 +205,6 @@ def send_via_whatsapp_web(image_input: Union[Path, List[Path]], recipients: List
                         url = f"https://web.whatsapp.com/send?phone={normalized_num}"
                         print(f"\n[WhatsApp Web] Opening direct chat with phone number: +{normalized_num}...")
                         page.goto(url, timeout=90000)
-                        dismiss_active_dialogs(page)
 
                         print("[WhatsApp Web] Waiting for chat conversation to load...")
                         try:
@@ -225,13 +216,14 @@ def send_via_whatsapp_web(image_input: Union[Path, List[Path]], recipients: List
                         invalid_popup = page.locator("div[role='dialog']:has-text('invalid'), div[role='dialog']:has-text('Phone number')")
                         if invalid_popup.count() > 0 and invalid_popup.first.is_visible():
                             print(f"[WhatsApp Web] [!] Phone number +{normalized_num} is not registered on WhatsApp or URL is invalid.")
-                            page.keyboard.press("Escape")
-                            time.sleep(1)
+                            ok_btn = invalid_popup.locator("button").first
+                            if ok_btn.count() > 0 and ok_btn.is_visible():
+                                ok_btn.click(force=True)
                             continue
 
-                        page.wait_for_selector("footer", timeout=20000)
+                        page.wait_for_selector("footer", timeout=30000)
                         dismiss_active_dialogs(page)
-                        time.sleep(2)
+                        time.sleep(1.5)
                     else:
                         print(f"\n[WhatsApp Web] Opening chat for group: '{target}'...")
                         page.goto("https://web.whatsapp.com/", timeout=90000)
@@ -240,7 +232,6 @@ def send_via_whatsapp_web(image_input: Union[Path, List[Path]], recipients: List
                         page.wait_for_selector("#side", timeout=60000)
                         time.sleep(1.5)
 
-                        # Dismiss any modals covering #side
                         dismiss_active_dialogs(page)
 
                         print(f"[WhatsApp Web] Searching for group: '{target}'...")
@@ -257,7 +248,7 @@ def send_via_whatsapp_web(image_input: Union[Path, List[Path]], recipients: List
                         search_box.click(force=True)
                         search_box.fill("")
                         search_box.fill(target)
-                        time.sleep(2.5)
+                        time.sleep(2.0)
 
                         # Check if matching chat appears in results
                         chat_item = page.locator(
@@ -272,40 +263,43 @@ def send_via_whatsapp_web(image_input: Union[Path, List[Path]], recipients: List
 
                         page.wait_for_selector("footer", timeout=30000)
                         dismiss_active_dialogs(page)
-                        time.sleep(2)
+                        time.sleep(1.5)
 
                     # Send each image as a separate standalone PHOTO message (full chat-bubble width).
                     for idx, single_image in enumerate(file_paths, 1):
                         img_name = Path(single_image).name
                         print(f"\n[WhatsApp Web] Sending photo {idx}/{len(file_paths)}: {img_name}...")
-                        time.sleep(1.0)
 
                         # Wait for footer to be present before attaching
-                        page.wait_for_selector("footer", timeout=15000)
-                        dismiss_active_dialogs(page)
+                        page.wait_for_selector("footer", timeout=20000)
 
                         success_attach = attach_and_prepare_photo(page, single_image, img_name)
                         if not success_attach:
                             print(f"[WhatsApp Web] [!] Failed to attach '{img_name}'. Skipping to next photo...")
                             continue
 
-                        print(f"[WhatsApp Web] Photo '{img_name}' loaded in preview. Waiting for upload/send...")
-                        time.sleep(2.5)
+                        print(f"[WhatsApp Web] Photo '{img_name}' loaded in preview. Waiting for send button...")
+                        time.sleep(2.0)
 
                         # Click Send button in the preview overlay
                         send_btn = page.locator(
                             "span[data-icon='send'], div[aria-label='Send'], button[aria-label='Send'], span[data-icon='send-refreshed']"
                         ).first
+                        try:
+                            send_btn.wait_for(state="visible", timeout=12000)
+                        except Exception:
+                            pass
+
                         if send_btn.count() > 0 and send_btn.is_visible():
                             send_btn.click(force=True)
                         else:
                             page.keyboard.press("Enter")
 
                         print(f"[WhatsApp Web] [OK] Sent photo '{img_name}' to: {target}. Waiting for upload confirmation...")
-                        time.sleep(3)
+                        time.sleep(2.5)
 
                         # Wait for upload to complete
-                        for attempt in range(45):
+                        for _ in range(45):
                             has_clock = page.locator("span[data-icon='msg-time']").count() > 0
                             has_progress = page.locator("div[role='progressbar'], button[aria-label='Cancel upload']").count() > 0
                             if not has_clock and not has_progress:
@@ -313,8 +307,8 @@ def send_via_whatsapp_web(image_input: Union[Path, List[Path]], recipients: List
                             time.sleep(1)
 
                         # Delivery buffer between consecutive images
-                        print(f"[WhatsApp Web] Upload confirmed for '{img_name}'. 6s delivery buffer...")
-                        time.sleep(6)
+                        print(f"[WhatsApp Web] Upload confirmed for '{img_name}'. 5s delivery buffer...")
+                        time.sleep(5)
 
                     print(f"[WhatsApp Web] [SUCCESS] All {len(file_paths)} standalone report(s) delivered to: {target}!")
                     delivered_recipients.append(target)
