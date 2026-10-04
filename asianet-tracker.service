@@ -7,8 +7,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=psms
-WorkingDirectory="/home/psms/Daily Work Reports"
-ExecStart="/home/psms/Daily Work Reports/venv/bin/python" -m uvicorn web_server:app --host 0.0.0.0 --port 8201
+WorkingDirectory=/home/psms
+ExecStart=/bin/bash -c "cd '/home/psms/Daily Work Reports' && exec ./venv/bin/python -m uvicorn web_server:app --host 0.0.0.0 --port 8201"
 Restart=always
 RestartSec=10
 TimeoutStartSec=60

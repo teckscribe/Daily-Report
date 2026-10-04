@@ -73,8 +73,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=$ACTUAL_USER
-WorkingDirectory="$APP_DIR"
-ExecStart="$APP_DIR/venv/bin/python" -m uvicorn web_server:app --host 0.0.0.0 --port 8201
+WorkingDirectory=$ACTUAL_HOME
+ExecStart=/bin/bash -c "cd '$APP_DIR' && exec ./venv/bin/python -m uvicorn web_server:app --host 0.0.0.0 --port 8201"
 Restart=always
 RestartSec=10
 TimeoutStartSec=60
