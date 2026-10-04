@@ -505,6 +505,9 @@
       from { transform: translateY(100%); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -1159,11 +1162,13 @@
     }
 
     // --- Tab Switching ---
-    function setTab(tabName) {
+    function setTab(tabName, clickedBtn) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-      event.currentTarget.classList.add('active');
-      document.getElementById('tab-' + tabName).classList.add('active');
+      const btn = clickedBtn || (window.event && window.event.currentTarget) || document.querySelector(`[onclick*="setTab('${tabName}')"]`);
+      if (btn && btn.classList) btn.classList.add('active');
+      const targetPane = document.getElementById('tab-' + tabName);
+      if (targetPane) targetPane.classList.add('active');
       if (tabName === 'whatsapp') {
         checkWhatsAppStatus();
       }
@@ -2119,11 +2124,12 @@
         title.innerText = "Waiting for QR Code Scan...";
         title.style.color = "#0369a1";
         desc.innerText = "Point your phone camera at the QR code below to pair.";
-        meta.innerText = "";
+        meta.innerText = "QR code is active. Will automatically pair once scanned.";
 
         qrContainer.style.display = "block";
-        if (data.qr_url) {
+        if (data.qr_url && qrImg.getAttribute('data-src') !== data.qr_url) {
           qrImg.src = data.qr_url;
+          qrImg.setAttribute('data-src', data.qr_url);
         }
 
         actions.innerHTML = `
@@ -2131,20 +2137,20 @@
         `;
 
         if (!waPollTimer) {
-          waPollTimer = setInterval(checkWhatsAppStatus, 2500);
+          waPollTimer = setInterval(checkWhatsAppStatus, 2000);
         }
       } else if (data.status === 'starting') {
-        badge.innerText = "Starting...";
+        badge.innerText = "Loading...";
         badge.style.background = "#fef3c7";
         badge.style.color = "#b45309";
 
         box.style.borderColor = "#d97706";
         box.style.background = "#fffbeb";
-        icon.innerText = "⏳";
-        title.innerText = "Opening WhatsApp Web...";
+        icon.innerHTML = `<span style="display:inline-block; animation: spin 1.5s linear infinite;">⏳</span>`;
+        title.innerText = "Opening WhatsApp Web Engine...";
         title.style.color = "#b45309";
-        desc.innerText = data.message || "Initializing browser context and generating QR code...";
-        meta.innerText = "";
+        desc.innerText = data.message || "Initializing browser engine and loading WhatsApp Web...";
+        meta.innerText = "Please wait a few moments while the QR canvas is retrieved...";
         qrContainer.style.display = "none";
 
         actions.innerHTML = `
@@ -2152,8 +2158,32 @@
         `;
 
         if (!waPollTimer) {
-          waPollTimer = setInterval(checkWhatsAppStatus, 2500);
+          waPollTimer = setInterval(checkWhatsAppStatus, 2000);
         }
+      } else if (data.status === 'error' || data.status === 'timeout') {
+        if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; }
+        const isTimeout = data.status === 'timeout';
+        badge.innerText = isTimeout ? "Timeout" : "Error";
+        badge.style.background = "#fee2e2";
+        badge.style.color = "#b91c1c";
+
+        box.style.borderColor = "#dc2626";
+        box.style.background = "#fef2f2";
+        icon.innerText = "⚠️";
+        title.innerText = isTimeout ? "QR Code Expired / Timed Out" : "WhatsApp Initialization Notice";
+        title.style.color = "#b91c1c";
+        desc.innerText = data.message || "An issue occurred while loading WhatsApp Web.";
+        meta.innerText = isTimeout ? "The QR code was not scanned in time." : "Please check your network and try again.";
+        qrContainer.style.display = "none";
+
+        actions.innerHTML = `
+          <button class="btn btn-primary" onclick="startWhatsAppLogin()" style="background: #16a34a; border-color: #15803d; font-size: 1rem; padding: 0.65rem 1.5rem;">
+            📱 Try Scanning Again
+          </button>
+          <button class="btn btn-danger" onclick="logoutWhatsAppSession()" style="background: #dc2626; border-color: #b91c1c;">
+            🚪 Reset / Clear Session
+          </button>
+        `;
       } else {
         // Disconnected or idle
         if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; }

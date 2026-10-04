@@ -27,6 +27,10 @@ STATUS_FILE = DATA_DIR / "whatsapp_status.json"
 QR_IMAGE_PATH = OUTPUT_DIR / "whatsapp_qr.png"
 SESSION_DIR = DATA_DIR / "whatsapp_session"
 
+CHROME_DESKTOP_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+)
+
 AUTH_LOCK = threading.Lock()
 _login_thread: Optional[threading.Thread] = None
 _stop_requested = False
@@ -105,12 +109,16 @@ def _run_playwright_login():
     global _stop_requested
     try:
         SESSION_DIR.mkdir(parents=True, exist_ok=True)
+        QR_IMAGE_PATH.parent.mkdir(parents=True, exist_ok=True)
         cleanup_stale_locks(SESSION_DIR)
 
+        print("[WhatsApp Auth] Launching browser engine with desktop User-Agent...")
         with sync_playwright() as p:
             launch_kwargs = {
                 "headless": True,
                 "user_data_dir": str(SESSION_DIR),
+                "user_agent": CHROME_DESKTOP_UA,
+                "viewport": {"width": 1280, "height": 800},
                 "args": [
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
@@ -140,21 +148,26 @@ def _run_playwright_login():
                 _current_state["status"] = "starting"
                 _current_state["message"] = "Loading WhatsApp Web (https://web.whatsapp.com/)..."
 
-            page.goto("https://web.whatsapp.com/", timeout=90000)
+            print("[WhatsApp Auth] Navigating to https://web.whatsapp.com/...")
+            page.goto("https://web.whatsapp.com/", wait_until="domcontentloaded", timeout=60000)
 
             start_time = time.time()
             max_duration = 300  # 5 minutes maximum for QR scan
+            last_capture_time = 0.0
 
             while time.time() - start_time < max_duration:
                 if _stop_requested:
+                    print("[WhatsApp Auth] Login process cancelled by user request.")
                     break
 
                 # 1. Check if already authenticated
-                if page.locator("#side, div[contenteditable='true'][data-tab='3'], div[aria-label='Search']").count() > 0:
+                if page.locator("#side, div[data-testid='chat-list'], header[data-testid='chatlist-header'], div[contenteditable='true'][data-tab='3']").count() > 0:
+                    print("[WhatsApp Auth] Chat UI detected! WhatsApp account authenticated successfully.")
                     with AUTH_LOCK:
                         _current_state["status"] = "authenticated"
                         _current_state["message"] = "Successfully linked and authenticated!"
                         _current_state["qr_available"] = False
+                        _current_state["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
                     STATUS_FILE.write_text(
                         json.dumps({
@@ -172,8 +185,9 @@ def _run_playwright_login():
                     break
 
                 # 2. Check for reload button on expired QR code
-                reload_btn = page.locator("span[data-icon='refresh'], button:has-text('reload'), div[role='button']:has(span[data-icon='refresh'])").first
+                reload_btn = page.locator("button:has-text('reload'), button:has-text('Click to reload'), span[data-icon='refresh'], div[role='button']:has(span[data-icon='refresh'])").first
                 if reload_btn.count() > 0 and reload_btn.is_visible():
+                    print("[WhatsApp Auth] QR code expired on WhatsApp Web. Clicking reload...")
                     try:
                         reload_btn.click()
                         time.sleep(2)
@@ -181,27 +195,21 @@ def _run_playwright_login():
                         pass
 
                 # 3. Check for QR code element
-                qr_loc = page.locator("canvas, div[data-ref], div[data-testid='qrcode'], div[aria-label*='QR']").first
-                if qr_loc.count() > 0 and qr_loc.is_visible():
-                    try:
-                        # Capture specific QR code element
-                        qr_loc.screenshot(path=str(QR_IMAGE_PATH.resolve()))
-                    except Exception:
-                        # Fallback to landing card screenshot
+                canvas = page.locator("canvas, div[data-ref], div[data-testid='qrcode']").first
+                if canvas.count() > 0 and canvas.is_visible():
+                    now = time.time()
+                    if (not _current_state.get("qr_available")) or (now - last_capture_time >= 5):
                         try:
-                            card = page.locator("div[data-testid='landing-wrapper'], div._ak8l").first
-                            if card.count() > 0 and card.is_visible():
-                                card.screenshot(path=str(QR_IMAGE_PATH.resolve()))
-                            else:
-                                page.screenshot(path=str(QR_IMAGE_PATH.resolve()))
-                        except Exception:
-                            pass
-
-                    with AUTH_LOCK:
-                        _current_state["status"] = "needs_scan"
-                        _current_state["message"] = "QR Code ready. Open WhatsApp on your phone -> Linked Devices -> Scan QR Code."
-                        _current_state["qr_available"] = True
-                        _current_state["last_qr_ts"] = time.time()
+                            canvas.screenshot(path=str(QR_IMAGE_PATH.resolve()))
+                            last_capture_time = now
+                            with AUTH_LOCK:
+                                _current_state["status"] = "needs_scan"
+                                _current_state["message"] = "QR Code ready. Open WhatsApp on your phone -> Linked Devices -> Scan QR Code."
+                                _current_state["qr_available"] = True
+                                _current_state["last_qr_ts"] = now
+                            print(f"[WhatsApp Auth] Live QR code snapshot updated at {datetime.now().strftime('%H:%M:%S')}")
+                        except Exception as e_shot:
+                            print(f"[WhatsApp Auth] Warning taking QR snapshot: {e_shot}")
 
                 time.sleep(2)
 
@@ -213,6 +221,7 @@ def _run_playwright_login():
 
             context.close()
     except Exception as e:
+        print(f"[WhatsApp Auth] Browser error: {e}")
         with AUTH_LOCK:
             _current_state["status"] = "error"
             _current_state["message"] = f"Browser error: {e}"

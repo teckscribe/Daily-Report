@@ -85,6 +85,8 @@ def send_via_whatsapp_web(image_input: Union[Path, List[Path]], recipients: List
             launch_kwargs = {
                 "headless": False if sys.platform == "win32" else True,
                 "user_data_dir": str(session_dir),
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                "viewport": {"width": 1280, "height": 800},
                 "args": [
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
