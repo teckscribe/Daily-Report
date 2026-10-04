@@ -742,7 +742,7 @@
             </p>
           </div>
           <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-            <input type="tel" id="test-phone-number" value="+919633889430" placeholder="+91XXXXXXXXXX" style="padding: 0.5rem 0.75rem; border: 1.5px solid #86efac; border-radius: var(--radius); font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 0.92rem; width: 180px; background: white;">
+            <input type="tel" id="test-phone-number" value="" placeholder="+91XXXXXXXXXX" style="padding: 0.5rem 0.75rem; border: 1.5px solid #86efac; border-radius: var(--radius); font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 0.92rem; width: 180px; background: white;">
             <select id="test-report-type" style="padding: 0.5rem 0.65rem; border: 1.5px solid #86efac; border-radius: var(--radius); font-size: 0.85rem; font-weight: 600; background: white;">
               <option value="all">All 4 Reports</option>
               <option value="adl_tl">ADL Team Leader</option>
@@ -1234,7 +1234,7 @@
         </div>
         <div class="form-group">
           <label>Target WhatsApp Groups / Mobile Numbers *</label>
-          <textarea id="rule-recipients" rows="2" required placeholder="e.g. NW Team TCR- REGION, +919633889430" style="width: 100%; border: 1px solid var(--border-dark); border-radius: var(--radius); padding: 0.6rem; font-family: inherit; font-size: 0.85rem;"></textarea>
+          <textarea id="rule-recipients" rows="2" required placeholder="e.g. Operations Group, +91XXXXXXXXXX" style="width: 100%; border: 1px solid var(--border-dark); border-radius: var(--radius); padding: 0.6rem; font-family: inherit; font-size: 0.85rem;"></textarea>
           <span class="hint">Separate multiple WhatsApp group names or phone numbers with commas (e.g. Group Name 1, +919846000000)</span>
         </div>
         <div class="form-group">
@@ -1753,7 +1753,7 @@
     }
 
     async function dispatchToWhatsApp() {
-      if (!confirm("Dispatch latest report cards to your WhatsApp (+919633889430)?")) return;
+      if (!confirm("Dispatch latest report cards to all active configured WhatsApp rules?")) return;
       showToast("Sending reports to WhatsApp in background...", "info");
       try {
         const res = await fetch(`/api/regions/${currentRegion}/dispatch-whatsapp`, { method: 'POST' });
@@ -1761,7 +1761,7 @@
         if (data.status === "OK") {
           showToast("Reports successfully queued/delivered to WhatsApp!");
         } else {
-          showToast(data.message || "WhatsApp dispatch error", "error");
+          showToast(data.detail || data.message || "WhatsApp dispatch error", "error");
         }
       } catch (err) {
         showToast("Error sending to WhatsApp", "error");
@@ -1779,6 +1779,9 @@
         phoneInput.focus();
         return;
       }
+      try {
+        localStorage.setItem('dwr_test_phone', phone);
+      } catch (e) {}
 
       if (btn) {
         btn.disabled = true;
@@ -1928,7 +1931,7 @@
             </td>
             <td>
               <div style="display: flex; flex-wrap: wrap; gap: 0.2rem;">
-                ${recipientBadges || '<span style="color: var(--text-muted); font-size: 0.8rem;">None</span>'}
+                ${recipientBadges || '<span style="color: #94a3b8; font-style: italic; font-size: 0.8rem;">None (Click Edit to set targets)</span>'}
               </div>
             </td>
             <td style="text-align: center;">
@@ -2554,6 +2557,14 @@
 
     // Init
     window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const savedPhone = localStorage.getItem('dwr_test_phone');
+        if (savedPhone) {
+          const testInput = document.getElementById('test-phone-number');
+          if (testInput && !testInput.value) testInput.value = savedPhone;
+        }
+      } catch (e) {}
+
       await loadRegions();
       await loadRegionConfig('thrissur');
       checkWhatsAppStatus();

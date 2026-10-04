@@ -240,19 +240,19 @@ def init_db():
     if c.fetchone()[0] == 0:
         c.execute("""
         INSERT INTO dispatch_rules (region_id, rule_name, report_type, target_recipients, is_enabled, created_at, updated_at)
-        VALUES ('thrissur', 'ADL Team Leader Reports', 'adl_tl', 'NW Team TCR- REGION, +919633889430', 1, ?, ?)
+        VALUES ('thrissur', 'ADL Team Leader Reports', 'adl_tl', '', 1, ?, ?)
         """, (now_str, now_str))
         c.execute("""
         INSERT INTO dispatch_rules (region_id, rule_name, report_type, target_recipients, is_enabled, created_at, updated_at)
-        VALUES ('thrissur', 'ADTv Team Leader Reports', 'adtv_tl', 'NW Team TCR- REGION, +919633889430', 1, ?, ?)
+        VALUES ('thrissur', 'ADTv Team Leader Reports', 'adtv_tl', '', 1, ?, ?)
         """, (now_str, now_str))
         c.execute("""
         INSERT INTO dispatch_rules (region_id, rule_name, report_type, target_recipients, is_enabled, created_at, updated_at)
-        VALUES ('thrissur', 'ADL ACSO Centers Report', 'adl_acso', 'NW Team TCR- REGION, +919633889430', 1, ?, ?)
+        VALUES ('thrissur', 'ADL ACSO Centers Report', 'adl_acso', '', 1, ?, ?)
         """, (now_str, now_str))
         c.execute("""
         INSERT INTO dispatch_rules (region_id, rule_name, report_type, target_recipients, is_enabled, created_at, updated_at)
-        VALUES ('thrissur', 'ADTv ACSO Centers Report', 'adtv_acso', 'NW Team TCR- REGION, +919633889430', 1, ?, ?)
+        VALUES ('thrissur', 'ADTv ACSO Centers Report', 'adtv_acso', '', 1, ?, ?)
         """, (now_str, now_str))
         conn.commit()
 

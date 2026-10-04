@@ -371,9 +371,12 @@ def dispatch_whatsapp(region_id: str):
                     if clean and clean not in targets:
                         targets.append(clean)
 
-        # Fallback to configured admin phone if no rules are defined/enabled
+        # Validate that targets are configured
         if not targets:
-            targets = ["+919633889430"]
+            raise HTTPException(
+                status_code=400,
+                detail="No target WhatsApp groups or phone numbers are configured in active dispatch rules. Please configure target recipients in the Auto Schedule & Routing tab."
+            )
 
         success = flash_report_image(images, target_recipients=targets)
         if success:
@@ -549,9 +552,12 @@ def trigger_dispatch_rule_endpoint(rule_id: int):
     rule = next((r for r in rules if r["id"] == rule_id), None)
     if not rule:
         raise HTTPException(status_code=404, detail="Dispatch rule not found")
-    targets = [t.strip() for t in rule["target_recipients"].split(",") if t.strip()]
+    targets = [t.strip() for t in (rule.get("target_recipients") or "").split(",") if t.strip()]
     if not targets:
-        raise HTTPException(status_code=400, detail="No recipients defined for this rule")
+        raise HTTPException(
+            status_code=400,
+            detail=f"No target recipients defined for rule '{rule.get('rule_name', 'Rule')}'. Please click 'Edit' to configure WhatsApp groups or phone numbers."
+        )
     imgs = get_images_for_report_type(rule["report_type"])
     missing = [i for i in imgs if not i.exists()]
     if missing:
