@@ -29,6 +29,10 @@ backups/
 temp_hist_*.db
 *.tmp
 
+# Logs & Diagnostics
+logs/*.log
+!logs/.gitkeep
+
 # System & IDE
 .DS_Store
 Thumbs.db

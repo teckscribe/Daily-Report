@@ -41,6 +41,10 @@ from whatsapp_sender import flash_report_image
 from data_processor import filter_adl, filter_adtv, filter_prepaid, write_working_copy
 from crm_downloader import download_from_crm
 import whatsapp_auth_manager
+import logger_setup
+
+# Initialize dual-stream 3-day rotating logging
+logger_setup.init_logging()
 
 app = FastAPI(
     title="Asianet Kerala Network Tracker - Regional Operations Manager",
@@ -652,6 +656,36 @@ def cancel_whatsapp_login():
 def logout_whatsapp_session():
     """Wipes WhatsApp Web profile and session cache to allow pairing a new phone."""
     return whatsapp_auth_manager.logout_session()
+
+
+# --- Logs & System Diagnostics Endpoints ---
+
+@app.get("/api/logs/files")
+def api_get_log_files():
+    """Returns list of all available running and error log files in logs/ directory."""
+    return logger_setup.get_log_files()
+
+
+@app.get("/api/logs/view")
+def api_view_log(file: Optional[str] = None, type: str = "running", lines: int = 300):
+    """Returns tail content of a specific log file or today's default log."""
+    safe_lines = min(max(lines, 10), 2000)
+    return logger_setup.read_log_file(file_name=file, log_type=type, max_lines=safe_lines)
+
+
+@app.get("/api/logs/analysis")
+def api_analyze_logs(days: int = 3):
+    """Performs deep log diagnostic analysis, health score calculation, and issue categorization."""
+    safe_days = min(max(days, 1), 7)
+    return logger_setup.analyze_system_logs(days=safe_days)
+
+
+@app.post("/api/logs/cleanup")
+def api_cleanup_logs(days: int = 3):
+    """Purges log files older than N days (default 3 days)."""
+    safe_days = min(max(days, 1), 30)
+    deleted = logger_setup.cleanup_old_logs(retention_days=safe_days)
+    return {"status": "OK", "deleted_files": deleted, "count": len(deleted)}
 
 
 # --- Background Scheduler Loop ---

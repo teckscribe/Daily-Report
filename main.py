@@ -12,6 +12,9 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
+import logger_setup
+logger_setup.init_logging()
+
 from config import (
     REPORT_IMAGE_PATH,
     ADL_REPORT_IMAGE_PATH,

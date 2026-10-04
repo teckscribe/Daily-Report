@@ -600,6 +600,10 @@
         <span>WhatsApp Login</span>
         <span class="tab-badge" id="badge-whatsapp" style="background: #fee2e2; color: #b91c1c;">Offline</span>
       </button>
+      <button class="tab-btn" onclick="setTab('logs')">
+        <span>System Logs & Diagnostics</span>
+        <span class="tab-badge" id="badge-logs" style="background: #e2e8f0; color: #475569;">Logs (3d)</span>
+      </button>
     </div>
 
     <!-- TAB 1: Team Leaders -->
@@ -892,6 +896,133 @@
         </div>
       </div>
     </div>
+
+    <!-- TAB 7: System Logs & Diagnostics (3-Day Retention) -->
+    <div id="tab-logs" class="tab-pane">
+      
+      <!-- Top Diagnostic & Health Overview -->
+      <div class="section-card" style="margin-bottom: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.35rem;">
+              <h3 style="font-size: 1.2rem; font-weight: 800;">📋 System Logs &amp; Diagnostic Monitor</h3>
+              <span id="log-health-pill" class="badge" style="background: #dcfce7; color: #15803d; font-weight: 700; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.8rem;">
+                HEALTHY
+              </span>
+            </div>
+            <p id="log-health-desc" style="font-size: 0.85rem; color: var(--text-muted);">
+              Capturing all running execution logs and error logs. Automatically retained for 3 days.
+            </p>
+          </div>
+
+          <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="runLogDiagnostics()">
+              <span>🔍</span> Analyze Issues
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="cleanupLogsNow()">
+              <span>🧹</span> Prune &gt; 3 Days
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="fetchActiveLog()">
+              <span>🔄</span> Refresh Logs
+            </button>
+          </div>
+        </div>
+
+        <!-- Metric Badges Row -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-top: 1.25rem;">
+          <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85rem 1rem;">
+            <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Health Score</div>
+            <div id="diag-score" style="font-size: 1.5rem; font-weight: 800; color: #16a34a; margin-top: 0.2rem;">100%</div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85rem 1rem;">
+            <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Errors (3d)</div>
+            <div id="diag-errors" style="font-size: 1.5rem; font-weight: 800; color: #dc2626; margin-top: 0.2rem;">0</div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85rem 1rem;">
+            <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Warnings (3d)</div>
+            <div id="diag-warnings" style="font-size: 1.5rem; font-weight: 800; color: #d97706; margin-top: 0.2rem;">0</div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85rem 1rem;">
+            <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Retention Window</div>
+            <div style="font-size: 1.2rem; font-weight: 800; color: #0284c7; margin-top: 0.3rem;">3 Days Active</div>
+          </div>
+        </div>
+
+        <!-- Issue Categories Breakdown -->
+        <div id="diag-breakdown-box" style="margin-top: 1.25rem; display: none; padding: 1rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius);">
+          <h4 style="font-size: 0.95rem; font-weight: 700; color: #92400e; margin-bottom: 0.5rem;">Diagnostic Findings &amp; Recommendations</h4>
+          <ul id="diag-recommendations-list" style="margin-left: 1.25rem; font-size: 0.85rem; color: #78350f; line-height: 1.6;">
+          </ul>
+        </div>
+      </div>
+
+      <!-- Log Terminal Card -->
+      <div class="section-card" style="padding: 1.25rem;">
+        
+        <!-- Controls Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.85rem; margin-bottom: 1rem;">
+          
+          <!-- Stream Switcher Buttons -->
+          <div style="display: inline-flex; border: 1px solid var(--border-dark); border-radius: var(--radius); overflow: hidden; background: #f8fafc;">
+            <button id="btn-stream-running" class="btn btn-sm" onclick="switchLogStream('running')" style="background: #0284c7; color: white; border-radius: 0; font-weight: 700;">
+              🟢 Running Logs (All)
+            </button>
+            <button id="btn-stream-error" class="btn btn-sm" onclick="switchLogStream('error')" style="background: transparent; color: var(--text-main); border-radius: 0; font-weight: 700;">
+              🔴 Error Logs Only
+            </button>
+          </div>
+
+          <!-- File and Tail Selectors -->
+          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <label for="logFileSelect" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">File:</label>
+              <select id="logFileSelect" onchange="onLogFileChange(this.value)" style="font-size: 0.82rem; padding: 0.35rem 0.6rem; border: 1px solid var(--border-dark); border-radius: var(--radius); background: white;">
+                <option value="">Today's Active Log</option>
+              </select>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <label for="logLinesSelect" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Lines:</label>
+              <select id="logLinesSelect" onchange="fetchActiveLog()" style="font-size: 0.82rem; padding: 0.35rem 0.6rem; border: 1px solid var(--border-dark); border-radius: var(--radius); background: white;">
+                <option value="100">100 lines</option>
+                <option value="300" selected>300 lines</option>
+                <option value="600">600 lines</option>
+                <option value="1200">1200 lines</option>
+              </select>
+            </div>
+
+            <!-- Search Filter -->
+            <input type="text" id="logSearchInput" oninput="filterDisplayedLogs()" placeholder="Filter log text..." style="font-size: 0.82rem; padding: 0.35rem 0.6rem; border: 1px solid var(--border-dark); border-radius: var(--radius); width: 170px;">
+
+            <!-- Auto Refresh Toggle -->
+            <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); cursor: pointer;">
+              <input type="checkbox" id="logAutoRefresh" onchange="toggleLogAutoRefresh(this.checked)"> Auto-Refresh
+            </label>
+          </div>
+        </div>
+
+        <!-- Terminal Window Frame -->
+        <div style="background: #090d16; border-radius: 8px; border: 1px solid #1e293b; overflow: hidden; box-shadow: var(--shadow);">
+          <!-- Window Header Bar -->
+          <div style="background: #0f172a; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b;">
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <span style="width: 11px; height: 11px; border-radius: 50%; background: #ef4444; display: inline-block;"></span>
+              <span style="width: 11px; height: 11px; border-radius: 50%; background: #f59e0b; display: inline-block;"></span>
+              <span style="width: 11px; height: 11px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
+              <span id="terminal-filename" style="margin-left: 0.5rem; font-family: monospace; font-size: 0.8rem; color: #94a3b8;">running_today.log</span>
+            </div>
+            <div style="font-family: monospace; font-size: 0.75rem; color: #64748b;" id="terminal-meta">
+              0 lines
+            </div>
+          </div>
+
+          <!-- Console Output Box -->
+          <pre id="terminal-content" style="margin: 0; padding: 1rem; max-height: 520px; overflow-y: auto; font-family: 'JetBrains Mono', Consolas, Monaco, monospace; font-size: 0.82rem; line-height: 1.5; color: #e2e8f0; white-space: pre-wrap; word-break: break-all;"></pre>
+        </div>
+
+      </div>
+
+    </div>
   </main>
 
   <!-- MODAL: Add/Edit Team Leader -->
@@ -1171,6 +1302,10 @@
       if (targetPane) targetPane.classList.add('active');
       if (tabName === 'whatsapp') {
         checkWhatsAppStatus();
+      } else if (tabName === 'logs') {
+        loadLogFilesList();
+        fetchActiveLog();
+        runLogDiagnostics();
       }
     }
 
@@ -2257,11 +2392,172 @@
       }
     }
 
+    // --- System Logs & Diagnostics (3-Day Auto-Retention) ---
+    let activeLogStream = "running";
+    let activeLogFile = "";
+    let rawLogLines = [];
+    let logAutoRefreshTimer = null;
+
+    async function loadLogFilesList() {
+      try {
+        const res = await fetch('/api/logs/files');
+        const files = await res.json();
+        const select = document.getElementById('logFileSelect');
+        const filtered = files.filter(f => f.type === activeLogStream);
+        
+        let opts = `<option value="">Today's Active (${activeLogStream})</option>`;
+        opts += filtered.map(f => `
+          <option value="${escapeHtml(f.name)}" ${f.name === activeLogFile ? 'selected' : ''}>
+            ${escapeHtml(f.name)} (${f.size_kb} KB)
+          </option>
+        `).join('');
+        select.innerHTML = opts;
+      } catch (err) {
+        console.error("Error loading log files list:", err);
+      }
+    }
+
+    async function switchLogStream(streamType) {
+      activeLogStream = streamType;
+      activeLogFile = "";
+      document.getElementById('btn-stream-running').style.background = streamType === 'running' ? '#0284c7' : 'transparent';
+      document.getElementById('btn-stream-running').style.color = streamType === 'running' ? '#ffffff' : 'var(--text-main)';
+      document.getElementById('btn-stream-error').style.background = streamType === 'error' ? '#dc2626' : 'transparent';
+      document.getElementById('btn-stream-error').style.color = streamType === 'error' ? '#ffffff' : 'var(--text-main)';
+      await loadLogFilesList();
+      fetchActiveLog();
+    }
+
+    function onLogFileChange(val) {
+      activeLogFile = val;
+      fetchActiveLog();
+    }
+
+    async function fetchActiveLog() {
+      const lines = document.getElementById('logLinesSelect').value || 300;
+      const fileParam = activeLogFile ? `&file=${encodeURIComponent(activeLogFile)}` : '';
+      try {
+        const res = await fetch(`/api/logs/view?type=${activeLogStream}&lines=${lines}${fileParam}`);
+        const data = await res.json();
+        rawLogLines = data.lines || [];
+        document.getElementById('terminal-filename').innerText = data.file_name || `${activeLogStream}_log`;
+        document.getElementById('terminal-meta').innerText = `${data.total_lines || 0} total lines | ${data.size_kb || 0} KB`;
+        renderFormattedLogs(rawLogLines);
+      } catch (err) {
+        document.getElementById('terminal-content').innerText = "Error loading logs from server.";
+      }
+    }
+
+    function renderFormattedLogs(lines) {
+      const q = (document.getElementById('logSearchInput').value || '').toLowerCase();
+      const pre = document.getElementById('terminal-content');
+      
+      const filtered = q ? lines.filter(l => l.toLowerCase().includes(q)) : lines;
+      if (filtered.length === 0) {
+        pre.innerHTML = `<span style="color: #64748b;">(No log entries match the filter)</span>`;
+        return;
+      }
+
+      const formatted = filtered.map(l => {
+        let esc = escapeHtml(l);
+        if (esc.includes('[ERROR]') || esc.includes('Exception') || esc.includes('Traceback') || esc.includes('CRITICAL')) {
+          return `<span style="color: #f87171; font-weight: 600;">${esc}</span>`;
+        } else if (esc.includes('[WARNING]') || esc.includes('WARN')) {
+          return `<span style="color: #fbbf24;">${esc}</span>`;
+        } else if (esc.includes('[Scheduler]') || esc.includes('[SUCCESS]') || esc.includes('[OK]')) {
+          return `<span style="color: #34d399;">${esc}</span>`;
+        } else if (esc.includes('[WhatsApp Auth]') || esc.includes('[WhatsApp Web]')) {
+          return `<span style="color: #38bdf8;">${esc}</span>`;
+        }
+        return `<span>${esc}</span>`;
+      }).join('\n');
+
+      pre.innerHTML = formatted;
+      pre.scrollTop = pre.scrollHeight;
+    }
+
+    function filterDisplayedLogs() {
+      renderFormattedLogs(rawLogLines);
+    }
+
+    function toggleLogAutoRefresh(enabled) {
+      if (logAutoRefreshTimer) {
+        clearInterval(logAutoRefreshTimer);
+        logAutoRefreshTimer = null;
+      }
+      if (enabled) {
+        logAutoRefreshTimer = setInterval(fetchActiveLog, 3000);
+      }
+    }
+
+    async function runLogDiagnostics() {
+      try {
+        const res = await fetch('/api/logs/analysis?days=3');
+        const data = await res.json();
+        
+        // Update health badges
+        const pill = document.getElementById('log-health-pill');
+        if (pill) {
+          pill.innerText = data.health_status;
+          pill.style.background = data.health_status === 'HEALTHY' ? '#dcfce7' : (data.health_status === 'CRITICAL' ? '#fee2e2' : '#fef3c7');
+          pill.style.color = data.status_color || '#16a34a';
+        }
+
+        const desc = document.getElementById('log-health-desc');
+        if (desc) desc.innerText = data.summary_verdict;
+        const score = document.getElementById('diag-score');
+        if (score) {
+          score.innerText = `${data.health_score}%`;
+          score.style.color = data.status_color || '#16a34a';
+        }
+        const errs = document.getElementById('diag-errors');
+        if (errs) errs.innerText = data.total_errors;
+        const warns = document.getElementById('diag-warnings');
+        if (warns) warns.innerText = data.total_warnings;
+
+        const badgeLogs = document.getElementById('badge-logs');
+        if (badgeLogs) {
+          badgeLogs.innerText = data.total_errors > 0 ? `${data.total_errors} err` : 'Healthy';
+          badgeLogs.style.background = data.total_errors > 0 ? '#fee2e2' : '#dcfce7';
+          badgeLogs.style.color = data.total_errors > 0 ? '#b91c1c' : '#15803d';
+        }
+
+        // Show recommendations
+        const box = document.getElementById('diag-breakdown-box');
+        const list = document.getElementById('diag-recommendations-list');
+        if (box && list) {
+          if (data.recommendations && data.recommendations.length > 0) {
+            list.innerHTML = data.recommendations.map(r => `<li>${escapeHtml(r)}</li>`).join('');
+            box.style.display = 'block';
+          } else {
+            box.style.display = 'none';
+          }
+        }
+      } catch (err) {
+        console.error("Error running log diagnostics:", err);
+      }
+    }
+
+    async function cleanupLogsNow() {
+      if (!confirm("Prune log files older than 3 days?\n\nThis will safely remove expired running and error logs from the server.")) return;
+      try {
+        const res = await fetch('/api/logs/cleanup?days=3', { method: 'POST' });
+        const data = await res.json();
+        showToast(`Log retention cleanup complete. Removed ${data.count} expired files.`);
+        await loadLogFilesList();
+        fetchActiveLog();
+        runLogDiagnostics();
+      } catch (err) {
+        showToast("Error cleaning logs", "error");
+      }
+    }
+
     // Init
     window.addEventListener('DOMContentLoaded', async () => {
       await loadRegions();
       await loadRegionConfig('thrissur');
       checkWhatsAppStatus();
+      runLogDiagnostics();
     });
   </script>
 </body>

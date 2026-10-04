@@ -10,11 +10,15 @@ load_dotenv(BASE_DIR / ".env")
 DATA_DIR = BASE_DIR / "data"
 OUTPUT_DIR = BASE_DIR / "output"
 BACKUPS_DIR = BASE_DIR / "backups"
+LOGS_DIR = BASE_DIR / "logs"
 DOWNLOADS_DIR = Path(os.getenv("DOWNLOADS_DIR", os.path.expanduser(r"~\Downloads")))
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "3"))
 
 # --- Excel Report Paths ---
 TARGET_EXCEL_PATH = os.getenv(

@@ -241,6 +241,40 @@ def test_routes():
     assert res.json()["status"] == "OK"
     print("   [OK] WhatsApp session logout and wipe verified.")
 
+    print("\n15. Testing 3-Day Running & Error Logging Endpoints...")
+    res = client.get("/api/logs/files")
+    assert res.status_code == 200
+    files = res.json()
+    assert isinstance(files, list)
+    print(f"   [OK] Retrieved {len(files)} log file(s) from server.")
+
+    res = client.get("/api/logs/view?type=running&lines=50")
+    assert res.status_code == 200
+    run_log = res.json()
+    assert "lines" in run_log
+    assert run_log["log_type"] == "running"
+    print(f"   [OK] Read {len(run_log['lines'])} lines from running log ({run_log.get('file_name')}).")
+
+    res = client.get("/api/logs/view?type=error&lines=50")
+    assert res.status_code == 200
+    err_log = res.json()
+    assert "lines" in err_log
+    assert err_log["log_type"] == "error"
+    print(f"   [OK] Read {len(err_log['lines'])} lines from error log ({err_log.get('file_name')}).")
+
+    res = client.get("/api/logs/analysis?days=3")
+    assert res.status_code == 200
+    diag = res.json()
+    assert "health_score" in diag
+    assert "health_status" in diag
+    assert "categories" in diag
+    print(f"   [OK] Diagnostic analyzer verified: Health={diag['health_status']} ({diag['health_score']}%).")
+
+    res = client.post("/api/logs/cleanup?days=3")
+    assert res.status_code == 200
+    assert res.json()["status"] == "OK"
+    print("   [OK] 3-Day retention cleanup endpoint verified.")
+
     print("\nALL TEST SUITE CHECKS PASSED PERFECTLY!")
 
 if __name__ == "__main__":
