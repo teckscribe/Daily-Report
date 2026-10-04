@@ -1,5 +1,5 @@
 [Unit]
-Description=Asianet Kerala Regional Operations Manager & Automated Report Dispatcher (Port 8201)
+Description=Daily Work Report & Regional Operations Manager (Port 8201)
 Documentation=https://github.com/teckscribe/Daily-Report
 After=network.target network-online.target time-sync.target
 Wants=network-online.target

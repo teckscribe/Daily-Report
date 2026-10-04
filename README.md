@@ -68,9 +68,9 @@ chmod +x setup_ubuntu_service.sh
 
 ### Essential Management Commands:
 ```bash
-sudo systemctl status asianet-tracker
-sudo journalctl -u asianet-tracker -f
-sudo systemctl restart asianet-tracker
+sudo systemctl status daily-work-report
+sudo journalctl -u daily-work-report -f
+sudo systemctl restart daily-work-report
 ```
 For detailed hardware BIOS settings (Restore on AC Power Loss) and systemd configuration, see [**docs/UBUNTU_SERVICE_SETUP.md**](docs/UBUNTU_SERVICE_SETUP.md).
 
@@ -89,7 +89,7 @@ Daily-Report/
 ├── crm_downloader.py             # Softcode CRMS and Prepaid scraper
 ├── data_processor.py             # Data cleaning & ticket filtering
 ├── setup_ubuntu_service.sh       # Automated Ubuntu 24/7 service installer
-├── asianet-tracker.service       # Systemd service unit template
+├── daily-work-report.service     # Systemd service unit template
 ├── templates/
 │   └── index.html                # Responsive operations dashboard
 ├── docs/

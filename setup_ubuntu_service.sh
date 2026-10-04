@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Asianet Kerala Regional Complaint Tracker & 24/7 Automated Dispatcher
+# Daily Work Report & 24/7 Automated Operations Dispatcher
 # Ubuntu Desktop & Server - Systemd Power Reboot Survival Setup Script
 # ==============================================================================
 
 set -eo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVICE_NAME="asianet-tracker"
+SERVICE_NAME="daily-work-report"
 ACTUAL_USER="${SUDO_USER:-$USER}"
 ACTUAL_HOME="$(eval echo "~$ACTUAL_USER")"
 
 echo "========================================================================="
-echo "   Asianet Complaint Tracker - 24/7 Reboot Survival Service Setup        "
+echo "   Daily Work Report - 24/7 Reboot Survival Service Setup                "
 echo "========================================================================="
 echo "  Deploy Directory : $APP_DIR"
 echo "  Service User     : $ACTUAL_USER"
@@ -65,7 +65,7 @@ SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 sudo bash -c "cat > $SERVICE_FILE" <<EOF
 [Unit]
-Description=Asianet Kerala Regional Operations Manager & Automated Dispatcher (Port 8201)
+Description=Daily Work Report & Regional Operations Manager (Port 8201)
 Documentation=https://github.com/teckscribe/Daily-Report
 After=network.target network-online.target time-sync.target
 Wants=network-online.target

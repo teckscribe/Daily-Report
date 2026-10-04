@@ -9,7 +9,7 @@ This document explains how to set up the **Asianet Kerala Complaint Tracker & We
 When an Ubuntu Desktop machine experiences a sudden power outage and turns back on:
 1. The Linux kernel initializes and executes `systemd` as process ID 1 (`PID 1`).
 2. Systemd loads all services enabled under `multi-user.target`.
-3. The `asianet-tracker.service` has:
+3. The `daily-work-report.service` has:
    - `Restart=always`: If the process crashes or gets killed, systemd automatically restarts it within 10 seconds.
    - `RestartSec=10`: Grace period between crash and resurrection.
    - `After=network-online.target`: Waits until the network interfaces (LAN/Wi-Fi) have acquired an IP address and internet route.
@@ -35,8 +35,8 @@ chmod +x setup_ubuntu_service.sh
 1. Installs all required Linux shared libraries for Python 3, venv, SQLite, and Chromium.
 2. Creates and configures the Python virtual environment (`venv/`).
 3. Installs dependencies from `requirements.txt` and downloads Playwright Chromium binaries.
-4. Generates `/etc/systemd/system/asianet-tracker.service` bound to the current directory and user.
-5. Enables the service (`sudo systemctl enable asianet-tracker.service`) so it starts upon every boot.
+4. Generates `/etc/systemd/system/daily-work-report.service` bound to the current directory and user.
+5. Enables the service (`sudo systemctl enable daily-work-report.service`) so it starts upon every boot.
 6. Masks desktop sleep/suspend so Ubuntu Desktop does not go to sleep when left unattended on AC power.
 7. Starts the service immediately.
 
@@ -46,13 +46,13 @@ chmod +x setup_ubuntu_service.sh
 
 | Action | Command |
 | :--- | :--- |
-| **Check Live Status** | `sudo systemctl status asianet-tracker` |
-| **View Live Real-Time Logs** | `sudo journalctl -u asianet-tracker -f` |
-| **Restart Service Manually** | `sudo systemctl restart asianet-tracker` |
-| **Stop Service** | `sudo systemctl stop asianet-tracker` |
-| **Start Service** | `sudo systemctl start asianet-tracker` |
-| **Disable Boot Autostart** | `sudo systemctl disable asianet-tracker` |
-| **Re-enable Boot Autostart** | `sudo systemctl enable asianet-tracker` |
+| **Check Live Status** | `sudo systemctl status daily-work-report` |
+| **View Live Real-Time Logs** | `sudo journalctl -u daily-work-report -f` |
+| **Restart Service Manually** | `sudo systemctl restart daily-work-report` |
+| **Stop Service** | `sudo systemctl stop daily-work-report` |
+| **Start Service** | `sudo systemctl start daily-work-report` |
+| **Disable Boot Autostart** | `sudo systemctl disable daily-work-report` |
+| **Re-enable Boot Autostart** | `sudo systemctl enable daily-work-report` |
 
 ---
 
