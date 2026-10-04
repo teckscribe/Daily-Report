@@ -303,7 +303,7 @@ def generate_report_images(sections: Dict[str, pd.DataFrame] = None) -> List[Pat
 
 def extract_acso_table_data_from_dataframe(df: pd.DataFrame, is_adtv: bool = False) -> Tuple[str, List[str], List[dict], dict]:
     """Extracts ACSO table data and Grand Total row directly from computed DataFrame."""
-    title = "ADTv Complaint Pending (ACSO)" if is_adtv else "ADL Complaint Pending (ACSO)"
+    title = "ADTv Complaint Pending" if is_adtv else "ADL Complaint Pending"
     bucket_cols = [c for c in df.columns if c not in ("CENTER", "Name", "Grand Total")]
 
     # Determine longest non-zero bucket
@@ -347,7 +347,7 @@ def extract_acso_table_data_from_excel(is_adtv: bool = False) -> Tuple[str, List
     start_c = 16 if is_adtv else 0
     bucket_start_c = 19 if is_adtv else 3
     bucket_end_c = min(ws.ncols, 31 if is_adtv else 15)
-    title = "ADTv Complaint Pending (ACSO)" if is_adtv else "ADL Complaint Pending (ACSO)"
+    title = "ADTv Complaint Pending" if is_adtv else "ADL Complaint Pending"
 
     # Rows 33 to 45 in Excel correspond to 0-based indices 32 to 44
     # Row 46 is index 45 (Grand Total)
