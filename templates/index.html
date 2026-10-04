@@ -533,6 +533,9 @@
         <button class="btn btn-secondary btn-sm" onclick="openAddRegionModal()">
           <span>&#43;</span> Add Region
         </button>
+        <button class="btn btn-secondary btn-sm" onclick="openBackupModal()" title="Export/Import configuration or load Thrissur preset">
+          <span>💾</span> Backup & Preset
+        </button>
       </div>
     </div>
   </header>
@@ -1273,6 +1276,82 @@
         <button type="submit" class="btn btn-primary">Save Trigger Time</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- MODAL: Configuration Backup, Restore & Preset Manager -->
+  <dialog id="modal-backup" class="modal" style="max-width: 650px;">
+    <div class="modal-header">
+      <h3 style="display: flex; align-items: center; gap: 0.5rem;">
+        <span>💾</span> Configuration Backup, Restore & Presets
+      </h3>
+      <button class="modal-close" onclick="closeModal('modal-backup')">&times;</button>
+    </div>
+    <div class="modal-body" style="display: flex; flex-direction: column; gap: 1.25rem; padding: 1.25rem;">
+      
+      <!-- Section 1: Export Backup -->
+      <div style="background: var(--bg-main); border: 1px solid var(--border-dark); border-radius: var(--radius); padding: 1rem;">
+        <h4 style="margin: 0 0 0.35rem 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; color: var(--text-main);">
+          <span>📥</span> Export Configuration Backup (JSON)
+        </h4>
+        <p style="margin: 0 0 0.85rem 0; font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+          Download a portable JSON file containing Centers, ACSOs, Team Leaders, Employee Codes, Schedule Times, and Dispatch Rules. This JSON file is git-independent and safe to store or transfer anywhere.
+        </p>
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="exportBackup('region')">
+            <span>📄</span> Export Active Region (<span id="backup-reg-name">Active</span>)
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="exportBackup('all')">
+            <span>📦</span> Export Entire Database (All Regions)
+          </button>
+        </div>
+      </div>
+
+      <!-- Section 2: Import Backup -->
+      <div style="background: var(--bg-main); border: 1px solid var(--border-dark); border-radius: var(--radius); padding: 1rem;">
+        <h4 style="margin: 0 0 0.35rem 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; color: var(--text-main);">
+          <span>📤</span> Import & Restore from JSON
+        </h4>
+        <p style="margin: 0 0 0.85rem 0; font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+          Select a previously exported <code>.json</code> backup file to restore roster data into the active region or across all regions.
+        </p>
+        <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+          <input type="file" id="backup-file-input" accept=".json" style="font-size: 0.82rem; padding: 0.4rem; border: 1px dashed var(--border-dark); border-radius: var(--radius); background: #fff;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="importBackupFile()">
+            <span>🔄</span> Restore from File
+          </button>
+        </div>
+      </div>
+
+      <!-- Section 3: Bundled Presets -->
+      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius); padding: 1rem;">
+        <h4 style="margin: 0 0 0.35rem 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; color: #166534;">
+          <span>⚡</span> Thrissur Baseline Preset
+        </h4>
+        <p style="margin: 0 0 0.85rem 0; font-size: 0.8rem; color: #15803d; line-height: 1.4;">
+          Need the Thrissur roster? One-click restore loads the complete Thrissur baseline (22 Centers, 13 ACSOs, 22 TLs, 22 Employee Codes, 2 Schedule Times, and 4 Dispatch Rules).
+        </p>
+        <button type="button" class="btn btn-sm" style="background: #16a34a; color: white;" onclick="loadThrissurPreset()">
+          <span>✓</span> Load Thrissur Preset Baseline
+        </button>
+      </div>
+
+      <!-- Section 4: Clear Region (Wipe Roster) -->
+      <div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: var(--radius); padding: 1rem;">
+        <h4 style="margin: 0 0 0.35rem 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; color: #9f1239;">
+          <span>🗑️</span> Fresh Start (Clear Active Region Data)
+        </h4>
+        <p style="margin: 0 0 0.85rem 0; font-size: 0.8rem; color: #be123c; line-height: 1.4;">
+          Wipe all Centers, ACSOs, Team Leaders, Employee Codes, and Dispatch Rules for this region so you can configure a brand new region from scratch.
+        </p>
+        <button type="button" class="btn btn-danger btn-sm" onclick="clearCurrentRegionRoster()">
+          <span>⚠️</span> Wipe Roster for Active Region
+        </button>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('modal-backup')">Close</button>
+    </div>
   </dialog>
 
   <!-- Toast Container -->
@@ -2552,6 +2631,97 @@
         runLogDiagnostics();
       } catch (err) {
         showToast("Error cleaning logs", "error");
+      }
+    // --- Backup, Presets & Regional Portability ---
+    function openBackupModal() {
+      const regSelect = document.getElementById('regionSelect');
+      const regName = regSelect.options[regSelect.selectedIndex]?.text.split('(')[0].trim() || currentRegion;
+      const regLabel = document.getElementById('backup-reg-name');
+      if (regLabel) regLabel.innerText = regName;
+      openModal('modal-backup');
+    }
+
+    function exportBackup(scope) {
+      const url = scope === 'region' ? `/api/backup/export?region_id=${encodeURIComponent(currentRegion)}` : '/api/backup/export';
+      window.location.href = url;
+      showToast(scope === 'region' ? `Exporting ${currentRegion} backup...` : 'Exporting full database backup...', 'success');
+    }
+
+    async function importBackupFile() {
+      const fileInput = document.getElementById('backup-file-input');
+      if (!fileInput.files || fileInput.files.length === 0) {
+        showToast("Please choose a JSON backup file first", "error");
+        return;
+      }
+      const file = fileInput.files[0];
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        
+        if (!confirm(`Are you sure you want to restore configuration from "${file.name}"? This will update the database records.`)) {
+          return;
+        }
+
+        const res = await fetch(`/api/backup/restore?target_region=${encodeURIComponent(currentRegion)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (res.ok) {
+          showToast(result.message || "Backup restored successfully!", "success");
+          closeModal('modal-backup');
+          await loadRegions();
+          await loadRegionConfig(currentRegion);
+        } else {
+          showToast(result.detail || "Failed to restore backup", "error");
+        }
+      } catch (err) {
+        showToast("Invalid JSON file: " + err.message, "error");
+      }
+    }
+
+    async function loadThrissurPreset() {
+      if (!confirm(`Apply the bundled Thrissur preset baseline to the active region ("${currentRegion}")? Existing data for this region will be refreshed.`)) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/backup/load-sample?region_id=${encodeURIComponent(currentRegion)}`, {
+          method: 'POST'
+        });
+        const result = await res.json();
+        if (res.ok) {
+          showToast(`Thrissur preset baseline loaded successfully into '${currentRegion}'!`, "success");
+          closeModal('modal-backup');
+          await loadRegions();
+          await loadRegionConfig(currentRegion);
+        } else {
+          showToast(result.detail || "Failed to load preset", "error");
+        }
+      } catch (err) {
+        showToast("Error loading preset: " + err.message, "error");
+      }
+    }
+
+    async function clearCurrentRegionRoster() {
+      if (!confirm(`DANGER: Are you sure you want to delete ALL Centers, ACSOs, Team Leaders, Employees, Schedule Times, and Dispatch Rules for region "${currentRegion}"? This cannot be undone unless you have a backup!`)) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/backup/clear?region_id=${encodeURIComponent(currentRegion)}`, {
+          method: 'POST'
+        });
+        const result = await res.json();
+        if (res.ok) {
+          showToast(`Active region roster cleared! Ready for new configuration.`, "success");
+          closeModal('modal-backup');
+          await loadRegions();
+          await loadRegionConfig(currentRegion);
+        } else {
+          showToast(result.detail || "Failed to clear region", "error");
+        }
+      } catch (err) {
+        showToast("Error clearing region: " + err.message, "error");
       }
     }
 

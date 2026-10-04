@@ -275,6 +275,42 @@ def test_routes():
     assert res.json()["status"] == "OK"
     print("   [OK] 3-Day retention cleanup endpoint verified.")
 
+    print("\n16. Testing Backup, Restore, Preset, and Clear Endpoints...")
+    # Export full backup
+    res = client.get("/api/backup/export")
+    assert res.status_code == 200
+    backup_data = res.json()
+    assert "tables" in backup_data
+    assert "regions" in backup_data["tables"]
+    print(f"   [OK] Full backup exported successfully ({len(backup_data['tables'])} tables).")
+
+    # Clear test region (idukki)
+    res = client.post("/api/backup/clear?region_id=idukki")
+    assert res.status_code == 200
+    res = client.get("/api/regions/idukki/config")
+    assert len(res.json()["tls"]) == 0
+    assert len(res.json()["acsos"]) == 0
+    print("   [OK] Verified clear region endpoint: Idukki roster is empty.")
+
+    # Load Thrissur sample preset into idukki
+    res = client.post("/api/backup/load-sample?region_id=idukki")
+    assert res.status_code == 200
+    res = client.get("/api/regions/idukki/config")
+    idukki_config = res.json()
+    assert len(idukki_config["tls"]) == 22
+    assert len(idukki_config["acsos"]) == 13
+    assert len(idukki_config["emps"]) == 22
+    print("   [OK] Verified load-sample preset: Successfully populated Idukki with baseline preset.")
+
+    # Restore from exported backup
+    res = client.post("/api/backup/restore?target_region=idukki", json=backup_data)
+    assert res.status_code == 200
+    assert res.json()["status"] == "OK"
+    print("   [OK] Verified restore endpoint from JSON payload.")
+
+    # Clear idukki again so test doesn't leave sample data there
+    client.post("/api/backup/clear?region_id=idukki")
+
     print("\nALL TEST SUITE CHECKS PASSED PERFECTLY!")
 
 if __name__ == "__main__":

@@ -4,7 +4,9 @@ db_manager.py
 SQLite database manager for Kerala Multi-Region Network Complaint Tracker.
 Stores and manages Centers, Team Leaders, ACSO Officers, and Employee Codes region-by-region.
 """
+import json
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime
@@ -178,84 +180,6 @@ def init_db():
         VALUES (?, ?, ?, ?, 1, ?, ?)
         """, (r_id, r_name, sc_reg, pp_reg, now_str, now_str))
     conn.commit()
-
-    # Seed Thrissur Team Leaders if empty
-    c.execute("SELECT COUNT(*) FROM team_leaders WHERE region_id = 'thrissur'")
-    if c.fetchone()[0] == 0:
-        from report_layout import TEAM_LEADER_ROWS, ACSO_ROWS
-        
-        # 1. Team leaders
-        for idx, tl in enumerate(TEAM_LEADER_ROWS, 1):
-            c.execute("""
-            INSERT INTO team_leaders 
-            (region_id, center_name, name, adtv_center, adtv_name, pd_adl_name_key, pd_adtv_name_key, pp_adl_emp_code, pp_adtv_emp_code, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                "thrissur", tl.adl_center, tl.adl_name, tl.adtv_center, tl.adtv_name,
-                tl.pd_adl_name_key, tl.pd_adtv_name_key, str(tl.pp_adl_emp_code), str(tl.pp_adtv_emp_code), idx
-            ))
-
-            # Also seed employee code
-            c.execute("""
-            INSERT INTO employees (region_id, emp_code, name, role, center_name, phone)
-            VALUES (?, ?, ?, 'Team Leader', ?, '')
-            """, ("thrissur", str(tl.pp_adl_emp_code), tl.adl_name.strip(), tl.adl_center))
-
-        # 2. ACSOs
-        for idx, a in enumerate(ACSO_ROWS, 1):
-            c.execute("""
-            INSERT INTO acsos 
-            (region_id, center_name, acso_name, adtv_acso_name, adl_center_display, adtv_center_display, pd_adl_center_key, pd_adtv_center_key, pp_adl_center_key, pp_adtv_center_key, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                "thrissur", a.adl_center, a.adl_acso, a.adtv_acso, a.adl_center, a.adtv_center,
-                a.pd_adl_center_key, a.pd_adtv_center_key, a.pp_adl_center_key, a.pp_adtv_center_key, idx
-            ))
-
-            # Center records
-            c.execute("""
-            INSERT INTO centers (region_id, center_name, adl_area_key, adtv_amo_key, prepaid_area_key, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                "thrissur", a.adl_center, a.pd_adl_center_key, a.pd_adtv_center_key, a.pp_adl_center_key, idx
-            ))
-
-        conn.commit()
-
-    # Seed Default Schedule Times if empty
-    c.execute("SELECT COUNT(*) FROM schedule_times")
-    if c.fetchone()[0] == 0:
-        c.execute("""
-        INSERT INTO schedule_times (region_id, run_time, label, is_enabled, created_at)
-        VALUES ('thrissur', '08:00', 'Morning Operational Report (08:00 AM)', 1, ?)
-        """, (now_str,))
-        c.execute("""
-        INSERT INTO schedule_times (region_id, run_time, label, is_enabled, created_at)
-        VALUES ('thrissur', '15:00', 'Afternoon Operational Report (03:00 PM)', 1, ?)
-        """, (now_str,))
-        conn.commit()
-
-    # Seed Default Dispatch Rules if empty
-    c.execute("SELECT COUNT(*) FROM dispatch_rules")
-    if c.fetchone()[0] == 0:
-        c.execute("""
-        INSERT INTO dispatch_rules (region_id, rule_name, report_type, target_recipients, is_enabled, created_at, updated_at)
-        VALUES ('thrissur', 'ADL Team Leader Reports', 'adl_tl', '', 1, ?, ?)
-        """, (now_str, now_str))
-        c.execute("""
-        INSERT INTO dispatch_rules (region_id, rule_name, report_type, target_recipients, is_enabled, created_at, updated_at)
-        VALUES ('thrissur', 'ADTv Team Leader Reports', 'adtv_tl', '', 1, ?, ?)
-        """, (now_str, now_str))
-        c.execute("""
-        INSERT INTO dispatch_rules (region_id, rule_name, report_type, target_recipients, is_enabled, created_at, updated_at)
-        VALUES ('thrissur', 'ADL ACSO Centers Report', 'adl_acso', '', 1, ?, ?)
-        """, (now_str, now_str))
-        c.execute("""
-        INSERT INTO dispatch_rules (region_id, rule_name, report_type, target_recipients, is_enabled, created_at, updated_at)
-        VALUES ('thrissur', 'ADTv ACSO Centers Report', 'adtv_acso', '', 1, ?, ?)
-        """, (now_str, now_str))
-        conn.commit()
-
     # Seed Default Master Setting if empty
     c.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('scheduler_enabled', '1')")
     conn.commit()
@@ -779,3 +703,161 @@ def set_setting(key: str, value: str) -> bool:
 
 # Auto-initialize on first import
 init_db()
+
+
+# --- Configuration Backup & Restore Operations ---
+
+def export_backup(region_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Exports full database or specific region configuration to a serializable dictionary.
+    Includes Centers, TLs, ACSOs, Employees, Schedule Times, Dispatch Rules, and Settings.
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    tables = [
+        "regions",
+        "centers",
+        "acsos",
+        "team_leaders",
+        "employees",
+        "schedule_times",
+        "dispatch_rules",
+        "system_settings"
+    ]
+    backup = {
+        "_meta": {
+            "description": f"Configuration backup for {region_id or 'all regions'}",
+            "exported_at": datetime.now().isoformat(),
+            "version": "2.0",
+            "region_id": region_id or "all"
+        },
+        "tables": {}
+    }
+    for t in tables:
+        if region_id and t not in ("regions", "system_settings"):
+            c.execute(f'SELECT * FROM "{t}" WHERE region_id = ?', (region_id,))
+        else:
+            c.execute(f'SELECT * FROM "{t}"')
+        rows = c.fetchall()
+        c.execute(f'PRAGMA table_info("{t}")')
+        cols = [col[1] for col in c.fetchall()]
+        backup["tables"][t] = [dict(zip(cols, r)) for r in rows]
+    conn.close()
+    return backup
+
+
+def restore_backup(data: Dict[str, Any], target_region: Optional[str] = None, clear_existing: bool = True) -> Dict[str, int]:
+    """
+    Restores database tables from a backup dictionary.
+    Safe and idempotent with column validation.
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    counts = {}
+    tables = data.get("tables", {})
+
+    # 1. System Settings
+    if "system_settings" in tables:
+        for r in tables["system_settings"]:
+            c.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)", (r["key"], str(r["value"])))
+        counts["system_settings"] = len(tables["system_settings"])
+
+    # 2. Regions
+    if "regions" in tables:
+        for r in tables["regions"]:
+            c.execute("""
+            INSERT OR REPLACE INTO regions (id, name, softcode_region, prepaid_region, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (r["id"], r["name"], r["softcode_region"], r["prepaid_region"], r.get("is_active", 1), r.get("created_at"), r.get("updated_at")))
+        counts["regions"] = len(tables["regions"])
+
+    # Determine region scope
+    meta_reg = data.get("_meta", {}).get("region_id")
+    reg_id = target_region or (meta_reg if meta_reg != "all" else None)
+
+    scoped_tables = ["centers", "acsos", "team_leaders", "employees", "schedule_times", "dispatch_rules"]
+    for t in scoped_tables:
+        if t not in tables:
+            continue
+        rows = tables[t]
+        if clear_existing:
+            if reg_id:
+                c.execute(f'DELETE FROM "{t}" WHERE region_id = ?', (reg_id,))
+            else:
+                c.execute(f'DELETE FROM "{t}"')
+
+        for r in rows:
+            dest_reg = target_region or r.get("region_id", reg_id or "thrissur")
+            r_copy = dict(r)
+            r_copy["region_id"] = dest_reg
+
+            c.execute(f'PRAGMA table_info("{t}")')
+            valid_cols = [col[1] for col in c.fetchall() if col[1] != 'id']
+            cols_to_insert = [k for k in valid_cols if k in r_copy]
+            vals = [r_copy[k] for k in cols_to_insert]
+            placeholders = ", ".join(["?"] * len(cols_to_insert))
+            col_names = ", ".join(cols_to_insert)
+            c.execute(f'INSERT INTO "{t}" ({col_names}) VALUES ({placeholders})', vals)
+
+        counts[t] = len(rows)
+
+    conn.commit()
+    conn.close()
+    return counts
+
+
+def restore_from_file(filepath: str | Path, target_region: Optional[str] = None) -> Dict[str, int]:
+    """Reads a JSON backup file and restores it into the database."""
+    p = Path(filepath)
+    if not p.exists():
+        raise FileNotFoundError(f"Backup file not found at: {p.resolve()}")
+    with open(p, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return restore_backup(data, target_region=target_region)
+
+
+def load_sample_preset(region_id: str = "thrissur") -> Dict[str, int]:
+    """Loads the pre-packaged Thrissur sample configuration into the specified region."""
+    seed_paths = [
+        DATA_DIR / "seeds" / "thrissur_config_backup.json",
+        DATA_DIR / "thrissur_config_backup.json",
+    ]
+    for sp in seed_paths:
+        if sp.exists():
+            return restore_from_file(sp, target_region=region_id)
+    raise FileNotFoundError("Thrissur sample seed file not found.")
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Multi-Region Database & Configuration CLI")
+    parser.add_argument("--backup", nargs="?", const="backup.json", help="Export full configuration backup to JSON")
+    parser.add_argument("--restore", type=str, help="Import and restore configuration from a JSON backup file")
+    parser.add_argument("--load-sample", action="store_true", help="Restore Thrissur sample roster and configuration")
+    parser.add_argument("--region", type=str, default="thrissur", help="Target region ID (default: thrissur)")
+    parser.add_argument("--clear", action="store_true", help="Clear all configured roster data for a region")
+    args = parser.parse_args()
+
+    if args.backup:
+        out_file = Path(args.backup)
+        data = export_backup()
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        print(f"[OK] Full configuration backed up to {out_file.resolve()}")
+    elif args.restore:
+        counts = restore_from_file(args.restore, target_region=args.region)
+        print(f"[OK] Restored configuration from {args.restore}: {counts}")
+    elif args.load_sample:
+        counts = load_sample_preset(args.region)
+        print(f"[OK] Loaded Thrissur preset into '{args.region}': {counts}")
+    elif args.clear:
+        conn = get_connection()
+        c = conn.cursor()
+        for t in ["centers", "acsos", "team_leaders", "employees", "schedule_times", "dispatch_rules"]:
+            c.execute(f'DELETE FROM "{t}" WHERE region_id = ?', (args.region,))
+        conn.commit()
+        conn.close()
+        print(f"[OK] Cleared all configured data for region '{args.region}'")
+    else:
+        parser.print_help()
+

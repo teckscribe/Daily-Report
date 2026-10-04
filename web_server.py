@@ -18,8 +18,10 @@ import asyncio
 import os
 import sys
 
+import json
+
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -636,6 +638,55 @@ def run_automated_cycle_now(payload: Optional[CycleRunPayload] = None, region_id
     elif region_id:
         target_region = region_id
     return execute_automated_cycle(target_region)
+
+
+# --- Backup & Configuration Import/Export Endpoints ---
+
+@app.get("/api/backup/export")
+def export_configuration_endpoint(region_id: Optional[str] = None):
+    """Exports configuration backup as JSON."""
+    data = db_manager.export_backup(region_id=region_id)
+    reg_label = region_id or "all_regions"
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"dwr_config_{reg_label}_{ts}.json"
+    return Response(
+        content=json.dumps(data, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.post("/api/backup/restore")
+async def restore_configuration_endpoint(request: Request, target_region: Optional[str] = None):
+    """Restores configuration from JSON payload."""
+    try:
+        body = await request.json()
+        counts = db_manager.restore_backup(body, target_region=target_region)
+        return {"status": "OK", "message": "Configuration restored successfully", "counts": counts}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to restore configuration: {e}")
+
+
+@app.post("/api/backup/load-sample")
+def load_sample_preset_endpoint(region_id: str = "thrissur"):
+    """Loads the bundled Thrissur sample roster and configuration."""
+    try:
+        counts = db_manager.load_sample_preset(region_id)
+        return {"status": "OK", "message": f"Thrissur preset loaded into '{region_id}'", "counts": counts}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/backup/clear")
+def clear_region_configuration_endpoint(region_id: str):
+    """Clears all configured roster data for a region."""
+    conn = db_manager.get_connection()
+    c = conn.cursor()
+    for t in ["centers", "acsos", "team_leaders", "employees", "schedule_times", "dispatch_rules"]:
+        c.execute(f'DELETE FROM "{t}" WHERE region_id = ?', (region_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "OK", "message": f"All roster data cleared for region '{region_id}'"}
 
 
 # --- WhatsApp Web Session & Authentication Endpoints ---
