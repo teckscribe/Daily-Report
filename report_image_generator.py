@@ -144,45 +144,45 @@ def generate_table_html(title: str, bucket_names: List[str], rows: List[dict], i
         .banner {{
             background-color: #9c4108;
             color: #ffffff;
-            font-size: 20px;
+            font-size: 24px;
             font-weight: bold;
-            padding: 4px 8px;
+            padding: 6px 10px;
             border-bottom: 2px solid #000000;
-            height: 32px;
-            line-height: 25px;
+            height: 40px;
+            line-height: 28px;
             letter-spacing: 0.3px;
         }}
         table {{
             border-collapse: collapse;
-            font-size: 16.5px;
+            font-size: 18.5px;
             color: #000000;
         }}
         th, td {{
             border: 1px solid #7f7f7f;
-            padding: 2px 7px;
-            height: 25px;
+            padding: 3px 8px;
+            height: 33px;
             white-space: nowrap;
         }}
         thead th {{
             background-color: #d9d9d9;
             font-weight: bold;
-            font-size: 16.5px;
+            font-size: 18px;
             border: 1px solid #000000;
         }}
         .th-center {{ text-align: left; width: 235px; min-width: 235px; }}
         .th-name {{ text-align: left; width: 245px; min-width: 245px; }}
         .th-gt {{ text-align: center; width: 110px; min-width: 110px; }}
         .th-pending {{ text-align: center; }}
-        .th-bucket {{ text-align: center; width: 75px; min-width: 75px; }}
+        .th-bucket {{ text-align: center; width: 70px; min-width: 70px; }}
         
-        .col-center {{ text-align: left; font-size: 16px; font-weight: bold; color: #000000; }}
-        .col-name {{ text-align: left; font-size: 16px; font-weight: bold; color: #000000; }}
+        .col-center {{ text-align: left; font-size: 18px; font-weight: bold; color: #000000; }}
+        .col-name {{ text-align: left; font-size: 18px; font-weight: bold; color: #000000; }}
         
-        .gt-adl-val {{ text-align: center; font-weight: bold; font-size: 17px; background-color: #d9d9d9; color: #000000; }}
+        .gt-adl-val {{ text-align: center; font-weight: bold; font-size: 19px; background-color: #d9d9d9; color: #000000; }}
         .gt-adl-zero {{ text-align: center; background-color: #ffffff; }}
         
-        .gt-adtv-val {{ text-align: center; font-weight: bold; font-size: 17px; background-color: #dce6f1; color: #000000; }}
-        .gt-adtv-zero {{ text-align: center; font-size: 16px; font-weight: bold; background-color: #dce6f1; color: #a6b9d0; }}
+        .gt-adtv-val {{ text-align: center; font-weight: bold; font-size: 19px; background-color: #dce6f1; color: #000000; }}
+        .gt-adtv-zero {{ text-align: center; font-size: 18px; font-weight: bold; background-color: #dce6f1; color: #a6b9d0; }}
         
         .cell-empty {{ background-color: #ffffff; }}
         .cell-green {{
@@ -190,14 +190,14 @@ def generate_table_html(title: str, bucket_names: List[str], rows: List[dict], i
             color: #ffffff;
             font-weight: bold;
             text-align: center;
-            font-size: 17px;
+            font-size: 19px;
         }}
         .cell-red {{
             background-color: #ff0000;
             color: #ffffff;
             font-weight: bold;
             text-align: center;
-            font-size: 17px;
+            font-size: 19px;
         }}
     </style>
     </head>
@@ -263,7 +263,7 @@ def generate_report_images(sections: Dict[str, pd.DataFrame] = None) -> List[Pat
             else:
                 raise e_launch
 
-        page = browser.new_page(device_scale_factor=2.2)
+        page = browser.new_page(device_scale_factor=2.4)
 
         # Render ADL Image (Saved as JPEG for perfect WhatsApp mobile display)
         page.set_content(html_adl)
@@ -458,50 +458,50 @@ def generate_acso_table_html(title: str, bucket_names: List[str], rows: List[dic
         .banner {{
             background-color: #9c4108;
             color: #ffffff;
-            font-size: 20px;
+            font-size: 26px;
             font-weight: bold;
-            padding: 4px 8px;
+            padding: 6px 12px;
             border-bottom: 2px solid #000000;
-            height: 32px;
-            line-height: 25px;
+            height: 42px;
+            line-height: 30px;
             letter-spacing: 0.3px;
         }}
         table {{
             border-collapse: collapse;
-            font-size: 16.5px;
+            font-size: 20px;
             color: #000000;
         }}
         th, td {{
             border: 1px solid #7f7f7f;
-            padding: 2px 7px;
-            height: 25px;
+            padding: 5px 8px;
+            height: 40px;
             white-space: nowrap;
         }}
         thead th {{
             background-color: #d9d9d9;
             font-weight: bold;
-            font-size: 16.5px;
+            font-size: 19px;
             border: 1px solid #000000;
         }}
-        .th-center {{ text-align: left; width: 235px; min-width: 235px; }}
-        .th-name {{ text-align: left; width: 245px; min-width: 245px; }}
-        .th-gt {{ text-align: center; width: 110px; min-width: 110px; }}
+        .th-center {{ text-align: left; width: 220px; min-width: 220px; }}
+        .th-name {{ text-align: left; width: 230px; min-width: 230px; }}
+        .th-gt {{ text-align: center; width: 105px; min-width: 105px; }}
         .th-pending {{ text-align: center; }}
-        .th-bucket {{ text-align: center; width: 75px; min-width: 75px; }}
+        .th-bucket {{ text-align: center; width: 68px; min-width: 68px; }}
         
-        .col-center {{ text-align: left; font-size: 16px; font-weight: bold; color: #000000; }}
-        .col-name {{ text-align: left; font-size: 16px; font-weight: bold; color: #000000; }}
+        .col-center {{ text-align: left; font-size: 20px; font-weight: bold; color: #000000; }}
+        .col-name {{ text-align: left; font-size: 20px; font-weight: bold; color: #000000; }}
         
-        .gt-adl-val {{ text-align: center; font-weight: bold; font-size: 17px; background-color: #d9d9d9; color: #000000; }}
+        .gt-adl-val {{ text-align: center; font-weight: bold; font-size: 21px; background-color: #d9d9d9; color: #000000; }}
         .gt-adl-zero {{ text-align: center; background-color: #ffffff; }}
         
-        .gt-adtv-val {{ text-align: center; font-weight: bold; font-size: 17px; background-color: #dce6f1; color: #000000; }}
-        .gt-adtv-zero {{ text-align: center; font-size: 16px; font-weight: bold; background-color: #dce6f1; color: #a6b9d0; }}
+        .gt-adtv-val {{ text-align: center; font-weight: bold; font-size: 21px; background-color: #dce6f1; color: #000000; }}
+        .gt-adtv-zero {{ text-align: center; font-size: 19px; font-weight: bold; background-color: #dce6f1; color: #a6b9d0; }}
         
         .label-total-adl {{
             text-align: center;
             font-weight: bold;
-            font-size: 17px;
+            font-size: 21px;
             background-color: #d9d9d9;
             color: #000000;
             border-top: 2px solid #000000;
@@ -509,7 +509,7 @@ def generate_acso_table_html(title: str, bucket_names: List[str], rows: List[dic
         .label-total-adtv {{
             text-align: center;
             font-weight: bold;
-            font-size: 17px;
+            font-size: 21px;
             background-color: #dce6f1;
             color: #000000;
             border-top: 2px solid #000000;
@@ -517,7 +517,7 @@ def generate_acso_table_html(title: str, bucket_names: List[str], rows: List[dic
         .gt-total-adl {{
             text-align: center;
             font-weight: bold;
-            font-size: 18px;
+            font-size: 22px;
             background-color: #d9d9d9;
             color: #000000;
             border-top: 2px solid #000000;
@@ -525,13 +525,13 @@ def generate_acso_table_html(title: str, bucket_names: List[str], rows: List[dic
         .gt-total-adtv {{
             text-align: center;
             font-weight: bold;
-            font-size: 18px;
+            font-size: 22px;
             background-color: #dce6f1;
             color: #000000;
             border-top: 2px solid #000000;
         }}
         .font-total {{
-            font-size: 17px;
+            font-size: 21px;
             font-weight: bold;
             border-top: 2px solid #000000;
         }}
@@ -542,7 +542,7 @@ def generate_acso_table_html(title: str, bucket_names: List[str], rows: List[dic
         .row-total td {{
             border-top: 2px solid #000000;
             border-bottom: 2px solid #000000;
-            height: 28px;
+            height: 46px;
         }}
 
         .cell-empty {{ background-color: #ffffff; }}
@@ -551,14 +551,14 @@ def generate_acso_table_html(title: str, bucket_names: List[str], rows: List[dic
             color: #ffffff;
             font-weight: bold;
             text-align: center;
-            font-size: 17px;
+            font-size: 21px;
         }}
         .cell-red {{
             background-color: #ff0000;
             color: #ffffff;
             font-weight: bold;
             text-align: center;
-            font-size: 17px;
+            font-size: 21px;
         }}
     </style>
     </head>
@@ -623,7 +623,7 @@ def generate_acso_report_images(sections: Dict[str, pd.DataFrame] = None) -> Lis
             else:
                 raise e_launch
 
-        page = browser.new_page(device_scale_factor=2.2)
+        page = browser.new_page(device_scale_factor=2.4)
 
         # Render ADL ACSO Image
         page.set_content(html_adl)
