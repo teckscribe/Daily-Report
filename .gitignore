@@ -1,0 +1,36 @@
+# Environment & Secrets
+.env
+*.env
+
+# Python Cache & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+ENV/
+
+# Playwright WhatsApp Session Cache (sensitive user credentials)
+data/whatsapp_session/
+*.session
+
+# Temporary ticket downloads
+data/Pending*.xlsx
+data/Pending*.csv
+
+# Temporary generated reports & working copies
+output/*.jpg
+output/*.png
+output/*.xls
+!output/.gitkeep
+
+# Temporary databases and backups
+backups/
+temp_hist_*.db
+*.tmp
+
+# System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
