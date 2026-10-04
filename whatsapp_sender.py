@@ -23,11 +23,19 @@ DISPATCH_LOCK = threading.Lock()
 
 def normalize_recipient(target: str) -> str:
     """Detects if target is a phone number and formats it with country code if needed."""
-    digits = re.sub(r"\D", "", str(target).strip())
+    raw = str(target).strip()
+    # If the target string contains letters, it is a contact or group name, NOT a phone number
+    if re.search(r"[a-zA-Z]", raw):
+        return raw
+
+    digits = re.sub(r"\D", "", raw)
+    # Strip leading 0 if 11 digits (e.g. 09633889430 -> 9633889430)
+    if digits.startswith("0") and len(digits) == 11:
+        digits = digits[1:]
     # If 10 digits (standard Indian mobile), prepend 91
     if len(digits) == 10:
         return f"91{digits}"
-    return digits if len(digits) > 10 else target.strip()
+    return digits if len(digits) > 10 else raw
 
 
 def cleanup_stale_locks(session_dir: Path):
@@ -94,8 +102,17 @@ def send_via_whatsapp_web(image_input: Union[Path, List[Path]], recipients: List
             try:
                 context = p.chromium.launch_persistent_context(**launch_kwargs)
             except Exception as e_launch:
-                print(f"[WhatsApp Web] [!] Error launching persistent browser context: {e_launch}")
-                return False
+                if "channel" in launch_kwargs:
+                    print(f"[WhatsApp Web] Chrome launch notice ({e_launch}). Falling back to bundled Chromium...")
+                    launch_kwargs.pop("channel", None)
+                    try:
+                        context = p.chromium.launch_persistent_context(**launch_kwargs)
+                    except Exception as e_retry:
+                        print(f"[WhatsApp Web] [!] Error launching persistent browser context: {e_retry}")
+                        return False
+                else:
+                    print(f"[WhatsApp Web] [!] Error launching persistent browser context: {e_launch}")
+                    return False
 
             page = context.pages[0] if context.pages else context.new_page()
 
@@ -116,9 +133,29 @@ def send_via_whatsapp_web(image_input: Union[Path, List[Path]], recipients: List
                         print(f"\n[WhatsApp Web] Opening chat for group: '{target}'...")
                         page.goto("https://web.whatsapp.com/", timeout=90000)
 
+                    # Dismiss any modal overlays or notification banners
+                    try:
+                        page.keyboard.press("Escape")
+                        time.sleep(1)
+                    except Exception:
+                        pass
+
                     if is_phone:
                         print("[WhatsApp Web] Waiting for chat conversation to load...")
-                        page.wait_for_selector("footer", timeout=60000)
+                        try:
+                            page.wait_for_selector("footer, div[role='dialog']", timeout=60000)
+                        except Exception:
+                            pass
+
+                        # Check if invalid number dialog appears
+                        invalid_popup = page.locator("div[role='dialog']:has-text('invalid'), div[role='dialog']:has-text('Phone number')")
+                        if invalid_popup.count() > 0 and invalid_popup.first.is_visible():
+                            print(f"[WhatsApp Web] [!] Phone number +{normalized_num} is not registered on WhatsApp or URL is invalid.")
+                            page.keyboard.press("Escape")
+                            time.sleep(1)
+                            continue
+
+                        page.wait_for_selector("footer", timeout=20000)
                         time.sleep(3)
                     else:
                         # Group search in modern WhatsApp Web

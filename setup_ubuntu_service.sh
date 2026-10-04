@@ -19,30 +19,23 @@ echo "  Service User     : $ACTUAL_USER"
 echo "  Web Manager Port : 8201"
 echo "========================================================================="
 
-# 1. System packages for Python, SQLite, and Playwright Chromium
+# 1. System packages for Python and SQLite
 echo ""
-echo "[1/6] Installing Linux system libraries for Python 3 & Chromium..."
+echo "[1/6] Installing Linux system packages for Python 3..."
 sudo apt-get update -qq
+
+# Detect Ubuntu 24.04+ (Noble) 64-bit time package naming
+ASOUND_PKG="libasound2"
+if apt-cache show libasound2t64 >/dev/null 2>&1; then
+    ASOUND_PKG="libasound2t64"
+fi
+
 sudo apt-get install -y -qq \
     python3 \
     python3-pip \
     python3-venv \
     curl \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libpango-1.0-0 \
-    libcairo2
+    "$ASOUND_PKG"
 
 # 2. Virtual Environment
 echo ""
@@ -73,15 +66,15 @@ SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 sudo bash -c "cat > $SERVICE_FILE" <<EOF
 [Unit]
 Description=Asianet Kerala Regional Operations Manager & Automated Dispatcher (Port 8201)
-Documentation=https://github.com/teckscribe/Network-Mapping
+Documentation=https://github.com/teckscribe/Daily-Report
 After=network.target network-online.target time-sync.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=$ACTUAL_USER
-WorkingDirectory=$APP_DIR
-ExecStart=$APP_DIR/venv/bin/python -m uvicorn web_server:app --host 0.0.0.0 --port 8201
+WorkingDirectory="$APP_DIR"
+ExecStart="$APP_DIR/venv/bin/python" -m uvicorn web_server:app --host 0.0.0.0 --port 8201
 Restart=always
 RestartSec=10
 TimeoutStartSec=60

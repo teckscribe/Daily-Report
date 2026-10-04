@@ -1,21 +1,21 @@
 [Unit]
 Description=Asianet Kerala Regional Operations Manager & Automated Report Dispatcher (Port 8201)
-Documentation=https://github.com/teckscribe/Network-Mapping
+Documentation=https://github.com/teckscribe/Daily-Report
 After=network.target network-online.target time-sync.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# User running the service - replace with your username if running directly
-User=%I
-WorkingDirectory=/opt/asianet-tracker
-ExecStart=/opt/asianet-tracker/venv/bin/python -m uvicorn web_server:app --host 0.0.0.0 --port 8201
+User=psms
+WorkingDirectory="/home/psms/Daily Work Reports"
+ExecStart="/home/psms/Daily Work Reports/venv/bin/python" -m uvicorn web_server:app --host 0.0.0.0 --port 8201
 Restart=always
 RestartSec=10
 TimeoutStartSec=60
 Environment="PYTHONUNBUFFERED=1"
 Environment="PORT=8201"
-Environment="PATH=/opt/asianet-tracker/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="HOME=/home/psms"
+Environment="PATH=/home/psms/Daily Work Reports/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # Standard sandbox allowances for Playwright & SQLite persistence
 LimitNOFILE=65535

@@ -914,9 +914,13 @@
             <input type="text" id="acso-center" required placeholder="e.g. Chalakudy, Ottapalam">
           </div>
           <div class="form-group">
-            <label>ACSO Officer Name *</label>
+            <label>ACSO Officer Name (ADL) *</label>
             <input type="text" id="acso-name" required placeholder="e.g. Arun .A.R, Johnson K.C">
           </div>
+        </div>
+        <div class="form-group">
+          <label>ADTv ACSO Name (if different)</label>
+          <input type="text" id="acso-adtv-name" placeholder="Leave blank if same as ADL name">
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -1102,6 +1106,16 @@
     let currentRegion = "thrissur";
     let allData = { tls: [], acsos: [], centers: [], emps: [], regions: [] };
 
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     // --- Tab Switching ---
     function setTab(tabName) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -1142,8 +1156,8 @@
         allData.regions = regions;
         const select = document.getElementById('regionSelect');
         select.innerHTML = regions.map(r => `
-          <option value="${r.id}" ${r.id === currentRegion ? 'selected' : ''}>
-            ${r.name} (${r.tl_count} TLs, ${r.acso_count} ACSOs)
+          <option value="${escapeHtml(r.id)}" ${r.id === currentRegion ? 'selected' : ''}>
+            ${escapeHtml(r.name)} (${Number(r.tl_count || 0)} TLs, ${Number(r.acso_count || 0)} ACSOs)
           </option>
         `).join('');
       } catch (err) {
@@ -1188,7 +1202,7 @@
       const q = document.getElementById('tl-search').value.toLowerCase();
       const tbody = document.getElementById('tl-tbody');
       const filtered = allData.tls.filter(t => 
-        t.name.toLowerCase().includes(q) || t.center_name.toLowerCase().includes(q) || t.pp_adl_emp_code.toLowerCase().includes(q)
+        (t.name || '').toLowerCase().includes(q) || (t.center_name || '').toLowerCase().includes(q) || (t.pp_adl_emp_code || '').toLowerCase().includes(q)
       );
 
       if (filtered.length === 0) {
@@ -1199,14 +1213,14 @@
       tbody.innerHTML = filtered.map((t, idx) => `
         <tr>
           <td><strong>${idx + 1}</strong></td>
-          <td><span class="center-tag">${t.center_name}</span></td>
-          <td><strong>${t.name}</strong></td>
-          <td><span class="code-pill">${t.pd_adl_name_key}</span></td>
-          <td><span class="code-pill">${t.pd_adtv_name_key}</span></td>
-          <td><span class="code-pill" style="background: #e0f2fe; color: #0369a1;">${t.pp_adl_emp_code}</span></td>
+          <td><span class="center-tag">${escapeHtml(t.center_name)}</span></td>
+          <td><strong>${escapeHtml(t.name)}</strong></td>
+          <td><span class="code-pill">${escapeHtml(t.pd_adl_name_key)}</span></td>
+          <td><span class="code-pill">${escapeHtml(t.pd_adtv_name_key)}</span></td>
+          <td><span class="code-pill" style="background: #e0f2fe; color: #0369a1;">${escapeHtml(t.pp_adl_emp_code)}</span></td>
           <td class="actions-cell">
-            <button class="btn btn-secondary btn-sm" onclick="editTL(${t.id})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteTL(${t.id})">Delete</button>
+            <button class="btn btn-secondary btn-sm" onclick="editTL(${Number(t.id)})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteTL(${Number(t.id)})">Delete</button>
           </td>
         </tr>
       `).join('');
@@ -1216,7 +1230,7 @@
       const q = document.getElementById('center-search').value.toLowerCase();
       const tbody = document.getElementById('center-tbody');
       const filtered = allData.acsos.filter(c => 
-        c.center_name.toLowerCase().includes(q) || c.acso_name.toLowerCase().includes(q)
+        (c.center_name || '').toLowerCase().includes(q) || (c.acso_name || '').toLowerCase().includes(q)
       );
 
       if (filtered.length === 0) {
@@ -1227,14 +1241,17 @@
       tbody.innerHTML = filtered.map((c, idx) => `
         <tr>
           <td><strong>${idx + 1}</strong></td>
-          <td><span class="center-tag">${c.center_name}</span></td>
-          <td><strong>${c.acso_name}</strong></td>
-          <td><span class="code-pill">${c.pd_adl_center_key}</span></td>
-          <td><span class="code-pill">${c.pd_adtv_center_key}</span></td>
-          <td><span class="code-pill" style="background: #fef3c7; color: #92400e;">${c.pp_adl_center_key}</span></td>
+          <td><span class="center-tag">${escapeHtml(c.center_name)}</span></td>
+          <td>
+            <strong>${escapeHtml(c.acso_name)}</strong>
+            ${c.adtv_acso_name && c.adtv_acso_name !== c.acso_name ? `<div style="font-size: 0.75rem; color: var(--text-muted);">ADTv: ${escapeHtml(c.adtv_acso_name)}</div>` : ''}
+          </td>
+          <td><span class="code-pill">${escapeHtml(c.pd_adl_center_key)}</span></td>
+          <td><span class="code-pill">${escapeHtml(c.pd_adtv_center_key)}</span></td>
+          <td><span class="code-pill" style="background: #fef3c7; color: #92400e;">${escapeHtml(c.pp_adl_center_key)}</span></td>
           <td class="actions-cell">
-            <button class="btn btn-secondary btn-sm" onclick="editACSO(${c.id})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteACSO(${c.id})">Delete</button>
+            <button class="btn btn-secondary btn-sm" onclick="editACSO(${Number(c.id)})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteACSO(${Number(c.id)})">Delete</button>
           </td>
         </tr>
       `).join('');
@@ -1244,7 +1261,7 @@
       const q = document.getElementById('emp-search').value.toLowerCase();
       const tbody = document.getElementById('emp-tbody');
       const filtered = allData.emps.filter(e => 
-        e.emp_code.toLowerCase().includes(q) || e.name.toLowerCase().includes(q) || e.role.toLowerCase().includes(q)
+        (e.emp_code || '').toLowerCase().includes(q) || (e.name || '').toLowerCase().includes(q) || (e.role || '').toLowerCase().includes(q)
       );
 
       if (filtered.length === 0) {
@@ -1254,14 +1271,14 @@
 
       tbody.innerHTML = filtered.map(e => `
         <tr>
-          <td><span class="code-pill" style="background: #e0f2fe; color: #0369a1; font-size: 0.9rem;">${e.emp_code}</span></td>
-          <td><strong>${e.name}</strong></td>
-          <td><span class="tab-badge" style="background: #ede9fe; color: #6d28d9;">${e.role}</span></td>
-          <td>${e.center_name || '—'}</td>
-          <td>${e.phone || '—'}</td>
+          <td><span class="code-pill" style="background: #e0f2fe; color: #0369a1; font-size: 0.9rem;">${escapeHtml(e.emp_code)}</span></td>
+          <td><strong>${escapeHtml(e.name)}</strong></td>
+          <td><span class="tab-badge" style="background: #ede9fe; color: #6d28d9;">${escapeHtml(e.role)}</span></td>
+          <td>${escapeHtml(e.center_name || '—')}</td>
+          <td>${escapeHtml(e.phone || '—')}</td>
           <td class="actions-cell">
-            <button class="btn btn-secondary btn-sm" onclick="editEmp(${e.id})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteEmp(${e.id})">Delete</button>
+            <button class="btn btn-secondary btn-sm" onclick="editEmp(${Number(e.id)})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteEmp(${Number(e.id)})">Delete</button>
           </td>
         </tr>
       `).join('');
@@ -1344,6 +1361,7 @@
     function openAddACSOModal() {
       document.getElementById('form-acso').reset();
       document.getElementById('acso-id').value = '';
+      document.getElementById('acso-adtv-name').value = '';
       document.getElementById('modal-acso-title').innerText = "Add Center & ACSO Officer";
       openModal('modal-acso');
     }
@@ -1354,6 +1372,7 @@
       document.getElementById('acso-id').value = c.id;
       document.getElementById('acso-center').value = c.center_name;
       document.getElementById('acso-name').value = c.acso_name;
+      document.getElementById('acso-adtv-name').value = c.adtv_acso_name || '';
       document.getElementById('acso-adl-key').value = c.pd_adl_center_key;
       document.getElementById('acso-adtv-key').value = c.pd_adtv_center_key;
       document.getElementById('acso-pp-adl').value = c.pp_adl_center_key;
@@ -1365,15 +1384,18 @@
     async function saveACSO(e) {
       e.preventDefault();
       const id = document.getElementById('acso-id').value;
+      const acsoName = document.getElementById('acso-name').value.trim();
+      const adtvName = document.getElementById('acso-adtv-name').value.trim();
       const payload = {
-        center_name: document.getElementById('acso-center').value,
-        acso_name: document.getElementById('acso-name').value,
-        pd_adl_center_key: document.getElementById('acso-adl-key').value,
-        pd_adtv_center_key: document.getElementById('acso-adtv-key').value,
-        pp_adl_center_key: document.getElementById('acso-pp-adl').value,
-        pp_adtv_center_key: document.getElementById('acso-pp-adtv').value,
-        adl_center_display: document.getElementById('acso-center').value,
-        adtv_center_display: document.getElementById('acso-center').value
+        center_name: document.getElementById('acso-center').value.trim(),
+        acso_name: acsoName,
+        adtv_acso_name: adtvName || acsoName,
+        pd_adl_center_key: document.getElementById('acso-adl-key').value.trim(),
+        pd_adtv_center_key: document.getElementById('acso-adtv-key').value.trim(),
+        pp_adl_center_key: document.getElementById('acso-pp-adl').value.trim(),
+        pp_adtv_center_key: document.getElementById('acso-pp-adtv').value.trim(),
+        adl_center_display: document.getElementById('acso-center').value.trim(),
+        adtv_center_display: document.getElementById('acso-center').value.trim()
       };
 
       const url = id ? `/api/regions/${currentRegion}/acsos/${id}` : `/api/regions/${currentRegion}/acsos`;
@@ -1664,22 +1686,22 @@
         <div style="background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); display: flex; flex-direction: column; justify-content: space-between; gap: 0.75rem;">
           <div style="display: flex; align-items: flex-start; justify-content: space-between;">
             <div>
-              <div style="font-size: 1.6rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: var(--text-main); line-height: 1;">${t.run_time}</div>
-              <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin-top: 0.35rem;">${t.label || 'Daily Run'}</div>
+              <div style="font-size: 1.6rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: var(--text-main); line-height: 1;">${escapeHtml(t.run_time)}</div>
+              <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin-top: 0.35rem;">${escapeHtml(t.label || 'Daily Run')}</div>
             </div>
             <span class="tab-badge" style="background: ${t.is_enabled ? '#dcfce7' : '#f1f5f9'}; color: ${t.is_enabled ? '#15803d' : '#64748b'};">
               ${t.is_enabled ? 'Active' : 'Disabled'}
             </span>
           </div>
           <div style="font-size: 0.75rem; color: var(--text-muted);">
-            Last Run: ${t.last_run ? t.last_run.substring(0, 16) : 'Never'}
+            Last Run: ${t.last_run ? escapeHtml(t.last_run.substring(0, 16)) : 'Never'}
           </div>
           <div style="display: flex; gap: 0.4rem; justify-content: flex-end; border-top: 1px solid var(--border); padding-top: 0.6rem;">
-            <button class="btn btn-secondary btn-sm" onclick="editScheduleTime(${t.id})">Edit</button>
-            <button class="btn btn-secondary btn-sm" onclick="toggleScheduleTime(${t.id})" title="${t.is_enabled ? 'Disable' : 'Enable'}">
+            <button class="btn btn-secondary btn-sm" onclick="editScheduleTime(${Number(t.id)})">Edit</button>
+            <button class="btn btn-secondary btn-sm" onclick="toggleScheduleTime(${Number(t.id)})" title="${t.is_enabled ? 'Disable' : 'Enable'}">
               ${t.is_enabled ? '⏸ Pause' : '▶ Enable'}
             </button>
-            <button class="btn btn-danger btn-sm" onclick="deleteScheduleTime(${t.id})">Delete</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteScheduleTime(${Number(t.id)})">Delete</button>
           </div>
         </div>
       `).join('');
@@ -1704,7 +1726,7 @@
         const recipients = (r.target_recipients || '').split(',').map(s => s.trim()).filter(Boolean);
         const recipientBadges = recipients.map(rec => {
           const isPhone = rec.startsWith('+') || /^\d+$/.test(rec);
-          return `<span class="code-pill" style="background: ${isPhone ? '#dbeafe' : '#fef3c7'}; color: ${isPhone ? '#1e40af' : '#92400e'}; margin: 0.15rem; display: inline-block;">${isPhone ? '📱 ' : '👥 '}${rec}</span>`;
+          return `<span class="code-pill" style="background: ${isPhone ? '#dbeafe' : '#fef3c7'}; color: ${isPhone ? '#1e40af' : '#92400e'}; margin: 0.15rem; display: inline-block;">${isPhone ? '📱 ' : '👥 '}${escapeHtml(rec)}</span>`;
         }).join('');
 
         const typeLabel = REPORT_TYPE_LABELS[r.report_type] || r.report_type;
@@ -1713,11 +1735,11 @@
           <tr>
             <td><strong>${idx + 1}</strong></td>
             <td>
-              <strong style="color: var(--text-main); font-size: 0.92rem;">${r.rule_name}</strong>
-              ${r.description ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">${r.description}</div>` : ''}
+              <strong style="color: var(--text-main); font-size: 0.92rem;">${escapeHtml(r.rule_name)}</strong>
+              ${r.description ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">${escapeHtml(r.description)}</div>` : ''}
             </td>
             <td>
-              <span class="tab-badge" style="background: #ede9fe; color: #6d28d9; font-weight: 700;">${typeLabel}</span>
+              <span class="tab-badge" style="background: #ede9fe; color: #6d28d9; font-weight: 700;">${escapeHtml(typeLabel)}</span>
             </td>
             <td>
               <div style="display: flex; flex-wrap: wrap; gap: 0.2rem;">
@@ -1730,12 +1752,12 @@
               </span>
             </td>
             <td class="actions-cell">
-              <button class="btn btn-primary btn-sm" onclick="testTriggerRule(${r.id}, this)" title="Send this report right now" style="background: #16a34a; border-color: #15803d;">
+              <button class="btn btn-primary btn-sm" onclick="testTriggerRule(${Number(r.id)}, this)" title="Send this report right now" style="background: #16a34a; border-color: #15803d;">
                 ⚡ Send
               </button>
-              <button class="btn btn-secondary btn-sm" onclick="editRule(${r.id})">Edit</button>
-              <button class="btn btn-secondary btn-sm" onclick="toggleRule(${r.id})">${r.is_enabled ? 'Disable' : 'Enable'}</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteRule(${r.id})">Delete</button>
+              <button class="btn btn-secondary btn-sm" onclick="editRule(${Number(r.id)})">Edit</button>
+              <button class="btn btn-secondary btn-sm" onclick="toggleRule(${Number(r.id)})">${r.is_enabled ? 'Disable' : 'Enable'}</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteRule(${Number(r.id)})">Delete</button>
             </td>
           </tr>
         `;

@@ -40,12 +40,13 @@ def _casefold_eq(series: pd.Series, value: str) -> pd.Series:
     return series.astype(str).str.strip().str.casefold() == value.casefold()
 
 
-def filter_adl(df: pd.DataFrame) -> pd.DataFrame:
+def filter_adl(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFrame:
     if df.empty:
         return df
     f = df.copy()
+    target_reg = region or TARGET_REGION
     if "REGION" in f.columns:
-        f = f[_casefold_eq(f["REGION"], TARGET_REGION)]
+        f = f[_casefold_eq(f["REGION"], target_reg)]
     if "COMPLAINTTYPE" in f.columns:
         f = f[_casefold_eq(f["COMPLAINTTYPE"], ADL_COMPLAINT_TYPE)]
     if "PROBLEMTYPE" in f.columns:
@@ -54,24 +55,26 @@ def filter_adl(df: pd.DataFrame) -> pd.DataFrame:
     return f
 
 
-def filter_adtv(df: pd.DataFrame) -> pd.DataFrame:
+def filter_adtv(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFrame:
     if df.empty:
         return df
     f = df.copy()
+    target_reg = region or TARGET_REGION
     if "REGION" in f.columns:
-        f = f[_casefold_eq(f["REGION"], TARGET_REGION)]
+        f = f[_casefold_eq(f["REGION"], target_reg)]
     if "COMPLAINTTYPE" in f.columns:
         f = f[_casefold_eq(f["COMPLAINTTYPE"], ADTV_COMPLAINT_TYPE)]
     return f
 
 
-def filter_prepaid(df: pd.DataFrame) -> pd.DataFrame:
+def filter_prepaid(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFrame:
     if df.empty:
         return df
     f = df.copy()
+    target_reg = region or PREPAID_REGION
     region_col = next((c for c in f.columns if str(c).lower() == "region"), None)
     if region_col:
-        f = f[_casefold_eq(f[region_col], PREPAID_REGION)]
+        f = f[_casefold_eq(f[region_col], target_reg)]
     ct_col = next((c for c in f.columns if str(c).lower() in ("complaint type", "complainttype")), None)
     if ct_col:
         f = f[f[ct_col].astype(str).str.strip().str.casefold().str.contains(PREPAID_COMPLAINT_TYPE.casefold(), na=False)]
@@ -81,20 +84,20 @@ def filter_prepaid(df: pd.DataFrame) -> pd.DataFrame:
 # --- Report computation ---
 
 def compute_report_result(df_adl: pd.DataFrame, df_adtv: pd.DataFrame, df_prepaid: pd.DataFrame,
-                          strict: bool = True) -> ReportResult:
+                          region_id: str = "thrissur", strict: bool = True) -> ReportResult:
     """Validate inputs, then compute all three report sheets exactly like the Excel workbook."""
     warnings = validate_inputs(df_adl, df_adtv, df_prepaid)
     for w in warnings:
         print(f"  [!] DATA WARNING {w}")
     if warnings and strict:
         raise ValueError("Input data failed integrity checks - report NOT generated:\n  " + "\n  ".join(warnings))
-    return compute_report(df_adl, df_adtv, df_prepaid)
+    return compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
 
 
 def compute_all_sections(df_adl: pd.DataFrame, df_adtv: pd.DataFrame, df_prepaid: pd.DataFrame,
-                         strict: bool = True) -> Dict[str, pd.DataFrame]:
+                         region_id: str = "thrissur", strict: bool = True) -> Dict[str, pd.DataFrame]:
     """Backward-compatible wrapper: final 'Post Paid & Prepaid' tables as DataFrames."""
-    result = compute_report_result(df_adl, df_adtv, df_prepaid, strict=strict)
+    result = compute_report_result(df_adl, df_adtv, df_prepaid, region_id=region_id, strict=strict)
     return {k: t.to_frame() for k, t in result.final.items()}
 
 

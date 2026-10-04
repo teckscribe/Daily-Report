@@ -1,3 +1,4 @@
+import html
 import os
 import sys
 import time
@@ -87,8 +88,9 @@ def generate_table_html(title: str, bucket_names: List[str], rows: List[dict], i
     Generates pixel-perfect HTML table styled exactly like the user's manual report.
     Proportions and typography are calibrated for ultra-sharp Retina rendering.
     """
+    esc_title = html.escape(title)
     num_b = len(bucket_names)
-    thead_b_th = "".join(f'<th class="th-bucket">{b}</th>' for b in bucket_names)
+    thead_b_th = "".join(f'<th class="th-bucket">{html.escape(b)}</th>' for b in bucket_names)
 
     tbody_rows = ""
     for row in rows:
@@ -109,10 +111,13 @@ def generate_table_html(title: str, bucket_names: List[str], rows: List[dict], i
             else:
                 b_tds += '<td class="cell-empty"></td>'
 
+        esc_center = html.escape(str(row['center']))
+        esc_name = html.escape(str(row['name']))
+
         tbody_rows += f"""
         <tr>
-            <td class="col-center">{row['center']}</td>
-            <td class="col-name">{row['name']}</td>
+            <td class="col-center">{esc_center}</td>
+            <td class="col-name">{esc_name}</td>
             <td class="{gt_cls}">{gt_text}</td>
             {b_tds}
         </tr>
@@ -245,10 +250,19 @@ def generate_report_images(sections: Dict[str, pd.DataFrame] = None) -> List[Pat
 
     # 3. Render via Playwright with 2.2x scale factor for crisp 1600px+ width
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            channel="chrome" if sys.platform == "win32" else None,
-            headless=True,
-        )
+        launch_kwargs = {"headless": True}
+        if sys.platform == "win32":
+            launch_kwargs["channel"] = "chrome"
+
+        try:
+            browser = p.chromium.launch(**launch_kwargs)
+        except Exception as e_launch:
+            if "channel" in launch_kwargs:
+                launch_kwargs.pop("channel", None)
+                browser = p.chromium.launch(**launch_kwargs)
+            else:
+                raise e_launch
+
         page = browser.new_page(device_scale_factor=2.2)
 
         # Render ADL Image (Saved as JPEG for perfect WhatsApp mobile display)
@@ -366,8 +380,9 @@ def generate_acso_table_html(title: str, bucket_names: List[str], rows: List[dic
     """
     Generates pixel-perfect HTML table for ACSO report including the bottom Grand Total row.
     """
+    esc_title = html.escape(title)
     num_b = len(bucket_names)
-    thead_b_th = "".join(f'<th class="th-bucket">{b}</th>' for b in bucket_names)
+    thead_b_th = "".join(f'<th class="th-bucket">{html.escape(b)}</th>' for b in bucket_names)
 
     tbody_rows = ""
     for row in rows:
@@ -388,10 +403,13 @@ def generate_acso_table_html(title: str, bucket_names: List[str], rows: List[dic
             else:
                 b_tds += '<td class="cell-empty"></td>'
 
+        esc_center = html.escape(str(row['center']))
+        esc_name = html.escape(str(row['name']))
+
         tbody_rows += f"""
         <tr>
-            <td class="col-center">{row['center']}</td>
-            <td class="col-name">{row['name']}</td>
+            <td class="col-center">{esc_center}</td>
+            <td class="col-name">{esc_name}</td>
             <td class="{gt_cls}">{gt_text}</td>
             {b_tds}
         </tr>
@@ -592,10 +610,19 @@ def generate_acso_report_images(sections: Dict[str, pd.DataFrame] = None) -> Lis
 
     # 3. Render via Playwright with 2.2x scale factor for crisp 1600px+ width
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            channel="chrome" if sys.platform == "win32" else None,
-            headless=True,
-        )
+        launch_kwargs = {"headless": True}
+        if sys.platform == "win32":
+            launch_kwargs["channel"] = "chrome"
+
+        try:
+            browser = p.chromium.launch(**launch_kwargs)
+        except Exception as e_launch:
+            if "channel" in launch_kwargs:
+                launch_kwargs.pop("channel", None)
+                browser = p.chromium.launch(**launch_kwargs)
+            else:
+                raise e_launch
+
         page = browser.new_page(device_scale_factor=2.2)
 
         # Render ADL ACSO Image

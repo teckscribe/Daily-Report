@@ -19,6 +19,8 @@ from config import (
     ADTV_REPORT_URL,
     ADL_EXPORT_QUERY,
     ADTV_EXPORT_QUERY,
+    get_adl_export_query,
+    get_adtv_export_query,
     PREPAID_PORTAL_URL,
     PREPAID_REPORT_URL,
     PREPAID_EXPORT_URL,
@@ -56,12 +58,12 @@ def get_latest_local_downloads() -> Tuple[Optional[Path], Optional[Path], Option
     return None, None, None
 
 
-def download_via_http_session() -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
+def download_via_http_session(region: str = "Thrissur") -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
     """
     Direct, ultra-fast headless HTTP session downloader for Softcode and Prepaid portals.
     Executes in 2-3 seconds without browser overhead or profile lock issues.
     """
-    print("[CRM Downloader] Trying direct HTTP Session download...")
+    print(f"[CRM Downloader] Trying direct HTTP Session download for region: '{region}'...")
     adl_path = None
     adtv_path = None
     prep_path = None
@@ -105,11 +107,11 @@ def download_via_http_session() -> Tuple[Optional[Path], Optional[Path], Optiona
                 print(f"[CRM Downloader] CRMS module reached: {res_redir.url[:60]}...")
 
                 # Fetch ADL Broadband report
-                print("[CRM Downloader] Downloading ADL Broadband Pending Tickets (RFCRM014)...")
+                print(f"[CRM Downloader] Downloading ADL Broadband Pending Tickets (RFCRM014) for region '{region}'...")
                 adl_url = "https://portal.asianet.co.in/crms/getReportData"
                 params_adl = {
                     "RptCode": "RFCRM014",
-                    "dataSql": ADL_EXPORT_QUERY,
+                    "dataSql": get_adl_export_query(region),
                 }
                 res_adl = s.get(adl_url, params=params_adl, timeout=60)
                 if res_adl.status_code == 200 and len(res_adl.content) > 1000:
@@ -120,10 +122,10 @@ def download_via_http_session() -> Tuple[Optional[Path], Optional[Path], Optiona
                     print(f"  [!] ADL download received HTTP {res_adl.status_code}, size: {len(res_adl.content)} bytes")
 
                 # Fetch ADTv Digital TV report
-                print("[CRM Downloader] Downloading ADTv Digital TV Pending Tickets (RFCRM015)...")
+                print(f"[CRM Downloader] Downloading ADTv Digital TV Pending Tickets (RFCRM015) for region '{region}'...")
                 params_adtv = {
                     "RptCode": "RFCRM015",
-                    "dataSql": ADTV_EXPORT_QUERY,
+                    "dataSql": get_adtv_export_query(region),
                 }
                 res_adtv = s.get(adl_url, params=params_adtv, timeout=60)
                 if res_adtv.status_code == 200 and len(res_adtv.content) > 1000:
@@ -188,12 +190,12 @@ def download_via_http_session() -> Tuple[Optional[Path], Optional[Path], Optiona
     return adl_path, adtv_path, prep_path
 
 
-def download_via_playwright(headless: bool = False) -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
+def download_via_playwright(headless: bool = False, region: str = "Thrissur") -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
     """
     Playwright browser automation fallback.
     Launches browser, fills login fields, clicks elements, and captures file chooser downloads.
     """
-    print("[CRM Downloader] Initiating Playwright browser automation fallback...")
+    print(f"[CRM Downloader] Initiating Playwright browser automation fallback for region: '{region}'...")
     adl_path = None
     adtv_path = None
     prep_path = None
@@ -212,7 +214,16 @@ def download_via_playwright(headless: bool = False) -> Tuple[Optional[Path], Opt
             if sys.platform == "win32":
                 launch_kwargs["channel"] = "chrome"
 
-            context = p.chromium.launch_persistent_context(**launch_kwargs)
+            try:
+                context = p.chromium.launch_persistent_context(**launch_kwargs)
+            except Exception as e_launch:
+                if "channel" in launch_kwargs:
+                    print(f"[CRM Downloader] Chrome launch notice ({e_launch}). Falling back to bundled Chromium...")
+                    launch_kwargs.pop("channel", None)
+                    context = p.chromium.launch_persistent_context(**launch_kwargs)
+                else:
+                    raise e_launch
+
             page = context.new_page()
 
             # 1. Softcode Portal
@@ -240,8 +251,9 @@ def download_via_playwright(headless: bool = False) -> Tuple[Optional[Path], Opt
 
                 # Download ADL
                 try:
-                    print("[CRM Downloader] Fetching ADL report via datatable...")
-                    encoded_sql_adl = urllib.parse.quote(ADL_EXPORT_QUERY)
+                    print(f"[CRM Downloader] Fetching ADL report via datatable for '{region}'...")
+                    sql_adl = get_adl_export_query(region)
+                    encoded_sql_adl = urllib.parse.quote(sql_adl)
                     direct_adl_url = f"https://portal.asianet.co.in/crms/getReportData?RptCode=RFCRM014&dataSql={encoded_sql_adl}"
                     with page.expect_download(timeout=45000) as download_info:
                         page.goto(direct_adl_url)
@@ -254,8 +266,9 @@ def download_via_playwright(headless: bool = False) -> Tuple[Optional[Path], Opt
 
                 # Download ADTv
                 try:
-                    print("[CRM Downloader] Fetching ADTv report via datatable...")
-                    encoded_sql_adtv = urllib.parse.quote(ADTV_EXPORT_QUERY)
+                    print(f"[CRM Downloader] Fetching ADTv report via datatable for '{region}'...")
+                    sql_adtv = get_adtv_export_query(region)
+                    encoded_sql_adtv = urllib.parse.quote(sql_adtv)
                     direct_adtv_url = f"https://portal.asianet.co.in/crms/getReportData?RptCode=RFCRM015&dataSql={encoded_sql_adtv}"
                     with page.expect_download(timeout=45000) as download_info:
                         page.goto(direct_adtv_url)
@@ -298,7 +311,7 @@ def download_via_playwright(headless: bool = False) -> Tuple[Optional[Path], Opt
     return adl_path, adtv_path, prep_path
 
 
-def download_from_crm(headless: bool = True) -> Tuple[Path, Path, Path]:
+def download_from_crm(headless: bool = True, region: str = "Thrissur") -> Tuple[Path, Path, Path]:
     """
     Unified entrypoint:
     1. Attempts direct ultra-fast HTTP Session download.
@@ -306,7 +319,7 @@ def download_from_crm(headless: bool = True) -> Tuple[Path, Path, Path]:
     3. If still missing files, falls back to latest local downloads from Downloads/ or data/.
     """
     print("=" * 60)
-    print("[CRM Downloader] Starting Automated Portal Download Pipeline")
+    print(f"[CRM Downloader] Starting Automated Portal Download Pipeline for Region: {region}")
     print("=" * 60)
 
     adl_path = None
@@ -315,13 +328,13 @@ def download_from_crm(headless: bool = True) -> Tuple[Path, Path, Path]:
 
     # Step 1: Fast HTTP session
     if (SOFTCODE_USER and SOFTCODE_PWD) or (PREPAID_USER and PREPAID_PWD):
-        adl_path, adtv_path, prep_path = download_via_http_session()
+        adl_path, adtv_path, prep_path = download_via_http_session(region=region)
 
     # Step 2: Browser automation fallback if any file missing
     if not (adl_path and adtv_path and prep_path):
         if (SOFTCODE_USER and SOFTCODE_PWD) or (PREPAID_USER and PREPAID_PWD):
             print("\n[CRM Downloader] Some files not retrieved via HTTP. Attempting Playwright browser fallback...")
-            b_adl, b_adtv, b_prep = download_via_playwright(headless=headless)
+            b_adl, b_adtv, b_prep = download_via_playwright(headless=headless, region=region)
             adl_path = adl_path or b_adl
             adtv_path = adtv_path or b_adtv
             prep_path = prep_path or b_prep

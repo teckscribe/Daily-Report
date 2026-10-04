@@ -75,6 +75,7 @@ def init_db():
         region_id TEXT NOT NULL,
         center_name TEXT NOT NULL,
         acso_name TEXT NOT NULL,
+        adtv_acso_name TEXT,
         adl_center_display TEXT NOT NULL,
         adtv_center_display TEXT NOT NULL,
         pd_adl_center_key TEXT NOT NULL,
@@ -125,12 +126,27 @@ def init_db():
         rule_name TEXT NOT NULL,
         report_type TEXT NOT NULL,
         target_recipients TEXT NOT NULL,
+        description TEXT,
         is_enabled INTEGER DEFAULT 1,
         created_at TEXT,
         updated_at TEXT,
         FOREIGN KEY (region_id) REFERENCES regions (id) ON DELETE CASCADE
     )
     """)
+
+    # Dynamic migrations for existing databases
+    c.execute("PRAGMA table_info(acsos)")
+    acso_cols = [r[1] for r in c.fetchall()]
+    if "adtv_acso_name" not in acso_cols:
+        c.execute("ALTER TABLE acsos ADD COLUMN adtv_acso_name TEXT")
+        c.execute("UPDATE acsos SET adtv_acso_name = acso_name WHERE adtv_acso_name IS NULL")
+        conn.commit()
+
+    c.execute("PRAGMA table_info(dispatch_rules)")
+    rule_cols = [r[1] for r in c.fetchall()]
+    if "description" not in rule_cols:
+        c.execute("ALTER TABLE dispatch_rules ADD COLUMN description TEXT")
+        conn.commit()
 
     c.execute("""
     CREATE TABLE IF NOT EXISTS schedule_times (
@@ -189,10 +205,10 @@ def init_db():
         for idx, a in enumerate(ACSO_ROWS, 1):
             c.execute("""
             INSERT INTO acsos 
-            (region_id, center_name, acso_name, adl_center_display, adtv_center_display, pd_adl_center_key, pd_adtv_center_key, pp_adl_center_key, pp_adtv_center_key, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (region_id, center_name, acso_name, adtv_acso_name, adl_center_display, adtv_center_display, pd_adl_center_key, pd_adtv_center_key, pp_adl_center_key, pp_adtv_center_key, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                "thrissur", a.adl_center, a.adl_acso, a.adl_center, a.adtv_center,
+                "thrissur", a.adl_center, a.adl_acso, a.adtv_acso, a.adl_center, a.adtv_center,
                 a.pd_adl_center_key, a.pd_adtv_center_key, a.pp_adl_center_key, a.pp_adtv_center_key, idx
             ))
 
@@ -396,12 +412,13 @@ def add_acso(region_id: str, data: Dict[str, Any]) -> int:
     c = conn.cursor()
     c.execute("""
     INSERT INTO acsos 
-    (region_id, center_name, acso_name, adl_center_display, adtv_center_display, pd_adl_center_key, pd_adtv_center_key, pp_adl_center_key, pp_adtv_center_key, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (region_id, center_name, acso_name, adtv_acso_name, adl_center_display, adtv_center_display, pd_adl_center_key, pd_adtv_center_key, pp_adl_center_key, pp_adtv_center_key, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         region_id,
         data.get("center_name", "").strip(),
         data.get("acso_name", "").strip(),
+        data.get("adtv_acso_name", data.get("acso_name", "")).strip(),
         data.get("adl_center_display", data.get("center_name", "")).strip(),
         data.get("adtv_center_display", data.get("center_name", "")).strip(),
         data.get("pd_adl_center_key", data.get("center_name", "")).strip(),
@@ -423,6 +440,7 @@ def update_acso(acso_id: int, data: Dict[str, Any]) -> bool:
     UPDATE acsos SET
         center_name = ?,
         acso_name = ?,
+        adtv_acso_name = ?,
         adl_center_display = ?,
         adtv_center_display = ?,
         pd_adl_center_key = ?,
@@ -434,6 +452,7 @@ def update_acso(acso_id: int, data: Dict[str, Any]) -> bool:
     """, (
         data.get("center_name", "").strip(),
         data.get("acso_name", "").strip(),
+        data.get("adtv_acso_name", data.get("acso_name", "")).strip(),
         data.get("adl_center_display", "").strip(),
         data.get("adtv_center_display", "").strip(),
         data.get("pd_adl_center_key", "").strip(),
@@ -604,13 +623,14 @@ def add_dispatch_rule(data: Dict[str, Any]) -> int:
     c = conn.cursor()
     now_str = datetime.now().isoformat()
     c.execute("""
-    INSERT INTO dispatch_rules (region_id, rule_name, report_type, target_recipients, is_enabled, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO dispatch_rules (region_id, rule_name, report_type, target_recipients, description, is_enabled, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         data.get("region_id", "thrissur").strip(),
         data.get("rule_name", "").strip(),
         data.get("report_type", "all").strip(),
         data.get("target_recipients", "").strip(),
+        data.get("description", "").strip(),
         1 if data.get("is_enabled", 1) else 0,
         now_str,
         now_str
@@ -630,6 +650,7 @@ def update_dispatch_rule(rule_id: int, data: Dict[str, Any]) -> bool:
         rule_name = ?,
         report_type = ?,
         target_recipients = ?,
+        description = ?,
         is_enabled = ?,
         updated_at = ?
     WHERE id = ?
@@ -637,6 +658,7 @@ def update_dispatch_rule(rule_id: int, data: Dict[str, Any]) -> bool:
         data.get("rule_name", "").strip(),
         data.get("report_type", "all").strip(),
         data.get("target_recipients", "").strip(),
+        data.get("description", "").strip(),
         1 if data.get("is_enabled", 1) else 0,
         now_str,
         rule_id

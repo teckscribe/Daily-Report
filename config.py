@@ -45,41 +45,50 @@ PREPAID_PORTAL_URL = "https://sms.ali.asianetindia.com/login/"
 PREPAID_REPORT_URL = "https://sms.ali.asianetindia.com/admin/reports/customised/pending-tickets"
 PREPAID_EXPORT_URL = "https://sms.ali.asianetindia.com/api/reports/customised/pending-tickets/export?lco="
 
-# Direct SQL query used by Softcode CRMS export
-ADL_EXPORT_QUERY = (
-    " SELECT SubCode,NAME,'NA' AS Address, 'NA' AS MobileNo, TICKETNO, LOGINTIME,TicketStatus,subStatus, "
-    "followUpDate,followUpRemarks,modifiedBy as FollowUpBy,ComplaintType, ProblemType,ProblemSubType, "
-    "reason,ProblemDescription,problemRaisedBy,UserId,SourceOfComplaint, TicketType,OutageID,category,"
-    "WhyPendingDescription,probResolution, DescriptionByWhom, ReopenedRemarks, reopenedByWhom,NoofCalls,"
-    "FREQ_Complaints,FibreNode, Area,Center,Region, MAC,SecondMobileNo, PhoneNo, PackageName,DaysElapsed,"
-    "HoursElapsed, CallBackStatus,ASSOCIATEID, NewTicketSubCode, ClassDesc ,OutageStatus, Dues,status,"
-    "teamLeaderName, RegCode,ModemType,Technology_Type,allotEname,canvassedBy, Apprecom_Analysis, "
-    "canvassedByName,activatedOn,GPONSINO,[CRMS].[dbo].[New_AON_ADL_Table].[Age] as AON "
-    "FROM crms.dbo.Rpt_Pending_Tickets "
-    "LEFT join [CRMS].[dbo].[New_AON_ADL_Table] on [CRMS].[dbo].[New_AON_ADL_Table].BP_Code=SubCode "
-    "where 1=1 and region in ( 'Thrissur' ) and complaintType in ( 'Network' ) and problemType in ( 'Network Complaints','Onsite Visit' ) "
-    "ORDER BY LOGINTIME DESC"
-)
+def get_adl_export_query(region: str = "Thrissur") -> str:
+    """Generates the Softcode CRMS SQL export query for ADL Broadband for a specific region."""
+    clean_region = region.strip().replace("'", "''")
+    return (
+        " SELECT SubCode,NAME,'NA' AS Address, 'NA' AS MobileNo, TICKETNO, LOGINTIME,TicketStatus,subStatus, "
+        "followUpDate,followUpRemarks,modifiedBy as FollowUpBy,ComplaintType, ProblemType,ProblemSubType, "
+        "reason,ProblemDescription,problemRaisedBy,UserId,SourceOfComplaint, TicketType,OutageID,category,"
+        "WhyPendingDescription,probResolution, DescriptionByWhom, ReopenedRemarks, reopenedByWhom,NoofCalls,"
+        "FREQ_Complaints,FibreNode, Area,Center,Region, MAC,SecondMobileNo, PhoneNo, PackageName,DaysElapsed,"
+        "HoursElapsed, CallBackStatus,ASSOCIATEID, NewTicketSubCode, ClassDesc ,OutageStatus, Dues,status,"
+        "teamLeaderName, RegCode,ModemType,Technology_Type,allotEname,canvassedBy, Apprecom_Analysis, "
+        "canvassedByName,activatedOn,GPONSINO,[CRMS].[dbo].[New_AON_ADL_Table].[Age] as AON "
+        "FROM crms.dbo.Rpt_Pending_Tickets "
+        "LEFT join [CRMS].[dbo].[New_AON_ADL_Table] on [CRMS].[dbo].[New_AON_ADL_Table].BP_Code=SubCode "
+        f"where 1=1 and region in ( '{clean_region}' ) and complaintType in ( 'Network' ) and problemType in ( 'Network Complaints','Onsite Visit' ) "
+        "ORDER BY LOGINTIME DESC"
+    )
 
-ADTV_EXPORT_QUERY = (
-    "  SELECT     Subcode,TICKETNO, CustomerNAME,'NA' as Address,SMSNo,TICKETNO,LOGINTIME,Ticketstatus,ComplaintType,  "
-    "problemType,problemSubType,ProblemRemarks,ProblemRaisedBy,WhyPendingDescription,descriptionByWhom,   "
-    "ReopenedRemarks,reopenedByWhom,FibreNode,ServiceAMO,Region,TicketType, DaysElapsed,HoursElapsed,NoOfCalls,   "
-    "MAC,AMCDueDt, 'NA' as MobileNo,'NA' as PhoneNo, teamLeaderName,SchemeName,CustomerAMO, AMOCHANGENAME,     "
-    "AMOCHANGEDATE,Dues, SubscriberStatus, FranchiseeCode,FranchiseeType,  CostDate as UpdatedDate,  "
-    "IRResPersonName as UpdatedName,CostNo,allotEname,Technology,modemType,[CRMS].[dbo].[New_AON_ACS_Table].[Age] as AON   "
-    "FROM  Rpt_DTV_Pending_Tickets  "
-    "LEFT  join [CRMS].[dbo].[New_AON_ACS_Table] on [CRMS].[dbo].[New_AON_ACS_Table].BP_Code=SubCode  "
-    "where 1=1  and region = 'Thrissur' and complaintType in ( 'Network' ) "
-    "ORDER BY LOGINTIME DESC"
-)
+def get_adtv_export_query(region: str = "Thrissur") -> str:
+    """Generates the Softcode CRMS SQL export query for ADTv Digital TV for a specific region."""
+    clean_region = region.strip().replace("'", "''")
+    return (
+        "  SELECT     Subcode,TICKETNO, CustomerNAME,'NA' as Address,SMSNo,TICKETNO,LOGINTIME,Ticketstatus,ComplaintType,  "
+        "problemType,problemSubType,ProblemRemarks,ProblemRaisedBy,WhyPendingDescription,descriptionByWhom,   "
+        "ReopenedRemarks,reopenedByWhom,FibreNode,ServiceAMO,Region,TicketType, DaysElapsed,HoursElapsed,NoOfCalls,   "
+        "MAC,AMCDueDt, 'NA' as MobileNo,'NA' as PhoneNo, teamLeaderName,SchemeName,CustomerAMO, AMOCHANGENAME,     "
+        "AMOCHANGEDATE,Dues, SubscriberStatus, FranchiseeCode,FranchiseeType,  CostDate as UpdatedDate,  "
+        "IRResPersonName as UpdatedName,CostNo,allotEname,Technology,modemType,[CRMS].[dbo].[New_AON_ACS_Table].[Age] as AON   "
+        "FROM  Rpt_DTV_Pending_Tickets  "
+        "LEFT  join [CRMS].[dbo].[New_AON_ACS_Table] on [CRMS].[dbo].[New_AON_ACS_Table].BP_Code=SubCode  "
+        f"where 1=1  and region = '{clean_region}' and complaintType in ( 'Network' ) "
+        "ORDER BY LOGINTIME DESC"
+    )
 
-# --- Credentials (from .env) ---
+# Direct SQL query used by Softcode CRMS export (default to Thrissur baseline)
+ADL_EXPORT_QUERY = get_adl_export_query("Thrissur")
+ADTV_EXPORT_QUERY = get_adtv_export_query("Thrissur")
+
+# --- Credentials (from .env, supporting both _PWD and _PASS variants) ---
 SOFTCODE_USER = os.getenv("SOFTCODE_USER", "")
-SOFTCODE_PWD = os.getenv("SOFTCODE_PWD", "")
+SOFTCODE_PWD = os.getenv("SOFTCODE_PWD") or os.getenv("SOFTCODE_PASS", "")
 
 PREPAID_USER = os.getenv("PREPAID_USER", "")
-PREPAID_PWD = os.getenv("PREPAID_PWD", "")
+PREPAID_PWD = os.getenv("PREPAID_PWD") or os.getenv("PREPAID_PASS", "")
 
 # --- Filter Criteria ---
 TARGET_REGION = "Thrissur"

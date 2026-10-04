@@ -78,6 +78,7 @@ class TeamLeaderPayload(BaseModel):
 class AcsoPayload(BaseModel):
     center_name: str
     acso_name: str
+    adtv_acso_name: Optional[str] = ""
     pd_adl_center_key: Optional[str] = ""
     pd_adtv_center_key: Optional[str] = ""
     pp_adl_center_key: Optional[str] = ""
@@ -99,6 +100,7 @@ class DispatchRulePayload(BaseModel):
     rule_name: str
     report_type: str
     target_recipients: str
+    description: Optional[str] = ""
     region_id: Optional[str] = "thrissur"
     is_enabled: Optional[bool] = True
 
@@ -113,6 +115,10 @@ class ScheduleTimePayload(BaseModel):
 class GenerateAndSendPayload(BaseModel):
     target_phone: str
     report_type: Optional[str] = "all"
+
+
+class CycleRunPayload(BaseModel):
+    region_id: Optional[str] = "thrissur"
 
 
 # --- Frontend View Route ---
@@ -325,7 +331,8 @@ def generate_reports(region_id: str):
 @app.post("/api/regions/{region_id}/dispatch-whatsapp")
 def dispatch_whatsapp(region_id: str):
     """
-    Sends the 4 standalone high-definition report cards directly to WhatsApp (+919633889430).
+    Sends the 4 standalone high-definition report cards directly to WhatsApp
+    configured for this region, or operator fallback.
     """
     try:
         images = [
@@ -349,10 +356,23 @@ def dispatch_whatsapp(region_id: str):
             generate_report_images(df_sections)
             generate_acso_report_images(df_sections)
 
-        # Dispatch strictly to operator's WhatsApp number
-        success = flash_report_image(images, target_recipients=["+919633889430"])
+        # Collect target recipients from active dispatch rules for this region
+        rules = db_manager.get_dispatch_rules(region_id)
+        targets: List[str] = []
+        for r in rules:
+            if r.get("is_enabled", 1):
+                for t in str(r.get("target_recipients", "")).split(","):
+                    clean = t.strip()
+                    if clean and clean not in targets:
+                        targets.append(clean)
+
+        # Fallback to configured admin phone if no rules are defined/enabled
+        if not targets:
+            targets = ["+919633889430"]
+
+        success = flash_report_image(images, target_recipients=targets)
         if success:
-            return {"status": "OK", "message": "All 4 report cards dispatched to +919633889430"}
+            return {"status": "OK", "message": f"All 4 report cards dispatched to {', '.join(targets)}"}
         else:
             raise HTTPException(status_code=500, detail="WhatsApp dispatcher failed.")
     except Exception as e:
@@ -372,19 +392,19 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
     try:
         # 1. Download latest CRM tickets
         try:
-            adl_path, adtv_path, prep_path = download_from_crm(headless=True)
+            adl_path, adtv_path, prep_path = download_from_crm(region=region_id, headless=True)
             raw_adl = pd.read_excel(adl_path)
             raw_adtv = pd.read_excel(adtv_path)
             raw_prep = pd.read_csv(prep_path) if str(prep_path).endswith(".csv") else pd.read_excel(prep_path)
-            df_adl = filter_adl(raw_adl)
-            df_adtv = filter_adtv(raw_adtv)
-            df_prep = filter_prepaid(raw_prep)
+            df_adl = filter_adl(raw_adl, region=region_id)
+            df_adtv = filter_adtv(raw_adtv, region=region_id)
+            df_prep = filter_prepaid(raw_prep, region=region_id)
         except Exception as e_dl:
             print(f"[Generate & Send] Online download fallback: {e_dl}")
             df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
 
         # 2. Compute report
-        result = compute_report(df_adl, df_adtv, df_prep, region_id=region_id)
+        result = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
 
         # 3. Render High-DPI images
         df_sections = {
@@ -438,14 +458,14 @@ def execute_automated_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
     """Pulls fresh tickets from CRM, computes report, renders images, and dispatches per rules."""
     ts_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
-        adl_path, adtv_path, prep_path = download_from_crm(headless=True)
+        adl_path, adtv_path, prep_path = download_from_crm(region=region_id, headless=True)
         raw_adl = pd.read_excel(adl_path)
         raw_adtv = pd.read_excel(adtv_path)
         raw_prep = pd.read_csv(prep_path) if str(prep_path).endswith(".csv") else pd.read_excel(prep_path)
 
-        df_adl = filter_adl(raw_adl)
-        df_adtv = filter_adtv(raw_adtv)
-        df_prep = filter_prepaid(raw_prep)
+        df_adl = filter_adl(raw_adl, region=region_id)
+        df_adtv = filter_adtv(raw_adtv, region=region_id)
+        df_prep = filter_prepaid(raw_prep, region=region_id)
 
         result = compute_report(df_adl, df_adtv, df_prep, region_id=region_id)
 
@@ -598,8 +618,13 @@ def toggle_master_scheduler():
 
 
 @app.post("/api/system/run-automated-cycle-now")
-def run_automated_cycle_now(region_id: str = "thrissur"):
-    return execute_automated_cycle(region_id)
+def run_automated_cycle_now(payload: Optional[CycleRunPayload] = None, region_id: Optional[str] = None):
+    target_region = "thrissur"
+    if payload and payload.region_id:
+        target_region = payload.region_id
+    elif region_id:
+        target_region = region_id
+    return execute_automated_cycle(target_region)
 
 
 # --- Background Scheduler Loop ---

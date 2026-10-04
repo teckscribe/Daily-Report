@@ -137,6 +137,93 @@ def test_routes():
     assert len(data["images"]) == 4
     print("   [OK] Generated all 4 Retina report images via API.")
 
+    print("\n9. Testing Dispatch Rules CRUD & Description Persistence...")
+    rule_payload = {
+        "rule_name": "Test Regional Field Team",
+        "report_type": "all",
+        "target_recipients": "NW Team TCR- REGION, +919633889430",
+        "description": "Daily test dispatch rule notes",
+        "region_id": "ernakulam",
+        "is_enabled": True
+    }
+    res = client.post("/api/regions/ernakulam/dispatch-rules", json=rule_payload)
+    assert res.status_code == 200
+    rule_id = res.json()["id"]
+    print(f"   [OK] Created Dispatch Rule ID: {rule_id}")
+
+    res = client.get("/api/regions/ernakulam/dispatch-rules")
+    assert res.status_code == 200
+    rules = res.json()
+    created_rule = next((r for r in rules if r["id"] == rule_id), None)
+    assert created_rule is not None
+    assert created_rule["description"] == "Daily test dispatch rule notes"
+    print("   [OK] Verified description persistence in SQLite.")
+
+    # Toggle
+    res = client.post(f"/api/dispatch-rules/{rule_id}/toggle")
+    assert res.status_code == 200
+    print("   [OK] Toggled dispatch rule status")
+
+    # Delete
+    res = client.delete(f"/api/dispatch-rules/{rule_id}")
+    assert res.status_code == 200
+    print("   [OK] Deleted dispatch rule")
+
+    print("\n10. Testing Schedule Times CRUD...")
+    time_payload = {
+        "run_time": "11:30",
+        "label": "Midday Review",
+        "region_id": "ernakulam",
+        "is_enabled": True
+    }
+    res = client.post("/api/regions/ernakulam/schedule-times", json=time_payload)
+    assert res.status_code == 200
+    time_id = res.json()["id"]
+    print(f"   [OK] Created Schedule Time ID: {time_id}")
+
+    res = client.get("/api/regions/ernakulam/schedule-times")
+    assert res.status_code == 200
+    times = res.json()
+    assert any(t["id"] == time_id for t in times)
+
+    # Delete
+    res = client.delete(f"/api/schedule-times/{time_id}")
+    assert res.status_code == 200
+    print("   [OK] Deleted schedule time")
+
+    print("\n11. Testing System Settings & Scheduler Toggle...")
+    res = client.get("/api/system/settings")
+    assert res.status_code == 200
+    initial_enabled = res.json()["scheduler_enabled"]
+    res = client.post("/api/system/scheduler-toggle")
+    assert res.status_code == 200
+    assert res.json()["scheduler_enabled"] != initial_enabled
+    # Toggle back
+    res = client.post("/api/system/scheduler-toggle")
+    assert res.status_code == 200
+    assert res.json()["scheduler_enabled"] == initial_enabled
+    print("   [OK] Master scheduler toggle and status persistence verified.")
+
+    print("\n12. Testing WhatsApp Recipient Parser...")
+    from whatsapp_sender import normalize_recipient
+    # Group names with numbers must NOT be treated as direct numbers
+    assert normalize_recipient("NW Team TCR- REGION") == "NW Team TCR- REGION"
+    assert normalize_recipient("Team 2026 Shift 1") == "Team 2026 Shift 1"
+    assert normalize_recipient("ADL Team Leaders 24x7") == "ADL Team Leaders 24x7"
+    # Phone numbers
+    assert normalize_recipient("+919633889430") == "919633889430"
+    assert normalize_recipient("9633889430") == "919633889430"
+    assert normalize_recipient("09633889430") == "919633889430"
+    print("   [OK] Recipient parsing and group/phone disambiguation verified.")
+
+    print("\n13. Testing Dynamic Region CRM Queries...")
+    from config import get_adl_export_query, get_adtv_export_query
+    q_adl = get_adl_export_query("Kollam")
+    q_adtv = get_adtv_export_query("Kollam")
+    assert "region in ( 'Kollam' )" in q_adl
+    assert "region = 'Kollam'" in q_adtv
+    print("   [OK] Dynamic multi-region SQL queries verified.")
+
     print("\nALL TEST SUITE CHECKS PASSED PERFECTLY!")
 
 if __name__ == "__main__":

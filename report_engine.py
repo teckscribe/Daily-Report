@@ -293,8 +293,6 @@ def compute_report(
 
     return ReportResult(pending_days=pd_, prepaid_pending=pp, final=final)
 
-    return ReportResult(pending_days=pd_, prepaid_pending=pp, final=final)
-
 
 # ---------------------------------------------------------------------------
 # 7. Load the three input sheets from a workbook (read-only)
@@ -317,11 +315,17 @@ def _share(values, pred) -> float:
     return (sum(1 for v in vals if pred(v)) / len(vals)) if vals else 1.0
 
 
-def validate_inputs(df_adl, df_adtv, df_prepaid, min_share: float = 0.5) -> List[str]:
+def validate_inputs(df_adl, df_adtv, df_prepaid, region_id: str = "thrissur", min_share: float = 0.5) -> List[str]:
     """Return human-readable warnings. Empty list = inputs look correctly aligned."""
     warnings: List[str] = []
-    tl_keys = {str(r.pd_adl_name_key).strip().casefold() for r in TEAM_LEADER_ROWS} | \
-              {str(r.pd_adtv_name_key).strip().casefold() for r in TEAM_LEADER_ROWS}
+    try:
+        tl_db, _ = get_layout_for_region(region_id)
+        tl_source = tl_db if tl_db else TEAM_LEADER_ROWS
+    except Exception:
+        tl_source = TEAM_LEADER_ROWS
+
+    tl_keys = {str(r.pd_adl_name_key).strip().casefold() for r in tl_source} | \
+              {str(r.pd_adtv_name_key).strip().casefold() for r in tl_source}
     is_tl = lambda v: str(v).strip().casefold() in tl_keys
     is_num = lambda v: _to_number(v) is not None
 
@@ -330,7 +334,7 @@ def validate_inputs(df_adl, df_adtv, df_prepaid, min_share: float = 0.5) -> List
         ("ADL P", df_adl, ADL_COLS["days"], is_num, "numeric days"),
         ("ADTv P", df_adtv, ADTV_COLS["team"], is_tl, "Team Leader names"),
         ("ADTv P", df_adtv, ADTV_COLS["days"], is_num, "numeric days"),
-        ("ADTv P", df_adtv, ADTV_COLS["center"], lambda v: str(v).strip().casefold() != "thrissur", "AMO centre names (not the region)"),
+        ("ADTv P", df_adtv, ADTV_COLS["center"], lambda v: str(v).strip().casefold() != region_id.strip().casefold(), "AMO centre names (not the region)"),
         ("Prepaid", df_prepaid, PREPAID_COLS["days"], is_num, "numeric TAT"),
         ("Prepaid", df_prepaid, PREPAID_COLS["issue"], lambda v: "issue" in str(v).casefold() or "both" in str(v).casefold(), "Issue Service Type values"),
     ]
