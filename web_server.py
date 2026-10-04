@@ -403,7 +403,7 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
             raw_prep = pd.read_csv(prep_path) if str(prep_path).endswith(".csv") else pd.read_excel(prep_path)
             df_adl = filter_adl(raw_adl, region=region_id)
             df_adtv = filter_adtv(raw_adtv, region=region_id)
-            df_prep = filter_prepaid(raw_prep, region=region_id)
+            df_prepaid = filter_prepaid(raw_prep, region=region_id)
         except Exception as e_dl:
             print(f"[Generate & Send] Online download fallback: {e_dl}")
             df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
@@ -423,7 +423,7 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
 
         # 4. Save working copy
         try:
-            write_working_copy(df_adl, df_adtv, df_prep, template_path=TARGET_EXCEL_PATH)
+            write_working_copy(df_adl, df_adtv, df_prepaid, template_path=TARGET_EXCEL_PATH)
         except Exception:
             pass
 
@@ -470,9 +470,9 @@ def execute_automated_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
 
         df_adl = filter_adl(raw_adl, region=region_id)
         df_adtv = filter_adtv(raw_adtv, region=region_id)
-        df_prep = filter_prepaid(raw_prep, region=region_id)
+        df_prepaid = filter_prepaid(raw_prep, region=region_id)
 
-        result = compute_report(df_adl, df_adtv, df_prep, region_id=region_id)
+        result = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
 
         df_sections = {
             "adl_team": result.final["adl_team"].to_frame(),
@@ -483,7 +483,7 @@ def execute_automated_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
         generate_report_images(df_sections)
         generate_acso_report_images(df_sections)
 
-        write_working_copy(df_adl, df_adtv, df_prep, template_path=TARGET_EXCEL_PATH)
+        write_working_copy(df_adl, df_adtv, df_prepaid, template_path=TARGET_EXCEL_PATH)
 
         # Dispatch according to active rules
         rules = db_manager.get_dispatch_rules(region_id)
