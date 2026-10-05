@@ -15,7 +15,7 @@ def test_routes():
     print("1. Testing GET / (Dashboard UI)...")
     res = client.get("/")
     assert res.status_code == 200, f"Expected 200, got {res.status_code}"
-    assert "Asianet Kerala Network Tracker" in res.text
+    assert "Daily QOS tracker" in res.text
     print("   [OK] Dashboard HTML served.")
 
     print("\n2. Testing GET /api/regions...")
