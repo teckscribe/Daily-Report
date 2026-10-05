@@ -1,0 +1,25 @@
+[Unit]
+Description=Daily QOS Tracker — Telegram Operations Control Daemon
+Documentation=https://github.com/teckscribe/Daily-Report
+After=network.target network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=psms
+WorkingDirectory=/home/psms
+ExecStart=/bin/bash -c "cd '/home/psms/Daily Work Reports' && exec ./venv/bin/python telegram_bot.py"
+Restart=always
+RestartSec=10
+TimeoutStartSec=30
+Environment="PYTHONUNBUFFERED=1"
+Environment="HOME=/home/psms"
+Environment="PATH=/home/psms/Daily Work Reports/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Sandbox allowances
+LimitNOFILE=65535
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

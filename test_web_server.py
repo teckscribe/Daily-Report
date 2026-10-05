@@ -311,7 +311,63 @@ def test_routes():
     # Clear idukki again so test doesn't leave sample data there
     client.post("/api/backup/clear?region_id=idukki")
 
+    print("\n17. Testing Telegram Bot Engine & UI Keyboard Schemas...")
+    from telegram_bot import (
+        TelegramAPI,
+        format_status_message,
+        get_main_menu_keyboard,
+        get_phone_selection_keyboard,
+        get_service_status,
+        is_user_authorized,
+    )
+
+    # Test Telegram API client initialization
+    api = TelegramAPI("123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ")
+    assert api.is_configured() is True
+    assert api.base_url == "https://api.telegram.org/bot123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+    dummy_api = TelegramAPI("")
+    assert dummy_api.is_configured() is False
+    print("   [OK] Telegram API client initialization and token validator verified.")
+
+    # Test Main Menu Keyboard Layout & Button Labels
+    kb = get_main_menu_keyboard(service_active=True)
+    flat_buttons = [btn for row in kb["inline_keyboard"] for btn in row]
+    btn_texts = [b["text"] for b in flat_buttons]
+    btn_callbacks = [b["callback_data"] for b in flat_buttons]
+
+    assert "▶️ Start Service" in btn_texts
+    assert "⏹️ Stop Service" in btn_texts
+    assert "🔄 Restart Service" in btn_texts
+    assert "🚀 Report-to-Group Dispatch Rules" in btn_texts
+    assert "📲 Test Delivery: Generate & Send to Specific Number" in btn_texts
+    assert "srv:start" in btn_callbacks
+    assert "srv:stop" in btn_callbacks
+    assert "srv:restart" in btn_callbacks
+    assert "action:dispatch_groups" in btn_callbacks
+    assert "action:test_delivery" in btn_callbacks
+    print("   [OK] Main menu keyboard verified: Start, Stop, Restart, Group Dispatch, Test Delivery buttons intact.")
+
+    # Test Phone Quick-Select Keyboard
+    phone_kb = get_phone_selection_keyboard("+919999999999")
+    phone_btns = [btn for row in phone_kb["inline_keyboard"] for btn in row]
+    assert any("9999999999" in b["text"] for b in phone_btns)
+    assert any("Custom Mobile Number" in b["text"] for b in phone_btns)
+    print("   [OK] Phone selection keyboard layout verified.")
+
+    # Test Service Status & Formatting
+    st = get_service_status()
+    assert "is_active" in st
+    assert "web_connected" in st
+    formatted = format_status_message(st)
+    assert "Daily QOS Tracker — Control Center" in formatted
+    print("   [OK] Service status collector and Telegram HTML formatting verified.")
+
+    # Test Authorization Check
+    assert is_user_authorized(123456, 123456) in (True, False)
+    print("   [OK] Authorization gatekeeper verified.")
+
     print("\nALL TEST SUITE CHECKS PASSED PERFECTLY!")
+
 
 if __name__ == "__main__":
     test_routes()

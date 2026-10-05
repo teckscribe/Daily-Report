@@ -123,3 +123,13 @@ WHATSAPP_BOT_TOKEN = os.getenv("WHATSAPP_BOT_TOKEN", "asianet")
 
 # --- Schedule Times (24-hour format HH:MM) ---
 SCHEDULE_TIMES = ["08:00", "15:00"]
+
+# --- Telegram Bot Configuration ---
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+raw_tg_users = os.getenv("TELEGRAM_ALLOWED_USERS", "").strip()
+TELEGRAM_ALLOWED_USERS = [
+    int(u.strip()) for u in raw_tg_users.split(",") if u.strip().isdigit()
+]
+TELEGRAM_DEFAULT_CHAT_ID = os.getenv("TELEGRAM_DEFAULT_CHAT_ID", "").strip()
+TELEGRAM_TEST_PHONE = os.getenv("TELEGRAM_TEST_PHONE", "+919633889430").strip()
+TELEGRAM_WEB_URL = os.getenv("TELEGRAM_WEB_URL", "http://127.0.0.1:8201").strip()
