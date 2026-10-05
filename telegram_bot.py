@@ -352,6 +352,18 @@ def get_phone_selection_keyboard(default_phone: str) -> Dict[str, Any]:
     return {"inline_keyboard": buttons}
 
 
+def get_confirmation_keyboard(confirm_data: str, cancel_data: str = "menu:cancel") -> Dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Confirm", "callback_data": confirm_data},
+                {"text": "❌ Cancel", "callback_data": cancel_data},
+            ]
+        ]
+    }
+
+
+
 def format_status_message(status_info: Dict[str, Any]) -> str:
     is_act = status_info["is_active"]
     act_badge = "🟢 <b>ACTIVE (Running)</b>" if is_act else "🛑 <b>INACTIVE (Stopped)</b>"
@@ -479,10 +491,16 @@ class TelegramBotRunner:
                 return
 
             formatted_num = f"+91{clean_digits[-10:]}"
-            self.execute_test_delivery_async(chat_id, formatted_num)
+            prompt = (
+                "⚠️ <b>Confirm Action: Test Delivery</b>\n\n"
+                f"Are you sure you want to generate reports and send to:\n"
+                f"📱 <b>{formatted_num}</b>?"
+            )
+            kb = get_confirmation_keyboard(confirm_data=f"exec:test_delivery:{formatted_num}")
+            self.api.send_message(chat_id, prompt, reply_markup=kb)
             return
 
-        # Commands
+        # Commands (All command triggers require confirmation)
         if text.startswith("/start") or text.startswith("/menu") or text.startswith("/help"):
             self.send_main_menu(chat_id)
         elif text.startswith("/status"):
@@ -491,13 +509,30 @@ class TelegramBotRunner:
             kb = get_main_menu_keyboard(st["is_active"])
             self.api.send_message(chat_id, msg, reply_markup=kb)
         elif text.startswith("/start_service"):
-            self.handle_service_action(chat_id, None, "start")
+            prompt = (
+                "⚠️ <b>Confirm Action: Start Service</b>\n\n"
+                f"Are you sure you want to <b>START</b> <code>{SERVICE_NAME}</code>?"
+            )
+            self.api.send_message(chat_id, prompt, reply_markup=get_confirmation_keyboard("exec:srv_start"))
         elif text.startswith("/stop_service"):
-            self.handle_service_action(chat_id, None, "stop")
+            prompt = (
+                "⚠️ <b>Confirm Action: Stop Service</b>\n\n"
+                f"Are you sure you want to <b>STOP</b> <code>{SERVICE_NAME}</code>?\n\n"
+                "<i>Note: Automated cycle schedules will be paused until restarted.</i>"
+            )
+            self.api.send_message(chat_id, prompt, reply_markup=get_confirmation_keyboard("exec:srv_stop"))
         elif text.startswith("/restart_service"):
-            self.handle_service_action(chat_id, None, "restart")
+            prompt = (
+                "⚠️ <b>Confirm Action: Restart Service</b>\n\n"
+                f"Are you sure you want to <b>RESTART</b> <code>{SERVICE_NAME}</code>?"
+            )
+            self.api.send_message(chat_id, prompt, reply_markup=get_confirmation_keyboard("exec:srv_restart"))
         elif text.startswith("/dispatch"):
-            self.execute_group_dispatch_async(chat_id, None)
+            prompt = (
+                "⚠️ <b>Confirm Action: Report-to-Group Dispatch Rules</b>\n\n"
+                "Are you sure you want to run the automated cycle and dispatch reports to all configured <b>WhatsApp Groups</b> & ACSO contacts?"
+            )
+            self.api.send_message(chat_id, prompt, reply_markup=get_confirmation_keyboard("exec:dispatch_groups"))
         else:
             self.send_main_menu(chat_id)
 
@@ -510,29 +545,66 @@ class TelegramBotRunner:
     def handle_callback(self, cb_id: str, chat_id: int, message_id: int, data: str):
         global user_states
 
-        # 1. Service Management Callbacks
-        if data == "srv:start":
-            self.api.answer_callback_query(cb_id, text="Starting service...")
-            self.handle_service_action(chat_id, message_id, "start")
-        elif data == "srv:stop":
-            self.api.answer_callback_query(cb_id, text="Stopping service...")
-            self.handle_service_action(chat_id, message_id, "stop")
-        elif data == "srv:restart":
-            self.api.answer_callback_query(cb_id, text="Restarting service...")
-            self.handle_service_action(chat_id, message_id, "restart")
-        elif data in ("srv:status", "menu:refresh", "menu:main"):
+        # 1. Navigation / Cancel Callbacks
+        if data == "menu:cancel":
+            self.api.answer_callback_query(cb_id, text="Action cancelled.")
+            st = get_service_status()
+            msg = "❌ <b>Action Cancelled.</b>\n\n" + format_status_message(st)
+            kb = get_main_menu_keyboard(st["is_active"])
+            self.api.edit_message_text(chat_id, message_id, msg, reply_markup=kb)
+            return
+
+        if data in ("srv:status", "menu:refresh", "menu:main"):
             self.api.answer_callback_query(cb_id, text="Updating status...")
             st = get_service_status()
             msg = format_status_message(st)
             kb = get_main_menu_keyboard(st["is_active"])
             self.api.edit_message_text(chat_id, message_id, msg, reply_markup=kb)
+            return
 
-        # 2. Report Dispatch Actions
-        elif data == "action:dispatch_groups":
-            self.api.answer_callback_query(cb_id, text="Triggering group dispatch...")
-            self.execute_group_dispatch_async(chat_id, message_id)
+        # 2. Confirmation Prompts (Before Executing Any Action)
+        if data == "srv:start":
+            self.api.answer_callback_query(cb_id)
+            prompt = (
+                "⚠️ <b>Confirm Action: Start Service</b>\n\n"
+                f"Are you sure you want to <b>START</b> the background service (<code>{SERVICE_NAME}</code>)?"
+            )
+            kb = get_confirmation_keyboard(confirm_data="exec:srv_start")
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
 
-        elif data == "action:test_delivery":
+        if data == "srv:stop":
+            self.api.answer_callback_query(cb_id)
+            prompt = (
+                "⚠️ <b>Confirm Action: Stop Service</b>\n\n"
+                f"Are you sure you want to <b>STOP</b> the background service (<code>{SERVICE_NAME}</code>)?\n\n"
+                "<i>Note: Automated cycle schedules will be paused until restarted.</i>"
+            )
+            kb = get_confirmation_keyboard(confirm_data="exec:srv_stop")
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        if data == "srv:restart":
+            self.api.answer_callback_query(cb_id)
+            prompt = (
+                "⚠️ <b>Confirm Action: Restart Service</b>\n\n"
+                f"Are you sure you want to <b>RESTART</b> the background service (<code>{SERVICE_NAME}</code>)?"
+            )
+            kb = get_confirmation_keyboard(confirm_data="exec:srv_restart")
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        if data == "action:dispatch_groups":
+            self.api.answer_callback_query(cb_id)
+            prompt = (
+                "⚠️ <b>Confirm Action: Report-to-Group Dispatch Rules</b>\n\n"
+                "Are you sure you want to run the automated cycle and dispatch reports to all configured <b>WhatsApp Groups</b> & ACSO contacts?"
+            )
+            kb = get_confirmation_keyboard(confirm_data="exec:dispatch_groups")
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        if data == "action:test_delivery":
             self.api.answer_callback_query(cb_id)
             kb = get_phone_selection_keyboard(TELEGRAM_TEST_PHONE)
             prompt = (
@@ -540,8 +612,9 @@ class TelegramBotRunner:
                 "Select a destination phone number below or enter a custom one:"
             )
             self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
 
-        elif data.startswith("num:"):
+        if data.startswith("num:"):
             target_val = data.split(":", 1)[1]
             if target_val == "custom":
                 user_states[chat_id] = "WAITING_FOR_PHONE"
@@ -553,12 +626,57 @@ class TelegramBotRunner:
                     "Please reply with the phone number (e.g. <code>+919846000000</code> or <code>9846000000</code>):",
                 )
             else:
-                self.api.answer_callback_query(cb_id, text=f"Sending to {target_val}...")
-                self.execute_test_delivery_async(chat_id, target_val, message_id)
+                self.api.answer_callback_query(cb_id)
+                prompt = (
+                    "⚠️ <b>Confirm Action: Test Delivery</b>\n\n"
+                    f"Are you sure you want to generate reports and send to:\n"
+                    f"📱 <b>{target_val}</b>?"
+                )
+                kb = get_confirmation_keyboard(confirm_data=f"exec:test_delivery:{target_val}")
+                self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
 
-        elif data == "action:send_photos":
-            self.api.answer_callback_query(cb_id, text="Sending report images...")
-            self.send_report_photos_async(chat_id)
+        if data == "action:send_photos":
+            self.api.answer_callback_query(cb_id)
+            prompt = (
+                "⚠️ <b>Confirm Action: Send Report Photos Here</b>\n\n"
+                "Are you sure you want to send all 4 high-resolution report cards directly into this chat?"
+            )
+            kb = get_confirmation_keyboard(confirm_data="exec:send_photos")
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        # 3. Confirmed Executions (exec:*)
+        if data == "exec:srv_start":
+            self.api.answer_callback_query(cb_id, text="Confirmed. Starting service...")
+            self.handle_service_action(chat_id, message_id, "start")
+            return
+
+        if data == "exec:srv_stop":
+            self.api.answer_callback_query(cb_id, text="Confirmed. Stopping service...")
+            self.handle_service_action(chat_id, message_id, "stop")
+            return
+
+        if data == "exec:srv_restart":
+            self.api.answer_callback_query(cb_id, text="Confirmed. Restarting service...")
+            self.handle_service_action(chat_id, message_id, "restart")
+            return
+
+        if data == "exec:dispatch_groups":
+            self.api.answer_callback_query(cb_id, text="Confirmed. Triggering group dispatch...")
+            self.execute_group_dispatch_async(chat_id, message_id)
+            return
+
+        if data.startswith("exec:test_delivery:"):
+            target_phone = data.split(":", 2)[2]
+            self.api.answer_callback_query(cb_id, text=f"Confirmed. Sending to {target_phone}...")
+            self.execute_test_delivery_async(chat_id, target_phone, message_id)
+            return
+
+        if data == "exec:send_photos":
+            self.api.answer_callback_query(cb_id, text="Confirmed. Delivering photos...")
+            self.send_report_photos_async(chat_id, message_id)
+            return
 
     # --- Asynchronous Action Handlers ---
 
@@ -670,8 +788,14 @@ class TelegramBotRunner:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def send_report_photos_async(self, chat_id: int):
+    def send_report_photos_async(self, chat_id: int, message_id: Optional[int] = None):
         def worker():
+            if message_id:
+                self.api.edit_message_text(
+                    chat_id,
+                    message_id,
+                    "⏳ <b>Delivering High-DPI Report Cards to Telegram...</b>\nPlease wait a moment.",
+                )
             cards = [
                 ("ADL Broadband — Team Leaders", ADL_REPORT_IMAGE_PATH),
                 ("ADTv Digital TV — Team Leaders", ADTV_REPORT_IMAGE_PATH),

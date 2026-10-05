@@ -315,6 +315,7 @@ def test_routes():
     from telegram_bot import (
         TelegramAPI,
         format_status_message,
+        get_confirmation_keyboard,
         get_main_menu_keyboard,
         get_phone_selection_keyboard,
         get_service_status,
@@ -353,6 +354,16 @@ def test_routes():
     assert any("9999999999" in b["text"] for b in phone_btns)
     assert any("Custom Mobile Number" in b["text"] for b in phone_btns)
     print("   [OK] Phone selection keyboard layout verified.")
+
+    # Test Confirmation Keyboard
+    conf_kb = get_confirmation_keyboard(confirm_data="exec:srv_stop", cancel_data="menu:cancel")
+    conf_btns = [btn for row in conf_kb["inline_keyboard"] for btn in row]
+    assert len(conf_btns) == 2
+    assert conf_btns[0]["text"] == "✅ Confirm"
+    assert conf_btns[0]["callback_data"] == "exec:srv_stop"
+    assert conf_btns[1]["text"] == "❌ Cancel"
+    assert conf_btns[1]["callback_data"] == "menu:cancel"
+    print("   [OK] Confirmation & cancellation dialog keyboard verified.")
 
     # Test Service Status & Formatting
     st = get_service_status()
