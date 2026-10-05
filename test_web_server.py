@@ -397,6 +397,26 @@ def test_routes():
     assert "> 10 day" in adl_first
     print(f"   [OK] SR Calculation Engine: {len(sr_res['adl'])} ADL rows and {len(sr_res['adtv'])} ADTv rows computed.")
 
+    # Verify exclusion of 'STATIC IP Renewal' from Service Request report generation
+    from service_request_engine import is_excluded_service, prepare_source
+    import pandas as pd
+
+    assert is_excluded_service("STATIC IP Renewal") is True
+    assert is_excluded_service("Static IP Renewal") is True
+    assert is_excluded_service("STATIC IP") is True
+    assert is_excluded_service("Cable Re-routing") is False
+
+    mock_df = pd.DataFrame([
+        {"Area": "Chalakudy", "Complaint": "Cable Rerouting Required", "DaysCalc": 1},
+        {"Area": "Chalakudy", "Complaint": "STATIC IP Renewal", "DaysCalc": 2},
+        {"Area": "Thrissur", "Complaint": "Transfer to a New location", "DaysCalc": 0},
+    ])
+    mock_prepared = prepare_source(mock_df, "Area", "Complaint", "DaysCalc")
+    assert len(mock_prepared) == 2
+    assert "STATIC IP Renewal" not in mock_prepared["Service Request Type"].values
+    assert "STATIC IP" not in str(mock_prepared["Service Request Type"].values)
+    print("   [OK] Verified STATIC IP Renewal exclusion filter from SMS portal (https://sms.ali.asianetindia.com/).")
+
     # Test Web API GET /api/service-request/reports
     res = client.get("/api/service-request/reports?region_id=thrissur")
     assert res.status_code == 200

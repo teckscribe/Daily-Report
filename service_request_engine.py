@@ -89,6 +89,22 @@ def normalize_service(value: Any) -> str:
     return service_map.get(value_str, value_str)
 
 
+def is_excluded_service(value: Any) -> bool:
+    """
+    Returns True if the ticket should be excluded from report generation.
+    Specifically excludes 'STATIC IP Renewal' complaint types under the Service Request head
+    from the SMS portal (https://sms.ali.asianetindia.com/) and CRM portals.
+    """
+    if value is None or pd.isna(value):
+        return True
+    v_norm = str(value).strip().lower()
+    if not v_norm or v_norm in ("nan", "none", "null"):
+        return True
+    if "static ip renewal" in v_norm or "static ip" in v_norm:
+        return True
+    return False
+
+
 def prepare_source(
     df: pd.DataFrame,
     center_col: str,
@@ -104,8 +120,14 @@ def prepare_source(
     data.columns = ["CENTER", "Service Request Type", "Days"]
     data = data.dropna(subset=["CENTER", "Service Request Type"])
 
+    # Exclude 'STATIC IP Renewal' from report generation
+    data = data[~data["Service Request Type"].apply(is_excluded_service)].copy()
+
     data["CENTER"] = data["CENTER"].astype(str).str.strip()
     data["Service Request Type"] = data["Service Request Type"].apply(normalize_service)
+
+    # Secondary check after normalization
+    data = data[~data["Service Request Type"].apply(is_excluded_service)]
 
     if center_case == "title":
         data["CENTER"] = data["CENTER"].str.title()
@@ -207,6 +229,11 @@ def compute_service_request_reports(
 
     # Process Prepaid (Handle TAT or calculate from Created On)
     if not prepaid_df.empty:
+        # Exclude 'STATIC IP Renewal' tickets under the service request head from https://sms.ali.asianetindia.com/
+        for c_col in ["Complaint", "COMPLAINT", "Complaint Type", "COMPLAINTTYPE"]:
+            if c_col in prepaid_df.columns:
+                prepaid_df = prepaid_df[~prepaid_df[c_col].apply(is_excluded_service)].copy()
+
         prep_days_col = "DaysCalc"
         if "TAT" in prepaid_df.columns:
             prepaid_df["DaysCalc"] = prepaid_df["TAT"]
