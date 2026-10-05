@@ -721,15 +721,24 @@
               Execute the mathematical parity calculation engine and generate full-resolution Retina reports for <strong id="active-reg-label">Thrissur</strong>.
             </p>
           </div>
-          <div style="display: flex; gap: 0.75rem;">
-            <button class="btn btn-secondary" onclick="runCalculationTest()">
-              <span>&#9874;</span> Test Engine Parity
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary" onclick="runCalculationTest()" title="Verify Complaint mathematical parity formulas">
+              <span>⚙️</span> Parity Test
             </button>
-            <button class="btn btn-primary" onclick="generateAllReports()">
-              <span>&#128444;</span> Render All Reports
+            <button class="btn btn-primary" onclick="generateAllReports('all')" title="Render both Complaint and Service Request reports">
+              <span>🖼️</span> Render All (Both)
             </button>
-            <button class="btn btn-accent" onclick="dispatchToWhatsApp()">
-              <span>&#128242;</span> Send to WhatsApp
+            <button class="btn btn-secondary" onclick="generateAllReports('complaint')" title="Render Complaints reports only">
+              <span>📊</span> Render Complaints
+            </button>
+            <button class="btn btn-secondary" onclick="generateAllReports('sr')" title="Render Service Request reports only">
+              <span>📋</span> Render SR Cards
+            </button>
+            <button class="btn btn-accent" onclick="dispatchToWhatsApp('complaint')" style="background: #2563eb; border-color: #1d4ed8;" title="Send Complaints reports to configured WhatsApp groups">
+              <span>📱</span> Send Complaints
+            </button>
+            <button class="btn btn-accent" onclick="dispatchToWhatsApp('sr')" style="background: #9333ea; border-color: #7e22ce;" title="Send Service Request reports to configured WhatsApp groups">
+              <span>📨</span> Send SR
             </button>
           </div>
         </div>
@@ -751,11 +760,22 @@
           <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
             <input type="tel" id="test-phone-number" value="" placeholder="+91XXXXXXXXXX" style="padding: 0.5rem 0.75rem; border: 1.5px solid #86efac; border-radius: var(--radius); font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 0.92rem; width: 180px; background: white;">
             <select id="test-report-type" style="padding: 0.5rem 0.65rem; border: 1.5px solid #86efac; border-radius: var(--radius); font-size: 0.85rem; font-weight: 600; background: white;">
-              <option value="all">All 4 Reports</option>
-              <option value="adl_tl">ADL Team Leader</option>
-              <option value="adtv_tl">ADTv Team Leader</option>
-              <option value="adl_acso">ADL ACSO Centers</option>
-              <option value="adtv_acso">ADTv ACSO Centers</option>
+              <optgroup label="Complete Suite">
+                <option value="suite_all">Entire Suite (All 4 Complaints + Both SRs)</option>
+              </optgroup>
+              <optgroup label="Network Complaints">
+                <option value="all">All 4 Complaints</option>
+                <option value="adl_tl">ADL Team Leader</option>
+                <option value="adtv_tl">ADTv Team Leader</option>
+                <option value="adl_acso">ADL ACSO Centers</option>
+                <option value="adtv_acso">ADTv ACSO Centers</option>
+              </optgroup>
+              <optgroup label="Service Requests (SR)">
+                <option value="sr_all">All SR Reports (Combined + Separate)</option>
+                <option value="sr_combined">SR Combined (ADL & ADTv Side-by-Side)</option>
+                <option value="adl_sr">ADL Broadband SR (ACSO-wise)</option>
+                <option value="adtv_sr">ADTv Digital TV SR (ACSO-wise)</option>
+              </optgroup>
             </select>
             <button id="btn-generate-send" class="btn btn-primary" onclick="generateAndSendToNumber(this)" style="background: #16a34a; border-color: #15803d;">
               <span>🚀</span> Generate and Send Now
@@ -783,6 +803,27 @@
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem;">
               <img id="img-adtv-tl" src="/output/ADTv_Complaint_Pending.jpg" alt="ADTv Team Leader Report" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'600\' height=\'300\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render to Generate</text></svg>'">
               <img id="img-adtv-acso" src="/output/ADTv_ACSO_Complaint_Pending.jpg" alt="ADTv ACSO Report" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'600\' height=\'300\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render to Generate</text></svg>'">
+            </div>
+          </div>
+
+          <div class="report-image-box" style="grid-column: 1 / -1; margin-top: 0.5rem;">
+            <h4>
+              <span>Daily Service Request Pending Reports (ACSO-wise)</span>
+              <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                <a href="/output/Daily_SR_Report_latest.jpg" target="_blank" class="btn btn-secondary btn-sm">Combined View</a>
+                <a href="/output/ADL_SR_Pending.jpg" target="_blank" class="btn btn-secondary btn-sm">ADL SR</a>
+                <a href="/output/ADTv_SR_Pending.jpg" target="_blank" class="btn btn-secondary btn-sm">ADTv SR</a>
+              </div>
+            </h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem;">
+              <div>
+                <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">ADL Broadband Service Requests</div>
+                <img id="img-adl-sr" src="/output/ADL_SR_Pending.jpg" alt="ADL SR Pending" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'600\' height=\'300\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render SR to Generate</text></svg>'">
+              </div>
+              <div>
+                <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">ADTv Digital TV Service Requests</div>
+                <img id="img-adtv-sr" src="/output/ADTv_SR_Pending.jpg" alt="ADTv SR Pending" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'600\' height=\'300\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render SR to Generate</text></svg>'">
+              </div>
             </div>
           </div>
         </div>
@@ -950,17 +991,29 @@
             <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.25rem;">
               Automates report generation at scheduled times and routes specific report cards to dedicated WhatsApp groups across Kerala.
             </p>
-            <div style="margin-top: 0.5rem; font-size: 0.82rem;">
-              <span style="font-weight: 600;">Last Cycle:</span> <span id="sched-last-run" style="color: var(--text-main);">Never</span> &bull;
-              <span style="font-weight: 600;">Status:</span> <span id="sched-last-status" style="color: var(--accent);">Ready</span>
+            <div style="margin-top: 0.5rem; font-size: 0.82rem; display: flex; flex-wrap: wrap; gap: 0.75rem;">
+              <div>
+                <span style="font-weight: 600; color: #1e3a8a;">⚡ Complaints:</span> <span id="sched-last-run" style="color: var(--text-main);">Never</span>
+                <span style="color: var(--text-muted);">|</span> <span id="sched-last-status" style="color: var(--accent); font-weight: 600;">Ready</span>
+              </div>
+              <div>
+                <span style="font-weight: 600; color: #9a3412;">📋 Service Requests:</span> <span id="sched-last-sr-run" style="color: var(--text-main);">Never</span>
+                <span style="color: var(--text-muted);">|</span> <span id="sched-last-sr-status" style="color: #9a3412; font-weight: 600;">Ready</span>
+              </div>
             </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
             <button class="btn btn-secondary" id="btn-toggle-sched" onclick="toggleMasterScheduler()">
               <span id="btn-toggle-sched-icon">⏸</span> <span id="btn-toggle-sched-text">Pause Scheduler</span>
             </button>
-            <button class="btn btn-primary" onclick="runAutomatedCycleNow()">
-              <span>🚀</span> Run Full Cycle Now
+            <button class="btn btn-primary" onclick="runAutomatedCycleNow('all')" title="Execute both Complaints and Service Requests cycles">
+              <span>🚀</span> Run Full Suite (Both)
+            </button>
+            <button class="btn btn-secondary" onclick="runAutomatedCycleNow('complaint')" title="Execute Complaints cycle only">
+              <span>📊</span> Run Complaints
+            </button>
+            <button class="btn btn-secondary" onclick="runAutomatedCycleNow('service_request')" title="Execute Service Requests cycle only">
+              <span>📋</span> Run SR
             </button>
           </div>
         </div>
@@ -973,9 +1026,16 @@
             <h3 style="font-size: 1.05rem; font-weight: 700;">⏰ Scheduled Daily Trigger Times</h3>
             <p style="font-size: 0.78rem; color: var(--text-muted);">Exact 24-hour daily times when the automation pipeline triggers automatically.</p>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="openAddTimeModal()">
-            <span>&#43;</span> Add Trigger Time
-          </button>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <select id="filter-sched-pipeline" onchange="filterScheduleTimesDisplay(this.value)" style="padding: 0.35rem 0.6rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8rem; font-weight: 600; background: white;">
+              <option value="all">All Pipelines</option>
+              <option value="complaint">Complaint Pipeline</option>
+              <option value="service_request">Service Request Pipeline</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="openAddTimeModal()">
+              <span>&#43;</span> Add Trigger Time
+            </button>
+          </div>
         </div>
         <div id="schedule-times-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; margin-top: 1rem;">
           <!-- Loaded via JS -->
@@ -1380,11 +1440,22 @@
         <div class="form-group">
           <label>Report Type *</label>
           <select id="rule-type" required>
-            <option value="all">All 4 Reports (ADL + ADTv TL & ACSO)</option>
-            <option value="adl_tl">ADL Broadband - Team Leader Report</option>
-            <option value="adtv_tl">ADTv Digital TV - Team Leader Report</option>
-            <option value="adl_acso">ADL Broadband - ACSO Centers Report</option>
-            <option value="adtv_acso">ADTv Digital TV - ACSO Centers Report</option>
+            <optgroup label="Complete Suite">
+              <option value="suite_all">Entire Suite (All 4 Complaints + Both SRs)</option>
+            </optgroup>
+            <optgroup label="Network Complaints">
+              <option value="all">All 4 Complaints (ADL + ADTv TL & ACSO)</option>
+              <option value="adl_tl">ADL Broadband - Team Leader Report</option>
+              <option value="adtv_tl">ADTv Digital TV - Team Leader Report</option>
+              <option value="adl_acso">ADL Broadband - ACSO Centers Report</option>
+              <option value="adtv_acso">ADTv Digital TV - ACSO Centers Report</option>
+            </optgroup>
+            <optgroup label="Service Requests (SR)">
+              <option value="sr_all">All SR Reports (Combined + Separate)</option>
+              <option value="sr_combined">SR Combined (ADL & ADTv Side-by-Side)</option>
+              <option value="adl_sr">ADL Broadband SR (ACSO-wise)</option>
+              <option value="adtv_sr">ADTv Digital TV SR (ACSO-wise)</option>
+            </optgroup>
           </select>
         </div>
         <div class="form-group">
@@ -1973,33 +2044,48 @@
       }
     }
 
-    async function generateAllReports() {
-      showToast("Rendering High-DPI reports via Playwright...", "info");
+    async function generateAllReports(pipeline = 'all') {
+      const label = pipeline === 'complaint' ? 'Complaints' : (pipeline === 'sr' ? 'Service Requests' : 'All (Both)');
+      showToast(`Rendering ${label} High-DPI reports via Playwright...`, "info");
       try {
-        const res = await fetch(`/api/regions/${currentRegion}/generate-reports`, { method: 'POST' });
+        const res = await fetch(`/api/regions/${currentRegion}/generate-reports?report_type=${pipeline}`, { method: 'POST' });
         const data = await res.json();
         if (data.status === "OK") {
-          showToast("All report images rendered successfully!");
-          // Refresh images with cache buster
+          showToast(`${label} report images rendered successfully!`);
           const ts = new Date().getTime();
-          document.getElementById('img-adl-tl').src = `/output/ADL_Complaint_Pending.jpg?t=${ts}`;
-          document.getElementById('img-adl-acso').src = `/output/ADL_ACSO_Complaint_Pending.jpg?t=${ts}`;
-          document.getElementById('img-adtv-tl').src = `/output/ADTv_Complaint_Pending.jpg?t=${ts}`;
-          document.getElementById('img-adtv-acso').src = `/output/ADTv_ACSO_Complaint_Pending.jpg?t=${ts}`;
+          if (pipeline === 'all' || pipeline === 'complaint') {
+            const adlTl = document.getElementById('img-adl-tl');
+            const adlAcso = document.getElementById('img-adl-acso');
+            const adtvTl = document.getElementById('img-adtv-tl');
+            const adtvAcso = document.getElementById('img-adtv-acso');
+            if (adlTl) adlTl.src = `/output/ADL_Complaint_Pending.jpg?t=${ts}`;
+            if (adlAcso) adlAcso.src = `/output/ADL_ACSO_Complaint_Pending.jpg?t=${ts}`;
+            if (adtvTl) adtvTl.src = `/output/ADTv_Complaint_Pending.jpg?t=${ts}`;
+            if (adtvAcso) adtvAcso.src = `/output/ADTv_ACSO_Complaint_Pending.jpg?t=${ts}`;
+          }
+          if (pipeline === 'all' || pipeline === 'sr') {
+            const adlSr = document.getElementById('img-adl-sr');
+            const adtvSr = document.getElementById('img-adtv-sr');
+            if (adlSr) adlSr.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
+            if (adtvSr) adtvSr.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
+          }
+        } else {
+          showToast(data.detail || data.message || "Error rendering reports", "error");
         }
       } catch (err) {
         showToast("Error generating report images", "error");
       }
     }
 
-    async function dispatchToWhatsApp() {
-      if (!confirm("Dispatch latest report cards to all active configured WhatsApp rules?")) return;
-      showToast("Sending reports to WhatsApp in background...", "info");
+    async function dispatchToWhatsApp(pipeline = 'all') {
+      const label = pipeline === 'complaint' ? 'Complaints' : (pipeline === 'sr' ? 'Service Requests' : 'All (Both)');
+      if (!confirm(`Dispatch ${label} report cards to active configured WhatsApp dispatch rules?`)) return;
+      showToast(`Sending ${label} reports to WhatsApp in background...`, "info");
       try {
-        const res = await fetch(`/api/regions/${currentRegion}/dispatch-whatsapp`, { method: 'POST' });
+        const res = await fetch(`/api/regions/${currentRegion}/dispatch-whatsapp?report_type=${pipeline}`, { method: 'POST' });
         const data = await res.json();
         if (data.status === "OK") {
-          showToast("Reports successfully queued/delivered to WhatsApp!");
+          showToast(data.message || `${label} reports successfully dispatched to WhatsApp!`);
         } else {
           showToast(data.detail || data.message || "WhatsApp dispatch error", "error");
         }
@@ -2039,10 +2125,18 @@
         if (res.ok && data.status === "OK") {
           showToast(data.message || `Reports sent successfully to ${phone}!`);
           const ts = new Date().getTime();
-          document.getElementById('img-adl-tl').src = `/output/ADL_Complaint_Pending.jpg?t=${ts}`;
-          document.getElementById('img-adl-acso').src = `/output/ADL_ACSO_Complaint_Pending.jpg?t=${ts}`;
-          document.getElementById('img-adtv-tl').src = `/output/ADTv_Complaint_Pending.jpg?t=${ts}`;
-          document.getElementById('img-adtv-acso').src = `/output/ADTv_ACSO_Complaint_Pending.jpg?t=${ts}`;
+          const adlTl = document.getElementById('img-adl-tl');
+          const adlAcso = document.getElementById('img-adl-acso');
+          const adtvTl = document.getElementById('img-adtv-tl');
+          const adtvAcso = document.getElementById('img-adtv-acso');
+          const adlSr = document.getElementById('img-adl-sr');
+          const adtvSr = document.getElementById('img-adtv-sr');
+          if (adlTl) adlTl.src = `/output/ADL_Complaint_Pending.jpg?t=${ts}`;
+          if (adlAcso) adlAcso.src = `/output/ADL_ACSO_Complaint_Pending.jpg?t=${ts}`;
+          if (adtvTl) adtvTl.src = `/output/ADTv_Complaint_Pending.jpg?t=${ts}`;
+          if (adtvAcso) adtvAcso.src = `/output/ADTv_ACSO_Complaint_Pending.jpg?t=${ts}`;
+          if (adlSr) adlSr.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
+          if (adtvSr) adtvSr.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
         } else {
           showToast(data.detail || data.message || "Failed to generate & send report", "error");
         }
@@ -2058,6 +2152,7 @@
 
     // --- Automation & Dispatch Management ---
     let automationData = { settings: {}, times: [], rules: [] };
+    let currentSchedPipelineFilter = 'all';
 
     async function loadAutomationData() {
       try {
@@ -2094,19 +2189,34 @@
 
         document.getElementById('sched-last-run').innerText = settings.last_cycle_timestamp || "Never";
         document.getElementById('sched-last-status').innerText = settings.last_cycle_status || "Ready";
+        const srRunEl = document.getElementById('sched-last-sr-run');
+        const srStatEl = document.getElementById('sched-last-sr-status');
+        if (srRunEl) srRunEl.innerText = settings.last_sr_cycle_timestamp || "Never";
+        if (srStatEl) srStatEl.innerText = settings.last_sr_cycle_status || "Ready";
         document.getElementById('badge-rules').innerText = rules.length;
 
-        renderScheduleTimes(times);
+        filterScheduleTimesDisplay(document.getElementById('filter-sched-pipeline')?.value || currentSchedPipelineFilter);
         renderDispatchRules(rules);
       } catch (err) {
         console.error("Error loading automation data:", err);
       }
     }
 
+    function filterScheduleTimesDisplay(filterVal) {
+      currentSchedPipelineFilter = filterVal || 'all';
+      let times = automationData.times || [];
+      if (currentSchedPipelineFilter === 'complaint') {
+        times = times.filter(t => !t.report_type || t.report_type === 'complaint');
+      } else if (currentSchedPipelineFilter === 'service_request') {
+        times = times.filter(t => t.report_type === 'service_request');
+      }
+      renderScheduleTimes(times);
+    }
+
     function renderScheduleTimes(times) {
       const container = document.getElementById('schedule-times-container');
       if (!times || times.length === 0) {
-        container.innerHTML = `<div style="grid-column: 1 / -1; padding: 1.5rem; text-align: center; color: var(--text-muted); background: #f8fafc; border-radius: var(--radius);">No daily trigger times configured. Click "+ Add Trigger Time" to schedule automated runs.</div>`;
+        container.innerHTML = `<div style="grid-column: 1 / -1; padding: 1.5rem; text-align: center; color: var(--text-muted); background: #f8fafc; border-radius: var(--radius);">No daily trigger times configured for this filter. Click "+ Add Trigger Time" to schedule automated runs.</div>`;
         return;
       }
 
@@ -2141,11 +2251,16 @@
     }
 
     const REPORT_TYPE_LABELS = {
-      "all": "All 4 Reports (TL + ACSO)",
+      "suite_all": "Entire Suite (Complaints + SR)",
+      "all": "All 4 Complaints (TL + ACSO)",
       "adl_tl": "ADL Team Leader",
       "adtv_tl": "ADTv Team Leader",
       "adl_acso": "ADL ACSO Centers",
-      "adtv_acso": "ADTv ACSO Centers"
+      "adtv_acso": "ADTv ACSO Centers",
+      "sr_all": "All SR Reports (Combined + Separate)",
+      "sr_combined": "SR Combined (Side-by-Side)",
+      "adl_sr": "ADL Broadband SR (ACSO-wise)",
+      "adtv_sr": "ADTv Digital TV SR (ACSO-wise)"
     };
 
     function renderDispatchRules(rules) {
@@ -2163,6 +2278,11 @@
         }).join('');
 
         const typeLabel = REPORT_TYPE_LABELS[r.report_type] || r.report_type;
+        const isSr = (r.report_type || '').startsWith('sr') || r.report_type === 'service_request';
+        const isSuite = r.report_type === 'suite_all';
+        const badgeBg = isSuite ? '#fdf4ff' : (isSr ? '#ffedd5' : '#ede9fe');
+        const badgeColor = isSuite ? '#7e22ce' : (isSr ? '#9a3412' : '#6d28d9');
+        const badgeIcon = isSuite ? '🌟 ' : (isSr ? '📋 ' : '📊 ');
 
         return `
           <tr>
@@ -2172,7 +2292,7 @@
               ${r.description ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">${escapeHtml(r.description)}</div>` : ''}
             </td>
             <td>
-              <span class="tab-badge" style="background: #ede9fe; color: #6d28d9; font-weight: 700;">${escapeHtml(typeLabel)}</span>
+              <span class="tab-badge" style="background: ${badgeBg}; color: ${badgeColor}; font-weight: 700;">${badgeIcon}${escapeHtml(typeLabel)}</span>
             </td>
             <td>
               <div style="display: flex; flex-wrap: wrap; gap: 0.2rem;">
@@ -2430,24 +2550,33 @@
       }
     }
 
-    async function runAutomatedCycleNow() {
-      if (!confirm("Execute full automated cycle now? This will download fresh tickets, compute equations, generate retina images, and dispatch according to active rules.")) return;
-      showToast("Running automated cycle in background...", "info");
+    async function runAutomatedCycleNow(pipeline = 'all') {
+      const pipelineName = pipeline === 'complaint' ? 'Complaints' : (pipeline === 'service_request' ? 'Service Requests' : 'Full Suite (Complaints + Service Requests)');
+      if (!confirm(`Execute automated cycle for ${pipelineName} now? This will download fresh tickets, compute equations, generate retina images, and dispatch according to active rules.`)) return;
+      showToast(`Running ${pipelineName} automated cycle in background...`, "info");
       try {
         const res = await fetch('/api/system/run-automated-cycle-now', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ region_id: currentRegion })
+          body: JSON.stringify({ region_id: currentRegion, pipeline: pipeline })
         });
         const data = await res.json();
-        if (data.status === "OK") {
-          showToast(data.message || "Cycle completed successfully!");
+        if (data.status === "OK" || data.status === "PARTIAL") {
+          showToast(data.message || `${pipelineName} cycle completed!`);
           loadAutomationData();
           const ts = new Date().getTime();
-          document.getElementById('img-adl-tl').src = `/output/ADL_Complaint_Pending.jpg?t=${ts}`;
-          document.getElementById('img-adl-acso').src = `/output/ADL_ACSO_Complaint_Pending.jpg?t=${ts}`;
-          document.getElementById('img-adtv-tl').src = `/output/ADTv_Complaint_Pending.jpg?t=${ts}`;
-          document.getElementById('img-adtv-acso').src = `/output/ADTv_ACSO_Complaint_Pending.jpg?t=${ts}`;
+          const adlTl = document.getElementById('img-adl-tl');
+          const adlAcso = document.getElementById('img-adl-acso');
+          const adtvTl = document.getElementById('img-adtv-tl');
+          const adtvAcso = document.getElementById('img-adtv-acso');
+          const adlSr = document.getElementById('img-adl-sr');
+          const adtvSr = document.getElementById('img-adtv-sr');
+          if (adlTl) adlTl.src = `/output/ADL_Complaint_Pending.jpg?t=${ts}`;
+          if (adlAcso) adlAcso.src = `/output/ADL_ACSO_Complaint_Pending.jpg?t=${ts}`;
+          if (adtvTl) adtvTl.src = `/output/ADTv_Complaint_Pending.jpg?t=${ts}`;
+          if (adtvAcso) adtvAcso.src = `/output/ADTv_ACSO_Complaint_Pending.jpg?t=${ts}`;
+          if (adlSr) adlSr.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
+          if (adtvSr) adtvSr.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
         } else {
           showToast(data.message || "Cycle encountered an issue", "error");
         }

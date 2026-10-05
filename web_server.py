@@ -138,6 +138,7 @@ class GenerateAndSendPayload(BaseModel):
 
 class CycleRunPayload(BaseModel):
     region_id: Optional[str] = "thrissur"
+    pipeline: Optional[str] = "all"  # 'complaint', 'service_request', or 'all'
 
 
 # --- Frontend View Route ---
@@ -312,91 +313,114 @@ def test_calculation_engine(region_id: str):
 
 
 @app.post("/api/regions/{region_id}/generate-reports")
-def generate_reports(region_id: str):
+def generate_reports(region_id: str, report_type: Optional[str] = "complaint"):
     """
-    Computes report for the region and renders high-definition Retina JPEG images
-    (Team Leader tables and ACSO tables) using Playwright.
-    """
-    try:
-        df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
-        result = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
-
-        df_sections = {
-            "adl_team": result.final["adl_team"].to_frame(),
-            "adtv_team": result.final["adtv_team"].to_frame(),
-            "adl_acso": result.final["adl_acso"].to_frame(),
-            "adtv_acso": result.final["adtv_acso"].to_frame(),
-        }
-
-        # Generate Team Leader images
-        generate_report_images(df_sections)
-        # Generate ACSO images
-        generate_acso_report_images(df_sections)
-
-        return {
-            "status": "OK",
-            "message": "All reports rendered successfully",
-            "images": [
-                "/output/ADL_Complaint_Pending.jpg",
-                "/output/ADTv_Complaint_Pending.jpg",
-                "/output/ADL_ACSO_Complaint_Pending.jpg",
-                "/output/ADTv_ACSO_Complaint_Pending.jpg",
-            ]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/regions/{region_id}/dispatch-whatsapp")
-def dispatch_whatsapp(region_id: str):
-    """
-    Sends the 4 standalone high-definition report cards directly to WhatsApp
-    configured for this region, or operator fallback.
+    Computes report for the region and renders high-definition Retina JPEG images.
+    Supports report_type: 'complaint' (default: 4 cards), 'sr' / 'service_request' (3 cards), or 'all' / 'suite_all' (both: 7 cards).
     """
     try:
-        images = [
-            ADL_REPORT_IMAGE_PATH,
-            ADTV_REPORT_IMAGE_PATH,
-            ADL_ACSO_REPORT_IMAGE_PATH,
-            ADTV_ACSO_REPORT_IMAGE_PATH,
-        ]
+        r_type = (report_type or "complaint").lower().strip()
+        rendered_images = []
 
-        # Verify images exist, or render if missing
-        missing = [img for img in images if not img.exists()]
-        if missing:
+        # 1. Render Complaints if requested
+        if r_type in ("all", "suite_all", "complaint", "complaints"):
             df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
             result = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
+
             df_sections = {
                 "adl_team": result.final["adl_team"].to_frame(),
                 "adtv_team": result.final["adtv_team"].to_frame(),
                 "adl_acso": result.final["adl_acso"].to_frame(),
                 "adtv_acso": result.final["adtv_acso"].to_frame(),
             }
+
             generate_report_images(df_sections)
             generate_acso_report_images(df_sections)
+            rendered_images.extend([
+                "/output/ADL_Complaint_Pending.jpg",
+                "/output/ADTv_Complaint_Pending.jpg",
+                "/output/ADL_ACSO_Complaint_Pending.jpg",
+                "/output/ADTv_ACSO_Complaint_Pending.jpg",
+            ])
 
-        # Collect target recipients from active dispatch rules for this region
+        # 2. Render Service Requests if requested
+        if r_type in ("all", "suite_all", "sr", "service_request", "sr_all"):
+            sr_sec = compute_service_request_reports()
+            render_sr_report_images(sr_sec)
+            rendered_images.extend([
+                "/output/ADL_SR_Pending.jpg",
+                "/output/ADTv_SR_Pending.jpg",
+                "/output/Daily_SR_Report_latest.jpg",
+            ])
+
+        return {
+            "status": "OK",
+            "message": f"Reports rendered successfully ({r_type})",
+            "images": rendered_images
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/regions/{region_id}/dispatch-whatsapp")
+def dispatch_whatsapp(region_id: str, report_type: Optional[str] = "complaint"):
+    """
+    Sends report cards directly to WhatsApp configured for this region based on active dispatch rules.
+    Supports report_type: 'complaint' (default), 'sr' / 'service_request', or 'all' / 'suite_all'.
+    """
+    try:
+        r_type = (report_type or "complaint").lower().strip()
         rules = db_manager.get_dispatch_rules(region_id)
-        targets: List[str] = []
-        for r in rules:
-            if r.get("is_enabled", 1):
-                for t in str(r.get("target_recipients", "")).split(","):
-                    clean = t.strip()
-                    if clean and clean not in targets:
-                        targets.append(clean)
+        active_rules = [r for r in rules if r.get("is_enabled", 1)]
 
-        # Validate that targets are configured
-        if not targets:
+        def is_sr_type(rt: str) -> bool:
+            return str(rt).lower().strip() in ("sr_all", "adl_sr", "adtv_sr", "sr_combined", "service_request", "sr")
+
+        if r_type in ("complaint", "complaints"):
+            target_rules = [r for r in active_rules if not is_sr_type(r.get("report_type", ""))]
+        elif r_type in ("sr", "service_request"):
+            target_rules = [r for r in active_rules if is_sr_type(r.get("report_type", ""))]
+        else:
+            target_rules = active_rules
+
+        if not target_rules:
             raise HTTPException(
                 status_code=400,
-                detail="No target WhatsApp groups or phone numbers are configured in active dispatch rules. Please configure target recipients in the Auto Schedule & Routing tab."
+                detail=f"No active dispatch rules found for '{r_type}'. Please configure dispatch rules in the Auto Schedule & Routing tab."
             )
 
-        success = flash_report_image(images, target_recipients=targets)
-        if success:
-            return {"status": "OK", "message": f"All 4 report cards dispatched to {', '.join(targets)}"}
-        else:
-            raise HTTPException(status_code=500, detail="WhatsApp dispatcher failed.")
+        dispatched_count = 0
+        for rule in target_rules:
+            rule_type = rule.get("report_type", "all")
+            targets = [t.strip() for t in str(rule.get("target_recipients", "")).split(",") if t.strip()]
+            if not targets:
+                continue
+
+            imgs = get_images_for_report_type(rule_type)
+            missing = [img for img in imgs if not img.exists()]
+            if missing:
+                if is_sr_type(rule_type):
+                    sr_sec = compute_service_request_reports()
+                    render_sr_report_images(sr_sec)
+                else:
+                    df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
+                    res = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
+                    df_sections = {
+                        "adl_team": res.final["adl_team"].to_frame(),
+                        "adtv_team": res.final["adtv_team"].to_frame(),
+                        "adl_acso": res.final["adl_acso"].to_frame(),
+                        "adtv_acso": res.final["adtv_acso"].to_frame(),
+                    }
+                    generate_report_images(df_sections)
+                    generate_acso_report_images(df_sections)
+
+            flash_report_image(imgs, target_recipients=targets)
+            dispatched_count += 1
+
+        return {
+            "status": "OK",
+            "message": f"Successfully triggered {dispatched_count} active dispatch rule(s) for '{r_type}'."
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -411,8 +435,20 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
     if not target:
         raise HTTPException(status_code=400, detail="Target phone number is required")
 
+    r_type = (payload.report_type or "all").lower().strip()
+
     try:
-        # 1. Download latest CRM tickets
+        # 1. Service Request only dispatch
+        if r_type in ("sr_all", "adl_sr", "adtv_sr", "sr_combined", "service_request"):
+            sr_sec = compute_service_request_reports()
+            render_sr_report_images(sr_sec)
+            imgs = get_images_for_report_type(r_type)
+            success = flash_report_image(imgs, target_recipients=[target])
+            if success:
+                return {"status": "OK", "message": f"Service Request reports sent to {target} successfully!"}
+            raise HTTPException(status_code=500, detail="WhatsApp delivery failed.")
+
+        # 2. Download latest CRM tickets for complaints
         try:
             adl_path, adtv_path, prep_path = download_from_crm(region=region_id, headless=True)
             raw_adl = pd.read_excel(adl_path)
@@ -425,10 +461,10 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
             print(f"[Generate & Send] Online download fallback: {e_dl}")
             df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
 
-        # 2. Compute report
+        # 3. Compute report
         result = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
 
-        # 3. Render High-DPI images
+        # 4. Render High-DPI images
         df_sections = {
             "adl_team": result.final["adl_team"].to_frame(),
             "adtv_team": result.final["adtv_team"].to_frame(),
@@ -438,14 +474,22 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
         generate_report_images(df_sections)
         generate_acso_report_images(df_sections)
 
-        # 4. Save working copy
+        # 5. Save working copy
         try:
             write_working_copy(df_adl, df_adtv, df_prepaid, template_path=TARGET_EXCEL_PATH)
         except Exception:
             pass
 
-        # 5. Dispatch to the specified number
-        imgs = get_images_for_report_type(payload.report_type or "all")
+        # 6. If suite_all, generate SR cards as well
+        if r_type in ("suite_all", "everything"):
+            try:
+                sr_sec = compute_service_request_reports()
+                render_sr_report_images(sr_sec)
+            except Exception as e_sr:
+                print(f"[Generate & Send] SR generation notice: {e_sr}")
+
+        # 7. Dispatch to the specified number
+        imgs = get_images_for_report_type(r_type)
         success = flash_report_image(imgs, target_recipients=[target])
         if success:
             return {"status": "OK", "message": f"Reports generated & sent to {target} successfully!"}
@@ -458,15 +502,33 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
 # --- Report Type Image Helper ---
 
 def get_images_for_report_type(report_type: str) -> List[Path]:
-    if report_type == "adl_tl":
+    r = (report_type or "all").lower().strip()
+    if r in ("adl_tl", "adl_team"):
         return [ADL_REPORT_IMAGE_PATH]
-    elif report_type == "adtv_tl":
+    elif r in ("adtv_tl", "adtv_team"):
         return [ADTV_REPORT_IMAGE_PATH]
-    elif report_type == "adl_acso":
+    elif r in ("adl_acso", "adl_acso_complaint"):
         return [ADL_ACSO_REPORT_IMAGE_PATH]
-    elif report_type == "adtv_acso":
+    elif r in ("adtv_acso", "adtv_acso_complaint"):
         return [ADTV_ACSO_REPORT_IMAGE_PATH]
-    elif report_type == "all":
+    elif r in ("adl_sr", "adl_sr_acso"):
+        return [ADL_SR_REPORT_IMAGE_PATH]
+    elif r in ("adtv_sr", "adtv_sr_acso"):
+        return [ADTV_SR_REPORT_IMAGE_PATH]
+    elif r in ("sr_combined", "sr_side_by_side", "combined_sr"):
+        return [SR_REPORT_IMAGE_PATH]
+    elif r in ("sr_all", "service_request", "sr"):
+        return [ADL_SR_REPORT_IMAGE_PATH, ADTV_SR_REPORT_IMAGE_PATH]
+    elif r in ("suite_all", "everything"):
+        return [
+            ADL_REPORT_IMAGE_PATH,
+            ADTV_REPORT_IMAGE_PATH,
+            ADL_ACSO_REPORT_IMAGE_PATH,
+            ADTV_ACSO_REPORT_IMAGE_PATH,
+            ADL_SR_REPORT_IMAGE_PATH,
+            ADTV_SR_REPORT_IMAGE_PATH,
+        ]
+    elif r in ("all", "complaints_all"):
         return [
             ADL_REPORT_IMAGE_PATH,
             ADTV_REPORT_IMAGE_PATH,
@@ -511,7 +573,10 @@ def execute_automated_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
             targets = [t.strip() for t in r.get("target_recipients", "").split(",") if t.strip()]
             if not targets:
                 continue
-            report_type = r.get("report_type", "all")
+            report_type = r.get("report_type", "all").lower()
+            # Skip SR rules in complaint cycle (handled by execute_automated_sr_cycle)
+            if report_type in ("sr_all", "adl_sr", "adtv_sr", "sr_combined", "service_request"):
+                continue
             imgs = get_images_for_report_type(report_type)
             flash_report_image(imgs, target_recipients=targets)
             dispatched_count += 1
@@ -572,19 +637,30 @@ def trigger_dispatch_rule_endpoint(rule_id: int):
             status_code=400,
             detail=f"No target recipients defined for rule '{rule.get('rule_name', 'Rule')}'. Please click 'Edit' to configure WhatsApp groups or phone numbers."
         )
-    imgs = get_images_for_report_type(rule["report_type"])
+    r_type = rule.get("report_type", "all").lower().strip()
+    imgs = get_images_for_report_type(r_type)
     missing = [i for i in imgs if not i.exists()]
     if missing:
-        df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
-        result = compute_report(df_adl, df_adtv, df_prepaid, region_id=rule["region_id"])
-        df_sections = {
-            "adl_team": result.final["adl_team"].to_frame(),
-            "adtv_team": result.final["adtv_team"].to_frame(),
-            "adl_acso": result.final["adl_acso"].to_frame(),
-            "adtv_acso": result.final["adtv_acso"].to_frame(),
-        }
-        generate_report_images(df_sections)
-        generate_acso_report_images(df_sections)
+        if r_type in ("sr_all", "adl_sr", "adtv_sr", "sr_combined", "service_request"):
+            sr_sec = compute_service_request_reports()
+            render_sr_report_images(sr_sec)
+        else:
+            df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
+            result = compute_report(df_adl, df_adtv, df_prepaid, region_id=rule["region_id"])
+            df_sections = {
+                "adl_team": result.final["adl_team"].to_frame(),
+                "adtv_team": result.final["adtv_team"].to_frame(),
+                "adl_acso": result.final["adl_acso"].to_frame(),
+                "adtv_acso": result.final["adtv_acso"].to_frame(),
+            }
+            generate_report_images(df_sections)
+            generate_acso_report_images(df_sections)
+            if r_type in ("suite_all", "everything"):
+                try:
+                    sr_sec = compute_service_request_reports()
+                    render_sr_report_images(sr_sec)
+                except Exception:
+                    pass
 
     success = flash_report_image(imgs, target_recipients=targets)
     if success:
@@ -656,13 +732,41 @@ def toggle_master_scheduler():
 
 
 @app.post("/api/system/run-automated-cycle-now")
-def run_automated_cycle_now(payload: Optional[CycleRunPayload] = None, region_id: Optional[str] = None):
+def run_automated_cycle_now(
+    payload: Optional[CycleRunPayload] = None,
+    region_id: Optional[str] = None,
+    pipeline: Optional[str] = None,
+):
     target_region = "thrissur"
-    if payload and payload.region_id:
-        target_region = payload.region_id
-    elif region_id:
+    target_pipeline = "all"
+
+    if payload:
+        if payload.region_id:
+            target_region = payload.region_id
+        if getattr(payload, "pipeline", None):
+            target_pipeline = payload.pipeline
+    if region_id:
         target_region = region_id
-    return execute_automated_cycle(target_region)
+    if pipeline:
+        target_pipeline = pipeline
+
+    target_pipeline = target_pipeline.lower().strip()
+
+    if target_pipeline in ("complaint", "complaints"):
+        return execute_automated_cycle(target_region)
+    elif target_pipeline in ("service_request", "sr"):
+        return execute_automated_sr_cycle(target_region)
+    else:
+        comp_res = execute_automated_cycle(target_region)
+        sr_res = execute_automated_sr_cycle(target_region)
+        ok = (comp_res.get("status") == "OK") and (sr_res.get("status") == "OK")
+        msg = f"Complaints: {comp_res.get('message', '')} | Service Requests: {sr_res.get('message', '')}"
+        return {
+            "status": "OK" if ok else "PARTIAL",
+            "message": msg,
+            "complaint_result": comp_res,
+            "service_request_result": sr_res,
+        }
 
 
 # --- Service Request (SR) Endpoints ---

@@ -7,6 +7,7 @@ Asianet Kerala Regional Operations Manager web server.
 
 from fastapi.testclient import TestClient
 from web_server import app
+from unittest.mock import patch
 import json
 
 client = TestClient(app)
@@ -472,6 +473,78 @@ def test_routes():
     assert "action:sr_test_delivery" in sr_btn_callbacks
     assert "menu:main" in sr_btn_callbacks
     print("   [OK] Verified Telegram SR menu keyboard schema and callbacks.")
+
+    print("\n19. Testing Unified Multi-Pipeline Web Server Endpoints & Dispatch Rules...")
+    from web_server import get_images_for_report_type, ADL_SR_REPORT_IMAGE_PATH, ADTV_SR_REPORT_IMAGE_PATH, SR_REPORT_IMAGE_PATH, ADL_REPORT_IMAGE_PATH
+
+    # Test get_images_for_report_type helper for all types
+    assert get_images_for_report_type("adl_sr") == [ADL_SR_REPORT_IMAGE_PATH]
+    assert get_images_for_report_type("adtv_sr") == [ADTV_SR_REPORT_IMAGE_PATH]
+    assert get_images_for_report_type("sr_combined") == [SR_REPORT_IMAGE_PATH]
+    assert get_images_for_report_type("sr_all") == [ADL_SR_REPORT_IMAGE_PATH, ADTV_SR_REPORT_IMAGE_PATH]
+    assert len(get_images_for_report_type("suite_all")) == 6
+    assert get_images_for_report_type("adl_tl") == [ADL_REPORT_IMAGE_PATH]
+    print("   [OK] Verified get_images_for_report_type for all Complaint, SR, and Suite variants.")
+
+    # Test creating and triggering an SR Dispatch Rule
+    sr_rule_payload = {
+        "rule_name": "Test SR Group Routing Rule",
+        "report_type": "sr_all",
+        "target_recipients": "Test Group TCR, +919876543210",
+        "description": "Daily automated SR distribution",
+        "is_enabled": True
+    }
+    res = client.post("/api/regions/thrissur/dispatch-rules", json=sr_rule_payload)
+    assert res.status_code == 200
+    created_rule_id = res.json()["id"]
+
+    # Verify rule in list
+    res = client.get("/api/regions/thrissur/dispatch-rules")
+    assert res.status_code == 200
+    all_rules = res.json()
+    rule_found = next((r for r in all_rules if r["id"] == created_rule_id), None)
+    assert rule_found is not None
+    assert rule_found["report_type"] == "sr_all"
+
+    # Test trigger SR dispatch rule endpoint with mocked flash_report_image
+    with patch("web_server.flash_report_image", return_value=True):
+        res = client.post(f"/api/dispatch-rules/{created_rule_id}/trigger")
+        assert res.status_code == 200
+        assert res.json()["status"] == "OK"
+    print("   [OK] Verified SR dispatch rule creation and trigger endpoint.")
+
+    # Clean up test rule
+    res = client.delete(f"/api/dispatch-rules/{created_rule_id}")
+    assert res.status_code == 200
+
+    # Test POST /api/system/run-automated-cycle-now with pipelines
+    with patch("web_server.execute_automated_cycle", return_value={"status": "OK", "message": "Complaints cycle ok"}), \
+         patch("web_server.execute_automated_sr_cycle", return_value={"status": "OK", "message": "SR cycle ok"}):
+        
+        # Test complaints pipeline
+        res = client.post("/api/system/run-automated-cycle-now", json={"region_id": "thrissur", "pipeline": "complaint"})
+        assert res.status_code == 200
+        assert res.json()["status"] == "OK"
+
+        # Test service_request pipeline
+        res = client.post("/api/system/run-automated-cycle-now", json={"region_id": "thrissur", "pipeline": "service_request"})
+        assert res.status_code == 200
+        assert res.json()["status"] == "OK"
+
+        # Test all / suite pipeline
+        res = client.post("/api/system/run-automated-cycle-now", json={"region_id": "thrissur", "pipeline": "all"})
+        assert res.status_code == 200
+        assert res.json()["status"] == "OK"
+        assert "Complaints:" in res.json()["message"]
+        assert "Service Requests:" in res.json()["message"]
+    print("   [OK] Verified run-automated-cycle-now for complaint, service_request, and all pipelines.")
+
+    # Test POST /api/regions/thrissur/generate-and-send with SR type
+    with patch("web_server.flash_report_image", return_value=True):
+        res = client.post("/api/regions/thrissur/generate-and-send", json={"target_phone": "+919999999999", "report_type": "sr_all"})
+        assert res.status_code == 200
+        assert res.json()["status"] == "OK"
+    print("   [OK] Verified generate-and-send test delivery for Service Requests.")
 
     print("\nALL TEST SUITE CHECKS PASSED PERFECTLY!")
 
