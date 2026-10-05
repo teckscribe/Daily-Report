@@ -20,8 +20,8 @@ import sys
 
 import json
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
+from fastapi.responses import HTMLResponse, JSONResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -35,6 +35,10 @@ from config import (
     ADTV_REPORT_IMAGE_PATH,
     ADL_ACSO_REPORT_IMAGE_PATH,
     ADTV_ACSO_REPORT_IMAGE_PATH,
+    ADL_SR_REPORT_IMAGE_PATH,
+    ADTV_SR_REPORT_IMAGE_PATH,
+    SR_REPORT_IMAGE_PATH,
+    SR_EXCEL_REPORT_PATH,
 )
 import db_manager
 from report_engine import compute_report, load_inputs_from_workbook
@@ -44,6 +48,12 @@ from data_processor import filter_adl, filter_adtv, filter_prepaid, write_workin
 from crm_downloader import download_from_crm
 import whatsapp_auth_manager
 import logger_setup
+from service_request_engine import (
+    compute_service_request_reports,
+    create_excel_output as create_sr_excel_output,
+    render_sr_report_images,
+    execute_automated_sr_cycle,
+)
 
 # Initialize dual-stream 3-day rotating logging
 logger_setup.init_logging()
@@ -117,6 +127,8 @@ class ScheduleTimePayload(BaseModel):
     label: Optional[str] = ""
     region_id: Optional[str] = "thrissur"
     is_enabled: Optional[bool] = True
+    report_type: Optional[str] = "complaint"
+
 
 
 class GenerateAndSendPayload(BaseModel):
@@ -583,19 +595,30 @@ def trigger_dispatch_rule_endpoint(rule_id: int):
 # --- Schedule Times Endpoints ---
 
 @app.get("/api/regions/{region_id}/schedule-times")
-def list_schedule_times(region_id: str):
-    return db_manager.get_schedule_times(region_id)
+def list_schedule_times(region_id: str, report_type: Optional[str] = None):
+    return db_manager.get_schedule_times(region_id, report_type=report_type)
 
 
 @app.post("/api/regions/{region_id}/schedule-times")
 def create_schedule_time(region_id: str, payload: ScheduleTimePayload):
-    sid = db_manager.add_schedule_time(region_id, payload.run_time, payload.label or "")
+    sid = db_manager.add_schedule_time(
+        region_id,
+        payload.run_time,
+        payload.label or "",
+        report_type=payload.report_type or "complaint"
+    )
     return {"status": "OK", "id": sid}
 
 
 @app.put("/api/schedule-times/{time_id}")
 def update_schedule_time_endpoint(time_id: int, payload: ScheduleTimePayload):
-    db_manager.update_schedule_time(time_id, payload.run_time, payload.label or "", 1 if payload.is_enabled else 0)
+    db_manager.update_schedule_time(
+        time_id,
+        payload.run_time,
+        payload.label or "",
+        1 if payload.is_enabled else 0,
+        report_type=payload.report_type
+    )
     return {"status": "OK"}
 
 
@@ -619,6 +642,8 @@ def get_system_settings():
         "scheduler_enabled": db_manager.get_setting("scheduler_enabled", "1") == "1",
         "last_cycle_timestamp": db_manager.get_setting("last_cycle_timestamp", "Not yet executed"),
         "last_cycle_status": db_manager.get_setting("last_cycle_status", "Scheduler Ready"),
+        "last_sr_cycle_timestamp": db_manager.get_setting("last_sr_cycle_thrissur", "Not yet executed"),
+        "last_sr_cycle_status": db_manager.get_setting("last_sr_cycle_status_thrissur", "Ready"),
     }
 
 
@@ -638,6 +663,106 @@ def run_automated_cycle_now(payload: Optional[CycleRunPayload] = None, region_id
     elif region_id:
         target_region = region_id
     return execute_automated_cycle(target_region)
+
+
+# --- Service Request (SR) Endpoints ---
+
+@app.get("/api/service-request/reports")
+def get_service_request_reports_endpoint():
+    """Returns preview tables for ADL and ADTv Service Request Pending."""
+    try:
+        sections = compute_service_request_reports()
+        return {
+            "status": "OK",
+            "adl": sections["ADL Service Request Pending"].to_dict(orient="records"),
+            "adtv": sections["ADTv Service Request Pending"].to_dict(orient="records"),
+            "last_updated": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/service-request/run-cycle")
+def run_service_request_cycle_endpoint(payload: Optional[CycleRunPayload] = None, region_id: Optional[str] = None):
+    """Triggers the full automated cycle for Service Requests."""
+    target_region = "thrissur"
+    if payload and payload.region_id:
+        target_region = payload.region_id
+    elif region_id:
+        target_region = region_id
+    res = execute_automated_sr_cycle(target_region)
+    if res.get("status") == "ERROR":
+        raise HTTPException(status_code=500, detail=res.get("message"))
+    return res
+
+
+@app.get("/api/service-request/download-excel")
+def download_service_request_excel_endpoint():
+    """Downloads the generated Daily Service Request Pending Excel report."""
+    if not SR_EXCEL_REPORT_PATH.exists():
+        try:
+            sections = compute_service_request_reports()
+            create_sr_excel_output(sections)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Cannot generate Excel: {e}")
+
+    return FileResponse(
+        path=str(SR_EXCEL_REPORT_PATH),
+        filename="Daily_Service_Request_Pending_Report.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
+@app.post("/api/service-request/upload-raw")
+async def upload_service_request_raw_endpoint(file: UploadFile = File(...)):
+    """Uploads a fresh raw Excel file and re-computes the reports immediately."""
+    try:
+        suffix = Path(file.filename).suffix or ".xls"
+        target_file = BASE_DIR / f"Service Request - Raw Data{suffix}"
+        content = await file.read()
+        target_file.write_bytes(content)
+
+        sections = compute_service_request_reports(target_file)
+        create_sr_excel_output(sections)
+        render_sr_report_images(sections)
+
+        return {
+            "status": "OK",
+            "message": f"Successfully uploaded '{file.filename}' and generated fresh Service Request reports!",
+            "adl_count": len(sections["ADL Service Request Pending"]),
+            "adtv_count": len(sections["ADTv Service Request Pending"]),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Upload failed: {e}")
+
+
+@app.post("/api/service-request/generate-and-send")
+def send_service_request_to_phone_endpoint(payload: GenerateAndSendPayload):
+    """Generates Service Request reports and dispatches to specific phone number or WhatsApp group."""
+    target = payload.target_phone.strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="Target recipient cannot be empty.")
+
+    try:
+        sections = compute_service_request_reports()
+        create_sr_excel_output(sections)
+        render_sr_report_images(sections)
+
+        r_type = (payload.report_type or "all").lower()
+        if r_type in ("adl_sr", "adl"):
+            to_send = [ADL_SR_REPORT_IMAGE_PATH]
+        elif r_type in ("adtv_sr", "adtv"):
+            to_send = [ADTV_SR_REPORT_IMAGE_PATH]
+        else:
+            to_send = [ADL_SR_REPORT_IMAGE_PATH, ADTV_SR_REPORT_IMAGE_PATH]
+
+        success = flash_report_image(to_send, target_recipients=[target])
+        if success:
+            return {"status": "OK", "message": f"Service Request report sent to {target} successfully!"}
+        raise HTTPException(status_code=500, detail="WhatsApp delivery failed or profile busy.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 # --- Backup & Configuration Import/Export Endpoints ---
@@ -764,9 +889,14 @@ async def background_scheduler_loop():
                 if slot.get("run_time") == current_hh_mm:
                     last_run = slot.get("last_run") or ""
                     if not last_run.startswith(today_date):
-                        print(f"\n[Scheduler] Auto-triggering report generation for region '{slot['region_id']}' at {current_hh_mm}...")
+                        slot_type = slot.get("report_type") or "complaint"
                         db_manager.update_last_run(slot["id"])
-                        await asyncio.to_thread(execute_automated_cycle, slot["region_id"])
+                        if slot_type == "service_request":
+                            print(f"\n[Scheduler] Auto-triggering SERVICE REQUEST report for region '{slot['region_id']}' at {current_hh_mm}...")
+                            await asyncio.to_thread(execute_automated_sr_cycle, slot["region_id"])
+                        else:
+                            print(f"\n[Scheduler] Auto-triggering COMPLAINT report for region '{slot['region_id']}' at {current_hh_mm}...")
+                            await asyncio.to_thread(execute_automated_cycle, slot["region_id"])
         except Exception as e:
             print(f"[Scheduler Loop Error] {e}")
 

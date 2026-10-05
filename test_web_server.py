@@ -377,8 +377,85 @@ def test_routes():
     assert is_user_authorized(123456, 123456) in (True, False)
     print("   [OK] Authorization gatekeeper verified.")
 
+    print("\n18. Testing Service Request Pending Report Pipeline & Scheduling...")
+    from service_request_engine import calculate_sr_pending_reports, generate_sr_excel_report
+    from telegram_bot import get_sr_menu_keyboard
+
+    # Test calculation engine directly
+    sr_res = calculate_sr_pending_reports()
+    assert sr_res["status"] == "OK"
+    assert "adl" in sr_res
+    assert "adtv" in sr_res
+    assert len(sr_res["adl"]) > 0
+    assert len(sr_res["adtv"]) > 0
+
+    adl_first = sr_res["adl"][0]
+    assert "CENTER" in adl_first
+    assert "Service Request Type" in adl_first
+    assert "Grand Total" in adl_first
+    assert "<1 day" in adl_first
+    assert "> 10 day" in adl_first
+    print(f"   [OK] SR Calculation Engine: {len(sr_res['adl'])} ADL rows and {len(sr_res['adtv'])} ADTv rows computed.")
+
+    # Test Web API GET /api/service-request/reports
+    res = client.get("/api/service-request/reports?region_id=thrissur")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "OK"
+    assert len(data["adl"]) > 0
+    print("   [OK] Verified GET /api/service-request/reports endpoint.")
+
+    # Test Web API GET /api/service-request/download-excel
+    res = client.get("/api/service-request/download-excel")
+    assert res.status_code == 200
+    assert "openxmlformats" in res.headers.get("content-type", "")
+    assert len(res.content) > 1000
+    print(f"   [OK] Verified GET /api/service-request/download-excel endpoint ({len(res.content)} bytes).")
+
+    # Test Independent Schedule Times (report_type: 'service_request' vs 'complaint')
+    sr_time_payload = {
+        "run_time": "11:45",
+        "label": "Automated Unit Test SR Run",
+        "report_type": "service_request",
+        "is_enabled": True
+    }
+    res = client.post("/api/regions/thrissur/schedule-times", json=sr_time_payload)
+    assert res.status_code == 200
+    created_sr_id = res.json()["id"]
+
+    # Verify filtering by report_type
+    res_sr = client.get("/api/regions/thrissur/schedule-times?report_type=service_request")
+    assert res_sr.status_code == 200
+    sr_times = res_sr.json()
+    assert any(t["id"] == created_sr_id for t in sr_times)
+    assert all(t.get("report_type") == "service_request" for t in sr_times)
+
+    res_comp = client.get("/api/regions/thrissur/schedule-times?report_type=complaint")
+    assert res_comp.status_code == 200
+    comp_times = res_comp.json()
+    assert not any(t["id"] == created_sr_id for t in comp_times)
+    print("   [OK] Verified independent scheduling: Service Request schedule isolated from Complaint schedule.")
+
+    # Clean up test schedule time
+    res = client.delete(f"/api/schedule-times/{created_sr_id}")
+    assert res.status_code == 200
+
+    # Test Telegram SR Menu Layout
+    sr_kb = get_sr_menu_keyboard()
+    flat_sr_btns = [btn for row in sr_kb["inline_keyboard"] for btn in row]
+    sr_btn_texts = [b["text"] for b in flat_sr_btns]
+    sr_btn_callbacks = [b["callback_data"] for b in flat_sr_btns]
+
+    assert any("Dispatch SR Reports to Groups" in t for t in sr_btn_texts)
+    assert any("Send SR Test Delivery" in t for t in sr_btn_texts)
+    assert "action:sr_dispatch" in sr_btn_callbacks
+    assert "action:sr_test_delivery" in sr_btn_callbacks
+    assert "menu:main" in sr_btn_callbacks
+    print("   [OK] Verified Telegram SR menu keyboard schema and callbacks.")
+
     print("\nALL TEST SUITE CHECKS PASSED PERFECTLY!")
 
 
 if __name__ == "__main__":
     test_routes()
+

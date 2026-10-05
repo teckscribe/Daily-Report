@@ -133,3 +133,11 @@ TELEGRAM_ALLOWED_USERS = [
 TELEGRAM_DEFAULT_CHAT_ID = os.getenv("TELEGRAM_DEFAULT_CHAT_ID", "").strip()
 TELEGRAM_TEST_PHONE = os.getenv("TELEGRAM_TEST_PHONE", "+919633889430").strip()
 TELEGRAM_WEB_URL = os.getenv("TELEGRAM_WEB_URL", "http://127.0.0.1:8201").strip()
+
+# --- Service Request (SR) Configuration ---
+SR_RAW_EXCEL_PATH = BASE_DIR / "Service Request - Raw Data.xls"
+SR_EXCEL_REPORT_PATH = OUTPUT_DIR / "Daily_Service_Request_Pending_Report.xlsx"
+ADL_SR_REPORT_IMAGE_PATH = OUTPUT_DIR / "ADL_SR_Pending.jpg"
+ADTV_SR_REPORT_IMAGE_PATH = OUTPUT_DIR / "ADTv_SR_Pending.jpg"
+SR_REPORT_IMAGE_PATH = OUTPUT_DIR / "Daily_SR_Report_latest.jpg"
+

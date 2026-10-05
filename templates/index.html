@@ -593,7 +593,11 @@
         <span class="tab-badge" id="badge-emps">0</span>
       </button>
       <button class="tab-btn" onclick="setTab('reports')">
-        <span>Report Preview & Dispatch</span>
+        <span>Complaint Reports</span>
+      </button>
+      <button class="tab-btn" onclick="setTab('service-requests')">
+        <span>Service Request Reports</span>
+        <span class="tab-badge" id="badge-sr" style="background: #fed7aa; color: #9a3412;">ACSO</span>
       </button>
       <button class="tab-btn" onclick="setTab('automation')">
         <span>Auto Schedule & Routing</span>
@@ -779,6 +783,154 @@
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem;">
               <img id="img-adtv-tl" src="/output/ADTv_Complaint_Pending.jpg" alt="ADTv Team Leader Report" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'600\' height=\'300\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render to Generate</text></svg>'">
               <img id="img-adtv-acso" src="/output/ADTv_ACSO_Complaint_Pending.jpg" alt="ADTv ACSO Report" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'600\' height=\'300\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render to Generate</text></svg>'">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4B: Service Request Pending Report (ACSO-wise) -->
+    <div id="tab-service-requests" class="tab-pane">
+      <div class="section-card" style="margin-bottom: 1.5rem;">
+        <div class="section-toolbar">
+          <div>
+            <h2 style="font-size: 1.2rem; font-weight: 700; color: #993300;">📋 Daily Service Request Pending Report (ACSO-wise)</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">
+              Automated extraction and pending bucket analysis (&lt;1d, 1d, 2d, 3d, &gt;3d, &gt;5d, &gt;10d) for ADL Broadband & ADTv Digital TV.
+            </p>
+          </div>
+          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary" onclick="loadServiceRequestData()">
+              <span>🔄</span> Refresh Data
+            </button>
+            <a href="/api/service-request/download-excel" class="btn btn-secondary" download>
+              <span>📥</span> Download Excel (.xlsx)
+            </a>
+            <label class="btn btn-secondary" style="margin-bottom: 0; cursor: pointer;">
+              <span>📤</span> Upload Raw Excel
+              <input type="file" id="sr-file-upload" accept=".xls,.xlsx" style="display: none;" onchange="uploadRawSRExcel(event)">
+            </label>
+            <button class="btn btn-primary" onclick="runSRCycleNow(this)" style="background: #993300; border-color: #7f2a00;">
+              <span>🚀</span> Run SR Cycle & Dispatch
+            </button>
+          </div>
+        </div>
+
+        <!-- Service Request Test Delivery Box -->
+        <div style="background: #fff7ed; border: 1.5px solid #fdba74; border-radius: var(--radius); padding: 1.15rem 1.25rem; margin: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h4 style="font-size: 0.98rem; font-weight: 700; color: #9a3412; display: flex; align-items: center; gap: 0.4rem;">
+              <span>📱</span> Test Delivery: Generate & Send SR Report to Specific Number
+            </h4>
+            <p style="font-size: 0.8rem; color: #c2410c; margin-top: 0.2rem;">
+              Parses latest raw workbook, calculates aging buckets, renders retina images, and delivers directly via WhatsApp Web.
+            </p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <input type="tel" id="sr-test-phone" value="" placeholder="+91XXXXXXXXXX" style="padding: 0.5rem 0.75rem; border: 1.5px solid #fdba74; border-radius: var(--radius); font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 0.92rem; width: 180px; background: white;">
+            <select id="sr-test-type" style="padding: 0.5rem 0.65rem; border: 1.5px solid #fdba74; border-radius: var(--radius); font-size: 0.85rem; font-weight: 600; background: white;">
+              <option value="all">Both ADL & ADTv SR Reports</option>
+              <option value="adl_sr">ADL Broadband SR Only</option>
+              <option value="adtv_sr">ADTv Digital TV SR Only</option>
+            </select>
+            <button id="btn-sr-generate-send" class="btn btn-primary" onclick="generateAndSendSR(this)" style="background: #ea580c; border-color: #c2410c;">
+              <span>🚀</span> Send SR Report Now
+            </button>
+          </div>
+        </div>
+
+        <!-- Image Previews -->
+        <div class="report-image-preview" style="padding: 0 1.25rem 1.25rem 1.25rem;">
+          <div class="report-image-box" style="margin-bottom: 1.25rem;">
+            <h4>
+              <span>Combined Service Request Pending Report (Side-by-Side)</span>
+              <a href="/output/Daily_SR_Report_latest.jpg" target="_blank" class="btn btn-secondary btn-sm">Full Image</a>
+            </h4>
+            <div style="padding: 1rem; text-align: center; background: #fafafa; border-radius: var(--radius);">
+              <img id="img-sr-combined" src="/output/Daily_SR_Report_latest.jpg" alt="Combined SR Report" style="max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm);" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'800\' height=\'250\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Run SR Cycle to Generate High-DPI Cards</text></svg>'">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="report-image-box">
+              <h4>
+                <span>ADL Broadband Service Requests (ACSO)</span>
+                <a href="/output/ADL_SR_Pending.jpg" target="_blank" class="btn btn-secondary btn-sm">Full Image</a>
+              </h4>
+              <div style="padding: 1rem; text-align: center;">
+                <img id="img-adl-sr" src="/output/ADL_SR_Pending.jpg" alt="ADL SR Card" style="max-width: 100%; height: auto; border: 1px solid var(--border);" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'500\' height=\'250\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Pending Generation</text></svg>'">
+              </div>
+            </div>
+            <div class="report-image-box">
+              <h4>
+                <span>ADTv Digital TV Service Requests (ACSO)</span>
+                <a href="/output/ADTv_SR_Pending.jpg" target="_blank" class="btn btn-secondary btn-sm">Full Image</a>
+              </h4>
+              <div style="padding: 1rem; text-align: center;">
+                <img id="img-adtv-sr" src="/output/ADTv_SR_Pending.jpg" alt="ADTv SR Card" style="max-width: 100%; height: auto; border: 1px solid var(--border);" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'500\' height=\'250\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Pending Generation</text></svg>'">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Tables Preview -->
+        <div style="padding: 1.25rem; border-top: 1px solid var(--border);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+            <h3 style="font-size: 1.05rem; font-weight: 700; color: #993300;">📊 Live Interactive Tables Preview</h3>
+            <span id="sr-status-badge" class="tab-badge" style="background: #e2e8f0; color: #475569;">Ready</span>
+          </div>
+
+          <div style="margin-bottom: 2rem;">
+            <div style="background: #993300; color: white; padding: 0.6rem 1rem; font-weight: 700; border-radius: var(--radius) var(--radius) 0 0; font-size: 0.95rem;">
+              ADL Broadband — Service Request Pending (ACSO-wise)
+            </div>
+            <div class="table-responsive" style="border: 1px solid var(--border); border-top: none;">
+              <table class="data-table" id="table-adl-sr">
+                <thead>
+                  <tr style="background: #d9d9d9;">
+                    <th>CENTER</th>
+                    <th>Service Request Type</th>
+                    <th style="background: #d9d9d9; text-align: center;">Grand Total</th>
+                    <th style="background: #d8e4bc; text-align: center;">&lt;1 day</th>
+                    <th style="background: #d8e4bc; text-align: center;">1 day</th>
+                    <th style="background: #d8e4bc; text-align: center;">2 day</th>
+                    <th style="background: #d8e4bc; text-align: center;">3 day</th>
+                    <th style="background: #d8e4bc; text-align: center;">&gt;3 day</th>
+                    <th style="background: #d8e4bc; text-align: center;">&gt;5 day</th>
+                    <th style="background: #d8e4bc; text-align: center;">&gt; 10 day</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-adl-sr">
+                  <tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading ADL Service Request data...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <div style="background: #993300; color: white; padding: 0.6rem 1rem; font-weight: 700; border-radius: var(--radius) var(--radius) 0 0; font-size: 0.95rem;">
+              ADTv Digital TV — Service Request Pending (ACSO-wise)
+            </div>
+            <div class="table-responsive" style="border: 1px solid var(--border); border-top: none;">
+              <table class="data-table" id="table-adtv-sr">
+                <thead>
+                  <tr style="background: #d9d9d9;">
+                    <th>CENTER</th>
+                    <th>Service Request Type</th>
+                    <th style="background: #d9d9d9; text-align: center;">Grand Total</th>
+                    <th style="background: #d8e4bc; text-align: center;">&lt;1 day</th>
+                    <th style="background: #d8e4bc; text-align: center;">1 day</th>
+                    <th style="background: #d8e4bc; text-align: center;">2 day</th>
+                    <th style="background: #d8e4bc; text-align: center;">3 day</th>
+                    <th style="background: #d8e4bc; text-align: center;">&gt;3 day</th>
+                    <th style="background: #d8e4bc; text-align: center;">&gt;5 day</th>
+                    <th style="background: #d8e4bc; text-align: center;">&gt; 10 day</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-adtv-sr">
+                  <tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading ADTv Service Request data...</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -1262,6 +1414,13 @@
       <input type="hidden" id="time-id">
       <div class="modal-body">
         <div class="form-group">
+          <label>Report Pipeline *</label>
+          <select id="time-report-type" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-dark); border-radius: var(--radius); font-weight: 600; font-size: 0.9rem;">
+            <option value="complaint">Complaint Report (QOS Tracker)</option>
+            <option value="service_request">Service Request Pending Report (ACSO-wise)</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label>Trigger Time (24-Hour Format: HH:MM) *</label>
           <input type="time" id="time-val" required style="font-size: 1.1rem; font-weight: 700; padding: 0.5rem;">
           <span class="hint">e.g. 08:00 for 8:00 AM, 15:00 for 3:00 PM</span>
@@ -1385,6 +1544,8 @@
         loadLogFilesList();
         fetchActiveLog();
         runLogDiagnostics();
+      } else if (tabName === 'service-requests') {
+        loadServiceRequestData();
       }
     }
 
@@ -1954,7 +2115,12 @@
           <div style="display: flex; align-items: flex-start; justify-content: space-between;">
             <div>
               <div style="font-size: 1.6rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: var(--text-main); line-height: 1;">${escapeHtml(t.run_time)}</div>
-              <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin-top: 0.35rem;">${escapeHtml(t.label || 'Daily Run')}</div>
+              <div style="display: flex; align-items: center; gap: 0.4rem; margin-top: 0.35rem; flex-wrap: wrap;">
+                <span style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted);">${escapeHtml(t.label || 'Daily Run')}</span>
+                ${t.report_type === 'service_request' 
+                  ? '<span class="tab-badge" style="background: #ffedd5; color: #9a3412; font-size: 0.72rem; font-weight: 700;">📋 Service Request</span>' 
+                  : '<span class="tab-badge" style="background: #e0f2fe; color: #0369a1; font-size: 0.72rem; font-weight: 700;">⚡ Complaint</span>'}
+              </div>
             </div>
             <span class="tab-badge" style="background: ${t.is_enabled ? '#dcfce7' : '#f1f5f9'}; color: ${t.is_enabled ? '#15803d' : '#64748b'};">
               ${t.is_enabled ? 'Active' : 'Disabled'}
@@ -2147,10 +2313,13 @@
     }
 
     // --- Schedule Times Actions ---
-    function openAddTimeModal() {
+    function openAddTimeModal(defaultType = 'complaint') {
       const form = document.getElementById('form-time');
       if (form) form.reset();
       document.getElementById('time-id').value = '';
+      if (document.getElementById('time-report-type')) {
+        document.getElementById('time-report-type').value = defaultType;
+      }
       document.getElementById('modal-time-title').innerText = "Add Daily Trigger Time";
       openModal('modal-time');
     }
@@ -2159,6 +2328,9 @@
       const t = (automationData.times || []).find(x => x.id === id);
       if (!t) return;
       document.getElementById('time-id').value = t.id;
+      if (document.getElementById('time-report-type')) {
+        document.getElementById('time-report-type').value = t.report_type || 'complaint';
+      }
       document.getElementById('time-val').value = t.run_time;
       document.getElementById('time-label').value = t.label || '';
       document.getElementById('modal-time-title').innerText = "Edit Daily Trigger Time";
@@ -2170,6 +2342,7 @@
       const id = document.getElementById('time-id').value;
       const timeValInput = document.getElementById('time-val');
       const labelInput = document.getElementById('time-label');
+      const reportTypeSelect = document.getElementById('time-report-type');
 
       if (!timeValInput || !timeValInput.value) {
         showToast("Please select a trigger time (HH:MM)", "error");
@@ -2179,6 +2352,7 @@
       const payload = {
         run_time: timeValInput.value.trim(),
         label: (labelInput ? labelInput.value : '').trim(),
+        report_type: reportTypeSelect ? reportTypeSelect.value : 'complaint',
         is_enabled: true
       };
 
@@ -2727,6 +2901,188 @@
       }
     }
 
+    // --- Service Request Report Engine ---
+    let srReportData = { adl: [], adtv: [] };
+
+    async function loadServiceRequestData() {
+      const badge = document.getElementById('sr-status-badge');
+      if (badge) {
+        badge.innerText = "Loading...";
+        badge.style.background = "#fef3c7";
+        badge.style.color = "#d97706";
+      }
+
+      try {
+        const res = await fetch(`/api/service-request/reports?region_id=${currentRegion}`);
+        const data = await res.json();
+        if (data.status === "OK") {
+          srReportData = data;
+          renderSRTable('tbody-adl-sr', data.adl || []);
+          renderSRTable('tbody-adtv-sr', data.adtv || []);
+          if (badge) {
+            badge.innerText = `Updated ${new Date().toLocaleTimeString()}`;
+            badge.style.background = "#dcfce7";
+            badge.style.color = "#15803d";
+          }
+        } else {
+          showToast(data.detail || data.message || "Failed to load SR data", "error");
+        }
+      } catch (err) {
+        console.error("Error loading SR data:", err);
+        showToast("Error connecting to server for Service Request data", "error");
+      }
+    }
+
+    function renderSRTable(tbodyId, rows) {
+      const tbody = document.getElementById(tbodyId);
+      if (!tbody) return;
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No pending service requests found.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = rows.map(r => {
+        const isTotal = (r["CENTER"] === "Grand Total");
+        const rowBg = isTotal ? "background: #ccccff; font-weight: 800;" : "";
+        const centerStyle = isTotal ? "font-weight: 800;" : "font-weight: 600;";
+
+        return `
+          <tr style="${rowBg}">
+            <td style="${centerStyle}">${escapeHtml(r["CENTER"])}</td>
+            <td>${escapeHtml(r["Service Request Type"])}</td>
+            <td style="text-align: center; font-weight: 700; background: ${isTotal ? '#b8cce4' : '#f1f5f9'};">${r["Grand Total"] || 0}</td>
+            <td style="text-align: center; font-weight: 600; color: #166534; ${r["<1 day"] > 0 ? 'background: #dcfce7;' : ''}">${r["<1 day"] || 0}</td>
+            <td style="text-align: center; font-weight: 600; color: #854d0e; ${r["1 day"] > 0 ? 'background: #fef3c7;' : ''}">${r["1 day"] || 0}</td>
+            <td style="text-align: center; font-weight: 600; color: #854d0e; ${r["2 day"] > 0 ? 'background: #fef3c7;' : ''}">${r["2 day"] || 0}</td>
+            <td style="text-align: center; font-weight: 600; color: #991b1b; ${r["3 day"] > 0 ? 'background: #fee2e2;' : ''}">${r["3 day"] || 0}</td>
+            <td style="text-align: center; font-weight: 600; color: #991b1b; ${r[">3 day"] > 0 ? 'background: #fee2e2;' : ''}">${r[">3 day"] || 0}</td>
+            <td style="text-align: center; font-weight: 600; color: #991b1b; ${r[">5 day"] > 0 ? 'background: #fee2e2;' : ''}">${r[">5 day"] || 0}</td>
+            <td style="text-align: center; font-weight: 600; color: #991b1b; ${r["> 10 day"] > 0 ? 'background: #fee2e2;' : ''}">${r["> 10 day"] || 0}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function runSRCycleNow(btn) {
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳</span> Running SR Cycle...`;
+      }
+      showToast("Executing Service Request cycle & generating retina cards...", "info");
+
+      try {
+        const res = await fetch(`/api/service-request/run-cycle?region_id=${currentRegion}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === "OK") {
+          showToast(data.message || "SR cycle completed successfully!");
+          const ts = new Date().getTime();
+          const imgComb = document.getElementById('img-sr-combined');
+          const imgAdl = document.getElementById('img-adl-sr');
+          const imgAdtv = document.getElementById('img-adtv-sr');
+          if (imgComb) imgComb.src = `/output/Daily_SR_Report_latest.jpg?t=${ts}`;
+          if (imgAdl) imgAdl.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
+          if (imgAdtv) imgAdtv.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
+          await loadServiceRequestData();
+        } else {
+          showToast(data.detail || data.message || "Failed to run SR cycle", "error");
+        }
+      } catch (err) {
+        console.error("SR cycle error:", err);
+        showToast("Error executing SR cycle", "error");
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<span>🚀</span> Run SR Cycle & Dispatch`;
+        }
+      }
+    }
+
+    async function uploadRawSRExcel(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      showToast(`Uploading '${file.name}' & computing Service Request report...`, "info");
+      try {
+        const res = await fetch('/api/service-request/upload-raw', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok && data.status === "OK") {
+          showToast("Raw workbook uploaded & report recomputed!");
+          const ts = new Date().getTime();
+          const imgComb = document.getElementById('img-sr-combined');
+          const imgAdl = document.getElementById('img-adl-sr');
+          const imgAdtv = document.getElementById('img-adtv-sr');
+          if (imgComb) imgComb.src = `/output/Daily_SR_Report_latest.jpg?t=${ts}`;
+          if (imgAdl) imgAdl.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
+          if (imgAdtv) imgAdtv.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
+          await loadServiceRequestData();
+        } else {
+          showToast(data.detail || data.message || "Upload failed", "error");
+        }
+      } catch (err) {
+        console.error("SR upload error:", err);
+        showToast("Error uploading file", "error");
+      } finally {
+        e.target.value = '';
+      }
+    }
+
+    async function generateAndSendSR(btn) {
+      const phoneInput = document.getElementById('sr-test-phone');
+      const phone = (phoneInput?.value || '').trim();
+      const reportType = document.getElementById('sr-test-type')?.value || 'all';
+
+      if (!phone) {
+        showToast("Please enter a destination phone number (+91XXXXXXXXXX)", "error");
+        phoneInput?.focus();
+        return;
+      }
+
+      try {
+        localStorage.setItem('dwr_test_phone', phone);
+      } catch (e) {}
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳</span> Generating & Sending...`;
+      }
+      showToast(`Delivering SR report to ${phone}...`, "info");
+
+      try {
+        const res = await fetch('/api/service-request/generate-and-send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_phone: phone, report_type: reportType })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === "OK") {
+          showToast(data.message || `SR report delivered to ${phone}!`);
+          const ts = new Date().getTime();
+          const imgComb = document.getElementById('img-sr-combined');
+          const imgAdl = document.getElementById('img-adl-sr');
+          const imgAdtv = document.getElementById('img-adtv-sr');
+          if (imgComb) imgComb.src = `/output/Daily_SR_Report_latest.jpg?t=${ts}`;
+          if (imgAdl) imgAdl.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
+          if (imgAdtv) imgAdtv.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
+        } else {
+          showToast(data.detail || data.message || "SR test delivery failed", "error");
+        }
+      } catch (err) {
+        console.error("SR test delivery error:", err);
+        showToast("Error sending SR report", "error");
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<span>🚀</span> Send SR Report Now`;
+        }
+      }
+    }
+
     // Init
     window.addEventListener('DOMContentLoaded', async () => {
       try {
@@ -2734,6 +3090,8 @@
         if (savedPhone) {
           const testInput = document.getElementById('test-phone-number');
           if (testInput && !testInput.value) testInput.value = savedPhone;
+          const srInput = document.getElementById('sr-test-phone');
+          if (srInput && !srInput.value) srInput.value = savedPhone;
         }
       } catch (e) {}
 

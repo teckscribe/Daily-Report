@@ -158,10 +158,17 @@ def init_db():
         label TEXT,
         is_enabled INTEGER DEFAULT 1,
         last_run TEXT,
+        report_type TEXT DEFAULT 'complaint',
         created_at TEXT,
         FOREIGN KEY (region_id) REFERENCES regions (id) ON DELETE CASCADE
     )
     """)
+
+    c.execute("PRAGMA table_info(schedule_times)")
+    sched_cols = [r[1] for r in c.fetchall()]
+    if "report_type" not in sched_cols:
+        c.execute("ALTER TABLE schedule_times ADD COLUMN report_type TEXT DEFAULT 'complaint'")
+        conn.commit()
 
     c.execute("""
     CREATE TABLE IF NOT EXISTS system_settings (
@@ -612,42 +619,61 @@ def toggle_dispatch_rule(rule_id: int) -> bool:
 
 # --- Schedule Times ---
 
-def get_schedule_times(region_id: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_schedule_times(region_id: Optional[str] = None, report_type: Optional[str] = None) -> List[Dict[str, Any]]:
     conn = get_connection()
     c = conn.cursor()
+    query = "SELECT * FROM schedule_times WHERE 1=1"
+    params = []
     if region_id:
-        c.execute("SELECT * FROM schedule_times WHERE region_id = ? ORDER BY run_time ASC", (region_id,))
-    else:
-        c.execute("SELECT * FROM schedule_times ORDER BY run_time ASC")
+        query += " AND region_id = ?"
+        params.append(region_id)
+    if report_type:
+        if report_type == "complaint":
+            query += " AND (report_type = 'complaint' OR report_type IS NULL OR report_type = '')"
+        else:
+            query += " AND report_type = ?"
+            params.append(report_type)
+    query += " ORDER BY run_time ASC"
+    c.execute(query, tuple(params))
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
     return rows
 
 
-def add_schedule_time(region_id: str, run_time: str, label: str = "") -> int:
+def add_schedule_time(region_id: str, run_time: str, label: str = "", report_type: str = "complaint") -> int:
     conn = get_connection()
     c = conn.cursor()
     now_str = datetime.now().isoformat()
     c.execute("""
-    INSERT INTO schedule_times (region_id, run_time, label, is_enabled, created_at)
-    VALUES (?, ?, ?, 1, ?)
-    """, (region_id.strip(), run_time.strip(), label.strip(), now_str))
+    INSERT INTO schedule_times (region_id, run_time, label, is_enabled, report_type, created_at)
+    VALUES (?, ?, ?, 1, ?, ?)
+    """, (region_id.strip(), run_time.strip(), label.strip(), report_type.strip(), now_str))
     sid = c.lastrowid
     conn.commit()
     conn.close()
     return sid
 
 
-def update_schedule_time(time_id: int, run_time: str, label: str = "", is_enabled: int = 1) -> bool:
+def update_schedule_time(time_id: int, run_time: str, label: str = "", is_enabled: int = 1, report_type: Optional[str] = None) -> bool:
     conn = get_connection()
     c = conn.cursor()
-    c.execute("""
-    UPDATE schedule_times SET
-        run_time = ?,
-        label = ?,
-        is_enabled = ?
-    WHERE id = ?
-    """, (run_time.strip(), label.strip(), 1 if is_enabled else 0, time_id))
+    if report_type is not None:
+        c.execute("""
+        UPDATE schedule_times SET
+            run_time = ?,
+            label = ?,
+            is_enabled = ?,
+            report_type = ?
+        WHERE id = ?
+        """, (run_time.strip(), label.strip(), 1 if is_enabled else 0, report_type.strip(), time_id))
+    else:
+        c.execute("""
+        UPDATE schedule_times SET
+            run_time = ?,
+            label = ?,
+            is_enabled = ?
+        WHERE id = ?
+        """, (run_time.strip(), label.strip(), 1 if is_enabled else 0, time_id))
     conn.commit()
     conn.close()
     return True

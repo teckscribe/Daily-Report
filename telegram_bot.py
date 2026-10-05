@@ -39,6 +39,9 @@ from config import (
     ADL_REPORT_IMAGE_PATH,
     ADTV_ACSO_REPORT_IMAGE_PATH,
     ADTV_REPORT_IMAGE_PATH,
+    ADL_SR_REPORT_IMAGE_PATH,
+    ADTV_SR_REPORT_IMAGE_PATH,
+    SR_REPORT_IMAGE_PATH,
     BASE_DIR,
     DATA_DIR,
     TELEGRAM_ALLOWED_USERS,
@@ -304,6 +307,37 @@ def trigger_test_delivery(target_phone: str, region_id: str = "thrissur") -> Tup
         return False, f"Could not connect to web server: {e}"
 
 
+def trigger_sr_dispatch(region_id: str = "thrissur") -> Tuple[bool, str]:
+    """Calls web server endpoint to run automated Service Request cycle and dispatch."""
+    try:
+        url = f"{TELEGRAM_WEB_URL}/api/service-request/run-cycle?region_id={region_id}"
+        res = requests.post(url, json={"region_id": region_id}, timeout=300)
+        data = res.json()
+        if res.status_code == 200 and data.get("status") == "OK":
+            return True, data.get("message", "Service Request reports generated & dispatched successfully.")
+        return False, data.get("message") or data.get("detail") or "Failed to run Service Request cycle"
+    except Exception as e:
+        return False, f"Could not connect to web server: {e}"
+
+
+def trigger_sr_test_delivery(target_phone: str, region_id: str = "thrissur") -> Tuple[bool, str]:
+    """Generates Service Request reports and delivers them to a specific phone number."""
+    clean_phone = target_phone.strip()
+    if not clean_phone:
+        return False, "Target phone number cannot be empty."
+
+    try:
+        url = f"{TELEGRAM_WEB_URL}/api/service-request/generate-and-send"
+        payload = {"target_phone": clean_phone, "report_type": "all"}
+        res = requests.post(url, json=payload, timeout=300)
+        data = res.json()
+        if res.status_code == 200 and data.get("status") == "OK":
+            return True, data.get("message", f"SR report delivered to {clean_phone} successfully.")
+        return False, data.get("detail") or data.get("message") or "SR delivery failed"
+    except Exception as e:
+        return False, f"Could not connect to web server: {e}"
+
+
 # --- Keyboard Layouts (UI Buttons) ---
 
 def get_main_menu_keyboard(service_active: bool) -> Dict[str, Any]:
@@ -332,6 +366,12 @@ def get_main_menu_keyboard(service_active: bool) -> Dict[str, Any]:
             ],
             [
                 {
+                    "text": "📋 Service Request Pending Report",
+                    "callback_data": "menu:sr",
+                }
+            ],
+            [
+                {
                     "text": "🖼️ Send Reports in Telegram",
                     "callback_data": "action:send_photos",
                 },
@@ -341,14 +381,43 @@ def get_main_menu_keyboard(service_active: bool) -> Dict[str, Any]:
     }
 
 
-def get_phone_selection_keyboard(default_phone: str) -> Dict[str, Any]:
+def get_sr_menu_keyboard() -> Dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "🚀 Dispatch SR Reports to Groups",
+                    "callback_data": "action:sr_dispatch",
+                }
+            ],
+            [
+                {
+                    "text": "📲 Send SR Test Delivery",
+                    "callback_data": "action:sr_test_delivery",
+                }
+            ],
+            [
+                {
+                    "text": "🖼️ Send SR Report Cards Here",
+                    "callback_data": "action:sr_send_photos",
+                }
+            ],
+            [
+                {"text": "🔙 Back to Main Menu", "callback_data": "menu:main"},
+            ],
+        ]
+    }
+
+
+def get_phone_selection_keyboard(default_phone: str, prefix: str = "num") -> Dict[str, Any]:
     buttons = []
     if default_phone:
-        buttons.append([{"text": f"📞 Send to {default_phone} (Default)", "callback_data": f"num:{default_phone}"}])
-    buttons.append([{"text": "📞 Send to +919633889430", "callback_data": "num:+919633889430"}])
-    buttons.append([{"text": "📞 Send to +917591920200", "callback_data": "num:+917591920200"}])
-    buttons.append([{"text": "✏️ Type Custom Mobile Number", "callback_data": "num:custom"}])
-    buttons.append([{"text": "🔙 Back to Main Menu", "callback_data": "menu:main"}])
+        buttons.append([{"text": f"📞 Send to {default_phone} (Default)", "callback_data": f"{prefix}:{default_phone}"}])
+    buttons.append([{"text": "📞 Send to +919633889430", "callback_data": f"{prefix}:+919633889430"}])
+    buttons.append([{"text": "📞 Send to +917591920200", "callback_data": f"{prefix}:+917591920200"}])
+    buttons.append([{"text": "✏️ Type Custom Mobile Number", "callback_data": f"{prefix}:custom"}])
+    back_target = "menu:sr" if prefix.startswith("sr") else "menu:main"
+    buttons.append([{"text": "🔙 Back", "callback_data": back_target}])
     return {"inline_keyboard": buttons}
 
 
@@ -361,6 +430,7 @@ def get_confirmation_keyboard(confirm_data: str, cancel_data: str = "menu:cancel
             ]
         ]
     }
+
 
 
 
@@ -500,6 +570,27 @@ class TelegramBotRunner:
             self.api.send_message(chat_id, prompt, reply_markup=kb)
             return
 
+        elif user_states.get(chat_id) == "WAITING_FOR_SR_PHONE":
+            user_states.pop(chat_id, None)
+            clean_digits = re.sub(r"\D", "", text)
+            if len(clean_digits) < 10:
+                self.api.send_message(
+                    chat_id,
+                    "❌ <b>Invalid Phone Number</b>\nPlease provide a valid 10-digit mobile number.",
+                )
+                self.send_main_menu(chat_id)
+                return
+
+            formatted_num = f"+91{clean_digits[-10:]}"
+            prompt = (
+                "⚠️ <b>Confirm Action: Service Request Test Delivery</b>\n\n"
+                f"Are you sure you want to generate SR reports and send to:\n"
+                f"📱 <b>{formatted_num}</b>?"
+            )
+            kb = get_confirmation_keyboard(confirm_data=f"exec:sr_test_delivery:{formatted_num}", cancel_data="menu:sr")
+            self.api.send_message(chat_id, prompt, reply_markup=kb)
+            return
+
         # Commands (All command triggers require confirmation)
         if text.startswith("/start") or text.startswith("/menu") or text.startswith("/help"):
             self.send_main_menu(chat_id)
@@ -508,6 +599,13 @@ class TelegramBotRunner:
             msg = format_status_message(st)
             kb = get_main_menu_keyboard(st["is_active"])
             self.api.send_message(chat_id, msg, reply_markup=kb)
+        elif text.startswith("/sr") or text.startswith("/service_request"):
+            kb = get_sr_menu_keyboard()
+            prompt = (
+                "📋 <b>Service Request Pending Reports (ACSO-wise)</b>\n\n"
+                "Select an action below to dispatch Service Request pending reports or send test deliveries:"
+            )
+            self.api.send_message(chat_id, prompt, reply_markup=kb)
         elif text.startswith("/start_service"):
             prompt = (
                 "⚠️ <b>Confirm Action: Start Service</b>\n\n"
@@ -646,6 +744,69 @@ class TelegramBotRunner:
             self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
             return
 
+        # --- Service Request Callbacks ---
+        if data == "menu:sr":
+            self.api.answer_callback_query(cb_id)
+            kb = get_sr_menu_keyboard()
+            prompt = (
+                "📋 <b>Service Request Pending Reports (ACSO-wise)</b>\n\n"
+                "Select an action below to dispatch Service Request pending reports or send test deliveries:"
+            )
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        if data == "action:sr_dispatch":
+            self.api.answer_callback_query(cb_id)
+            prompt = (
+                "⚠️ <b>Confirm Action: Service Request Dispatch Rules</b>\n\n"
+                "Are you sure you want to run the Service Request cycle and dispatch pending reports to all configured <b>WhatsApp Groups</b> & ACSO contacts?"
+            )
+            kb = get_confirmation_keyboard(confirm_data="exec:sr_dispatch", cancel_data="menu:sr")
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        if data == "action:sr_test_delivery":
+            self.api.answer_callback_query(cb_id)
+            kb = get_phone_selection_keyboard(TELEGRAM_TEST_PHONE, prefix="srnum")
+            prompt = (
+                "📲 <b>Service Request Test Delivery</b>\n\n"
+                "Select a destination phone number below or enter a custom one:"
+            )
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        if data.startswith("srnum:"):
+            target_val = data.split(":", 1)[1]
+            if target_val == "custom":
+                user_states[chat_id] = "WAITING_FOR_SR_PHONE"
+                self.api.answer_callback_query(cb_id)
+                self.api.edit_message_text(
+                    chat_id,
+                    message_id,
+                    "✏️ <b>Enter Target Mobile Number for Service Request</b>\n\n"
+                    "Please reply with the phone number (e.g. <code>+919846000000</code> or <code>9846000000</code>):",
+                )
+            else:
+                self.api.answer_callback_query(cb_id)
+                prompt = (
+                    "⚠️ <b>Confirm Action: Service Request Test Delivery</b>\n\n"
+                    f"Are you sure you want to generate SR reports and send to:\n"
+                    f"📱 <b>{target_val}</b>?"
+                )
+                kb = get_confirmation_keyboard(confirm_data=f"exec:sr_test_delivery:{target_val}", cancel_data="menu:sr")
+                self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        if data == "action:sr_send_photos":
+            self.api.answer_callback_query(cb_id)
+            prompt = (
+                "⚠️ <b>Confirm Action: Send Service Request Report Cards Here</b>\n\n"
+                "Are you sure you want to send the latest Service Request pending report cards into this chat?"
+            )
+            kb = get_confirmation_keyboard(confirm_data="exec:sr_send_photos", cancel_data="menu:sr")
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
         # 3. Confirmed Executions (exec:*)
         if data == "exec:srv_start":
             self.api.answer_callback_query(cb_id, text="Confirmed. Starting service...")
@@ -676,6 +837,22 @@ class TelegramBotRunner:
         if data == "exec:send_photos":
             self.api.answer_callback_query(cb_id, text="Confirmed. Delivering photos...")
             self.send_report_photos_async(chat_id, message_id)
+            return
+
+        if data == "exec:sr_dispatch":
+            self.api.answer_callback_query(cb_id, text="Confirmed. Triggering SR dispatch...")
+            self.execute_sr_dispatch_async(chat_id, message_id)
+            return
+
+        if data.startswith("exec:sr_test_delivery:"):
+            target_phone = data.split(":", 2)[2]
+            self.api.answer_callback_query(cb_id, text=f"Confirmed. Sending SR report to {target_phone}...")
+            self.execute_sr_test_delivery_async(chat_id, target_phone, message_id)
+            return
+
+        if data == "exec:sr_send_photos":
+            self.api.answer_callback_query(cb_id, text="Confirmed. Delivering SR cards...")
+            self.send_sr_report_photos_async(chat_id, message_id)
             return
 
     # --- Asynchronous Action Handlers ---
@@ -816,6 +993,109 @@ class TelegramBotRunner:
                 )
             else:
                 self.send_main_menu(chat_id)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def execute_sr_dispatch_async(self, chat_id: int, message_id: Optional[int] = None):
+        def worker():
+            status_text = (
+                "⏳ <b>Service Request Pending Pipeline Running</b>\n\n"
+                "• Parsing raw Service Request workbooks...\n"
+                "• Computing ACSO-wise pending days summary...\n"
+                "• Rendering High-DPI Retina report cards...\n"
+                "• Dispatching to configured WhatsApp Groups & ACSO contacts..."
+            )
+            if message_id:
+                self.api.edit_message_text(chat_id, message_id, status_text)
+            else:
+                self.api.send_message(chat_id, status_text)
+
+            ok, res_msg = trigger_sr_dispatch("thrissur")
+            kb = get_sr_menu_keyboard()
+
+            if ok:
+                finish_text = (
+                    "✅ <b>Service Request Dispatch Complete!</b>\n\n"
+                    f"<i>{res_msg}</i>"
+                )
+            else:
+                finish_text = (
+                    "❌ <b>Service Request Dispatch Error</b>\n\n"
+                    f"<code>{res_msg}</code>"
+                )
+
+            if message_id:
+                self.api.edit_message_text(chat_id, message_id, finish_text, reply_markup=kb)
+            else:
+                self.api.send_message(chat_id, finish_text, reply_markup=kb)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def execute_sr_test_delivery_async(
+        self, chat_id: int, target_phone: str, message_id: Optional[int] = None
+    ):
+        def worker():
+            status_text = (
+                f"⏳ <b>Generating & Sending Service Request Test Delivery</b>\n\n"
+                f"• Target Number: <code>{target_phone}</code>\n"
+                "• Reading Service Request ticket ledger...\n"
+                "• Rendering high-resolution ACSO report cards...\n"
+                "• Dispatching via WhatsApp Web..."
+            )
+            if message_id:
+                self.api.edit_message_text(chat_id, message_id, status_text)
+            else:
+                self.api.send_message(chat_id, status_text)
+
+            ok, res_msg = trigger_sr_test_delivery(target_phone, "thrissur")
+            kb = get_sr_menu_keyboard()
+
+            if ok:
+                finish_text = (
+                    f"✅ <b>Service Request Test Delivery Succeeded!</b>\n\n"
+                    f"Reports sent to: <code>{target_phone}</code>\n"
+                    f"<i>{res_msg}</i>"
+                )
+            else:
+                finish_text = (
+                    f"❌ <b>Service Request Test Delivery Failed</b>\n\n"
+                    f"Target: <code>{target_phone}</code>\n"
+                    f"Error: <code>{res_msg}</code>"
+                )
+
+            self.api.send_message(chat_id, finish_text, reply_markup=kb)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def send_sr_report_photos_async(self, chat_id: int, message_id: Optional[int] = None):
+        def worker():
+            if message_id:
+                self.api.edit_message_text(
+                    chat_id,
+                    message_id,
+                    "⏳ <b>Delivering High-DPI SR Report Cards to Telegram...</b>\nPlease wait a moment.",
+                )
+            cards = [
+                ("ADL Broadband — Service Requests (ACSO)", ADL_SR_REPORT_IMAGE_PATH),
+                ("ADTv Digital TV — Service Requests (ACSO)", ADTV_SR_REPORT_IMAGE_PATH),
+                ("Daily Service Request Combined Report", SR_REPORT_IMAGE_PATH),
+            ]
+            sent_count = 0
+            for title, path in cards:
+                if path.exists():
+                    self.api.send_photo(chat_id, path, caption=f"📊 <b>{title}</b>")
+                    sent_count += 1
+                    time.sleep(1)
+
+            kb = get_sr_menu_keyboard()
+            if sent_count == 0:
+                self.api.send_message(
+                    chat_id,
+                    "⚠️ No SR report images found in <code>output/</code> directory. Run SR dispatch or generate reports to create fresh cards.",
+                    reply_markup=kb,
+                )
+            else:
+                self.api.send_message(chat_id, "📋 <b>Service Request Menu:</b>", reply_markup=kb)
 
         threading.Thread(target=worker, daemon=True).start()
 

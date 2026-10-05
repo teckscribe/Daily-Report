@@ -22,6 +22,7 @@ data/Pending*.csv
 output/*.jpg
 output/*.png
 output/*.xls
+output/*.xlsx
 !output/.gitkeep
 
 # Temporary databases and backups
