@@ -147,7 +147,11 @@ class CycleRunPayload(BaseModel):
 async def serve_dashboard():
     """Renders the main operational management interface."""
     html_path = TEMPLATES_DIR / "index.html"
-    return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    response = HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 # --- Region Management Endpoints ---
@@ -1012,5 +1016,5 @@ async def start_scheduler_task():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("web_server:app", host="127.0.0.1", port=8201, reload=True)
+    uvicorn.run("web_server:app", host="127.0.0.1", port=8201, reload=True, reload_includes=["*.html", "*.py", "*.js", "*.css"])
 
