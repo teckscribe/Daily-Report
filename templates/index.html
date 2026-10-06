@@ -262,6 +262,41 @@
       border-color: rgba(156, 65, 8, 0.2);
     }
 
+    /* Directory Sub-Filter Pills */
+    .dir-filters {
+      display: inline-flex;
+      gap: 0.35rem;
+      background: #f1f5f9;
+      padding: 0.25rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .dir-filter-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.82rem;
+      transition: all 0.15s ease;
+    }
+    .dir-filter-btn:hover {
+      background: #e2e8f0;
+      color: var(--text-main);
+    }
+    .dir-filter-btn.active {
+      background: #ffffff;
+      color: var(--primary);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      font-weight: 700;
+    }
+
     /* Content Panes */
     .tab-pane {
       display: none;
@@ -580,17 +615,9 @@
 
     <!-- Tab Header Navigation -->
     <div class="tabs-header">
-      <button class="tab-btn active" onclick="setTab('tls')">
-        <span>Team Leaders</span>
-        <span class="tab-badge" id="badge-tls">0</span>
-      </button>
-      <button class="tab-btn" onclick="setTab('centers')">
-        <span>Centers & ACSOs</span>
-        <span class="tab-badge" id="badge-centers">0</span>
-      </button>
-      <button class="tab-btn" onclick="setTab('employees')">
+      <button class="tab-btn active" onclick="setTab('directory')">
         <span>Employee Directory</span>
-        <span class="tab-badge" id="badge-emps">0</span>
+        <span class="tab-badge" id="badge-directory">0</span>
       </button>
       <button class="tab-btn" onclick="setTab('reports')">
         <span>Complaint Reports</span>
@@ -613,19 +640,80 @@
       </button>
     </div>
 
-    <!-- TAB 1: Team Leaders -->
-    <div id="tab-tls" class="tab-pane active">
+    <!-- COMBINED TAB: Employee Directory (Includes Team Leaders, Centers & ACSOs, and Employee Codes) -->
+    <div id="tab-directory" class="tab-pane active">
       <div class="section-card">
-        <div class="section-toolbar">
-          <div class="search-box">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" id="tl-search" placeholder="Search Team Leader or Center..." oninput="filterTeamLeaders()">
+        <!-- Section Toolbar -->
+        <div class="section-toolbar" style="flex-wrap: wrap; gap: 0.75rem; justify-content: space-between;">
+          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; flex: 1; min-width: 320px;">
+            <div class="search-box" style="flex: 1; max-width: 340px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="dir-search" placeholder="Search Name, Center, Emp Code, Role, Keys..." oninput="filterDirectory()">
+            </div>
+            <!-- Sub-filter Segmented Buttons -->
+            <div class="dir-filters">
+              <button type="button" class="dir-filter-btn active" id="filter-dir-all" onclick="setDirectoryFilter('all')">
+                <span>All Personnel</span> <span class="tab-badge" id="badge-dir-all" style="background: #e2e8f0; color: #1e293b; font-size: 0.75rem;">0</span>
+              </button>
+              <button type="button" class="dir-filter-btn" id="filter-dir-tls" onclick="setDirectoryFilter('tls')">
+                <span>👔 Team Leaders</span> <span class="tab-badge" id="badge-dir-tls" style="background: #dbeafe; color: #1e40af; font-size: 0.75rem;">0</span>
+              </button>
+              <button type="button" class="dir-filter-btn" id="filter-dir-centers" onclick="setDirectoryFilter('centers')">
+                <span>🏢 Centers & ACSOs</span> <span class="tab-badge" id="badge-dir-centers" style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem;">0</span>
+              </button>
+              <button type="button" class="dir-filter-btn" id="filter-dir-emps" onclick="setDirectoryFilter('emps')">
+                <span>📋 Employee Codes</span> <span class="tab-badge" id="badge-dir-emps" style="background: #dcfce7; color: #15803d; font-size: 0.75rem;">0</span>
+              </button>
+            </div>
           </div>
-          <button class="btn btn-primary" onclick="openAddTLModal()">
-            <span>&#43;</span> Add Team Leader
-          </button>
+
+          <!-- Add Buttons Group -->
+          <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="openAddTLModal()">
+              <span>&#43;</span> Add Team Leader
+            </button>
+            <button class="btn btn-secondary" onclick="openAddACSOModal()">
+              <span>&#43;</span> Add Center & ACSO
+            </button>
+            <button class="btn btn-secondary" onclick="openAddEmpModal()">
+              <span>&#43;</span> Add Emp Code
+            </button>
+          </div>
         </div>
-        <div class="table-responsive">
+
+        <!-- Hidden inputs & badge bridges for backwards-compatibility -->
+        <input type="hidden" id="tl-search">
+        <input type="hidden" id="center-search">
+        <input type="hidden" id="emp-search">
+        <span id="badge-tls" style="display: none;">0</span>
+        <span id="badge-centers" style="display: none;">0</span>
+        <span id="badge-emps" style="display: none;">0</span>
+
+        <!-- VIEW 1: All Personnel (Unified Comprehensive Table) -->
+        <div id="view-dir-all" class="table-responsive dir-view">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Role / Category</th>
+                <th>Employee / Officer Name</th>
+                <th>Assigned Center</th>
+                <th>Emp Code</th>
+                <th>ADL Key / Area</th>
+                <th>ADTv Key / AMO</th>
+                <th>Prepaid Code / Area</th>
+                <th>Phone</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="dir-all-tbody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- VIEW 2: Team Leaders Dedicated View -->
+        <div id="view-dir-tls" class="table-responsive dir-view" style="display: none;">
           <table class="data-table" id="tl-table">
             <thead>
               <tr>
@@ -639,26 +727,13 @@
               </tr>
             </thead>
             <tbody id="tl-tbody">
-              <!-- Populated via JS -->
+              <!-- Rendered via JS -->
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
 
-    <!-- TAB 2: Centers & ACSOs -->
-    <div id="tab-centers" class="tab-pane">
-      <div class="section-card">
-        <div class="section-toolbar">
-          <div class="search-box">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" id="center-search" placeholder="Search Center or ACSO..." oninput="filterCenters()">
-          </div>
-          <button class="btn btn-primary" onclick="openAddACSOModal()">
-            <span>&#43;</span> Add Center & ACSO
-          </button>
-        </div>
-        <div class="table-responsive">
+        <!-- VIEW 3: Centers & ACSOs Dedicated View -->
+        <div id="view-dir-centers" class="table-responsive dir-view" style="display: none;">
           <table class="data-table" id="center-table">
             <thead>
               <tr>
@@ -672,26 +747,13 @@
               </tr>
             </thead>
             <tbody id="center-tbody">
-              <!-- Populated via JS -->
+              <!-- Rendered via JS -->
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
 
-    <!-- TAB 3: Employee Directory -->
-    <div id="tab-employees" class="tab-pane">
-      <div class="section-card">
-        <div class="section-toolbar">
-          <div class="search-box">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" id="emp-search" placeholder="Search Code, Name, Role..." oninput="filterEmployees()">
-          </div>
-          <button class="btn btn-primary" onclick="openAddEmpModal()">
-            <span>&#43;</span> Add Employee Code
-          </button>
-        </div>
-        <div class="table-responsive">
+        <!-- VIEW 4: Employee Codes Dedicated View -->
+        <div id="view-dir-emps" class="table-responsive dir-view" style="display: none;">
           <table class="data-table" id="emp-table">
             <thead>
               <tr>
@@ -704,7 +766,7 @@
               </tr>
             </thead>
             <tbody id="emp-tbody">
-              <!-- Populated via JS -->
+              <!-- Rendered via JS -->
             </tbody>
           </table>
         </div>
@@ -1603,6 +1665,10 @@
 
     // --- Tab Switching ---
     function setTab(tabName, clickedBtn) {
+      if (['tls', 'centers', 'employees'].includes(tabName)) {
+        setDirectoryFilter(tabName === 'tls' ? 'tls' : (tabName === 'centers' ? 'centers' : 'emps'));
+        tabName = 'directory';
+      }
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
       const btn = clickedBtn || (window.event && window.event.currentTarget) || document.querySelector(`[onclick*="setTab('${tabName}')"]`);
@@ -1669,6 +1735,7 @@
         const data = await res.json();
         allData = { ...allData, ...data };
         updateStats();
+        renderDirectoryAll();
         renderTeamLeaders();
         renderCenters();
         renderEmployees();
@@ -1683,20 +1750,200 @@
     }
 
     function updateStats() {
-      document.getElementById('stat-centers').innerText = allData.acsos.length;
-      document.getElementById('stat-tls').innerText = allData.tls.length;
-      document.getElementById('stat-acsos').innerText = allData.acsos.length;
-      document.getElementById('stat-emps').innerText = allData.emps.length;
+      const tlCount = (allData.tls || []).length;
+      const acsoCount = (allData.acsos || []).length;
+      const empCount = (allData.emps || []).length;
+      const totalDirectory = tlCount + acsoCount;
 
-      document.getElementById('badge-tls').innerText = allData.tls.length;
-      document.getElementById('badge-centers').innerText = allData.acsos.length;
-      document.getElementById('badge-emps').innerText = allData.emps.length;
+      if (document.getElementById('stat-centers')) document.getElementById('stat-centers').innerText = acsoCount;
+      if (document.getElementById('stat-tls')) document.getElementById('stat-tls').innerText = tlCount;
+      if (document.getElementById('stat-acsos')) document.getElementById('stat-acsos').innerText = acsoCount;
+      if (document.getElementById('stat-emps')) document.getElementById('stat-emps').innerText = empCount;
+
+      if (document.getElementById('badge-directory')) document.getElementById('badge-directory').innerText = totalDirectory;
+      if (document.getElementById('badge-dir-all')) document.getElementById('badge-dir-all').innerText = totalDirectory;
+      if (document.getElementById('badge-dir-tls')) document.getElementById('badge-dir-tls').innerText = tlCount;
+      if (document.getElementById('badge-dir-centers')) document.getElementById('badge-dir-centers').innerText = acsoCount;
+      if (document.getElementById('badge-dir-emps')) document.getElementById('badge-dir-emps').innerText = empCount;
+
+      if (document.getElementById('badge-tls')) document.getElementById('badge-tls').innerText = tlCount;
+      if (document.getElementById('badge-centers')) document.getElementById('badge-centers').innerText = acsoCount;
+      if (document.getElementById('badge-emps')) document.getElementById('badge-emps').innerText = empCount;
+    }
+
+    // --- Directory Sub-Filter & Navigation ---
+    let currentDirFilter = 'all';
+
+    function setDirectoryFilter(filterType) {
+      currentDirFilter = filterType;
+      document.querySelectorAll('.dir-filter-btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = document.getElementById('filter-dir-' + filterType);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      document.querySelectorAll('.dir-view').forEach(v => v.style.display = 'none');
+      const targetView = document.getElementById('view-dir-' + filterType);
+      if (targetView) targetView.style.display = 'block';
+
+      filterDirectory();
+    }
+
+    function filterDirectory() {
+      const q = (document.getElementById('dir-search')?.value || '').toLowerCase().trim();
+      if (document.getElementById('tl-search')) document.getElementById('tl-search').value = q;
+      if (document.getElementById('center-search')) document.getElementById('center-search').value = q;
+      if (document.getElementById('emp-search')) document.getElementById('emp-search').value = q;
+
+      renderDirectoryAll(q);
+      renderTeamLeaders();
+      renderCenters();
+      renderEmployees();
     }
 
     // --- Render Tables ---
+    function renderDirectoryAll(query) {
+      const q = query !== undefined ? query : (document.getElementById('dir-search')?.value || '').toLowerCase().trim();
+      const tbody = document.getElementById('dir-all-tbody');
+      if (!tbody) return;
+
+      const tls = allData.tls || [];
+      const acsos = allData.acsos || [];
+      const emps = allData.emps || [];
+
+      const empMap = {};
+      emps.forEach(e => {
+        if (e.emp_code) empMap[String(e.emp_code).trim()] = e;
+        if (e.name) empMap[String(e.name).trim().toLowerCase()] = e;
+      });
+
+      const unifiedRows = [];
+
+      // 1. Add Team Leaders
+      tls.forEach(t => {
+        const empMatch = empMap[String(t.pp_adl_emp_code).trim()] || empMap[String(t.name).trim().toLowerCase()];
+        unifiedRows.push({
+          type: 'tl',
+          id: t.id,
+          roleLabel: 'Team Leader',
+          roleBadgeBg: '#dbeafe',
+          roleBadgeColor: '#1e40af',
+          roleIcon: '👔',
+          name: t.name,
+          subName: (t.adtv_name && t.adtv_name !== t.name) ? `ADTv: ${t.adtv_name}` : '',
+          center: t.center_name,
+          empCode: t.pp_adl_emp_code || '',
+          adlKey: t.pd_adl_name_key || '',
+          adtvKey: t.pd_adtv_name_key || '',
+          prepaidKey: t.pp_adl_emp_code || '',
+          phone: empMatch ? (empMatch.phone || '') : '',
+          raw: t
+        });
+      });
+
+      // 2. Add ACSO Officers
+      acsos.forEach(c => {
+        unifiedRows.push({
+          type: 'acso',
+          id: c.id,
+          roleLabel: 'ACSO Officer',
+          roleBadgeBg: '#ede9fe',
+          roleBadgeColor: '#6d28d9',
+          roleIcon: '🏢',
+          name: c.acso_name,
+          subName: (c.adtv_acso_name && c.adtv_acso_name !== c.acso_name) ? `ADTv: ${c.adtv_acso_name}` : '',
+          center: c.adl_center_display || c.center_name,
+          empCode: '',
+          adlKey: c.pd_adl_center_key || '',
+          adtvKey: c.pd_adtv_center_key || '',
+          prepaidKey: c.pp_adl_center_key || '',
+          phone: '',
+          raw: c
+        });
+      });
+
+      // 3. Add standalone employees (who are not already listed as TLs)
+      const tlCodes = new Set(tls.map(t => String(t.pp_adl_emp_code).trim()).filter(Boolean));
+      const tlNames = new Set(tls.map(t => String(t.name).trim().toLowerCase()));
+      emps.forEach(e => {
+        const code = String(e.emp_code || '').trim();
+        const name = String(e.name || '').trim().toLowerCase();
+        if (!tlCodes.has(code) && !tlNames.has(name)) {
+          unifiedRows.push({
+            type: 'emp',
+            id: e.id,
+            roleLabel: e.role || 'Employee',
+            roleBadgeBg: '#dcfce7',
+            roleBadgeColor: '#15803d',
+            roleIcon: '📋',
+            name: e.name,
+            subName: '',
+            center: e.center_name || '—',
+            empCode: e.emp_code || '',
+            adlKey: '',
+            adtvKey: '',
+            prepaidKey: e.emp_code || '',
+            phone: e.phone || '',
+            raw: e
+          });
+        }
+      });
+
+      // Filter by query
+      const filtered = unifiedRows.filter(r => {
+        if (!q) return true;
+        return (
+          (r.name || '').toLowerCase().includes(q) ||
+          (r.center || '').toLowerCase().includes(q) ||
+          (r.empCode || '').toLowerCase().includes(q) ||
+          (r.roleLabel || '').toLowerCase().includes(q) ||
+          (r.adlKey || '').toLowerCase().includes(q) ||
+          (r.adtvKey || '').toLowerCase().includes(q) ||
+          (r.phone || '').toLowerCase().includes(q)
+        );
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 2.5rem;">No directory entries match your search. Click "+ Add Team Leader", "+ Add Center & ACSO", or "+ Add Emp Code" above.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map((r, idx) => `
+        <tr>
+          <td><strong>${idx + 1}</strong></td>
+          <td>
+            <span class="tab-badge" style="background: ${r.roleBadgeBg}; color: ${r.roleBadgeColor}; font-weight: 700; white-space: nowrap;">
+              ${r.roleIcon} ${escapeHtml(r.roleLabel)}
+            </span>
+          </td>
+          <td>
+            <strong style="color: var(--text-main); font-size: 0.92rem;">${escapeHtml(r.name)}</strong>
+            ${r.subName ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem;">${escapeHtml(r.subName)}</div>` : ''}
+          </td>
+          <td><span class="center-tag">${escapeHtml(r.center)}</span></td>
+          <td>${r.empCode ? `<span class="code-pill" style="background: #e0f2fe; color: #0369a1; font-weight: 700;">${escapeHtml(r.empCode)}</span>` : '<span style="color: #94a3b8;">—</span>'}</td>
+          <td>${r.adlKey ? `<span class="code-pill">${escapeHtml(r.adlKey)}</span>` : '<span style="color: #94a3b8;">—</span>'}</td>
+          <td>${r.adtvKey ? `<span class="code-pill">${escapeHtml(r.adtvKey)}</span>` : '<span style="color: #94a3b8;">—</span>'}</td>
+          <td>${r.prepaidKey ? `<span class="code-pill" style="background: #fef3c7; color: #92400e;">${escapeHtml(r.prepaidKey)}</span>` : '<span style="color: #94a3b8;">—</span>'}</td>
+          <td>${r.phone ? `<span style="font-size: 0.82rem; font-family: monospace;">${escapeHtml(r.phone)}</span>` : '<span style="color: #94a3b8;">—</span>'}</td>
+          <td class="actions-cell">
+            ${r.type === 'tl' ? `
+              <button class="btn btn-secondary btn-sm" onclick="editTL(${Number(r.id)})">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteTL(${Number(r.id)})">Delete</button>
+            ` : r.type === 'acso' ? `
+              <button class="btn btn-secondary btn-sm" onclick="editACSO(${Number(r.id)})">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteACSO(${Number(r.id)})">Delete</button>
+            ` : `
+              <button class="btn btn-secondary btn-sm" onclick="editEmp(${Number(r.id)})">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteEmp(${Number(r.id)})">Delete</button>
+            `}
+          </td>
+        </tr>
+      `).join('');
+    }
+
     function renderTeamLeaders() {
-      const q = document.getElementById('tl-search').value.toLowerCase();
+      const q = (document.getElementById('tl-search')?.value || '').toLowerCase();
       const tbody = document.getElementById('tl-tbody');
+      if (!tbody) return;
       const filtered = allData.tls.filter(t => 
         (t.name || '').toLowerCase().includes(q) || (t.center_name || '').toLowerCase().includes(q) || (t.pp_adl_emp_code || '').toLowerCase().includes(q)
       );
@@ -1723,8 +1970,9 @@
     }
 
     function renderCenters() {
-      const q = document.getElementById('center-search').value.toLowerCase();
+      const q = (document.getElementById('center-search')?.value || '').toLowerCase();
       const tbody = document.getElementById('center-tbody');
+      if (!tbody) return;
       const filtered = allData.acsos.filter(c => 
         (c.center_name || '').toLowerCase().includes(q) || (c.acso_name || '').toLowerCase().includes(q)
       );
@@ -1754,8 +2002,9 @@
     }
 
     function renderEmployees() {
-      const q = document.getElementById('emp-search').value.toLowerCase();
+      const q = (document.getElementById('emp-search')?.value || '').toLowerCase();
       const tbody = document.getElementById('emp-tbody');
+      if (!tbody) return;
       const filtered = allData.emps.filter(e => 
         (e.emp_code || '').toLowerCase().includes(q) || (e.name || '').toLowerCase().includes(q) || (e.role || '').toLowerCase().includes(q)
       );
