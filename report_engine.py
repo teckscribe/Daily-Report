@@ -21,6 +21,8 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+from config import DEFAULT_REGION_ID
+
 from report_layout import (
     ACSO_ROWS,
     ADL_COLS,
@@ -185,7 +187,7 @@ def compute_pending_days(
     df_adtv: pd.DataFrame,
     team_leader_rows: Optional[List[TeamLeaderRow]] = None,
     acso_rows: Optional[List[AcsoRow]] = None,
-    region_id: str = "thrissur",
+    region_id: str = DEFAULT_REGION_ID,
 ) -> Dict[str, Table]:
     if team_leader_rows is None or acso_rows is None:
         tl_db, acso_db = get_layout_for_region(region_id)
@@ -226,7 +228,7 @@ def compute_prepaid_pending(
     df_prepaid: pd.DataFrame,
     team_leader_rows: Optional[List[TeamLeaderRow]] = None,
     acso_rows: Optional[List[AcsoRow]] = None,
-    region_id: str = "thrissur",
+    region_id: str = DEFAULT_REGION_ID,
 ) -> Dict[str, Table]:
     if team_leader_rows is None or acso_rows is None:
         tl_db, acso_db = get_layout_for_region(region_id)
@@ -259,7 +261,7 @@ def compute_report(
     df_adl: pd.DataFrame,
     df_adtv: pd.DataFrame,
     df_prepaid: pd.DataFrame,
-    region_id: str = "thrissur",
+    region_id: str = DEFAULT_REGION_ID,
     team_leader_rows: Optional[List[TeamLeaderRow]] = None,
     acso_rows: Optional[List[AcsoRow]] = None,
 ) -> ReportResult:
@@ -322,7 +324,7 @@ def _share(values, pred) -> float:
     return (sum(1 for v in vals if pred(v)) / len(vals)) if vals else 1.0
 
 
-def validate_inputs(df_adl, df_adtv, df_prepaid, region_id: str = "thrissur", min_share: float = 0.5) -> List[str]:
+def validate_inputs(df_adl, df_adtv, df_prepaid, region_id: str = DEFAULT_REGION_ID, min_share: float = 0.5) -> List[str]:
     """Return human-readable warnings. Empty list = inputs look correctly aligned."""
     warnings: List[str] = []
     try:

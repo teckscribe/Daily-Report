@@ -1495,7 +1495,7 @@ async def restore_configuration_endpoint(request: Request, target_region: Option
 
 
 @app.post("/api/backup/load-sample")
-def load_sample_preset_endpoint(region_id: str = "thrissur"):
+def load_sample_preset_endpoint(region_id: str = DEFAULT_REGION_ID):
     """Loads the bundled Thrissur sample roster and configuration."""
     db_manager.ensure_region_exists(region_id)
     try:

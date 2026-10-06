@@ -19,6 +19,8 @@ run `python verify_engine.py` to prove the engine still matches the workbook.
 from dataclasses import dataclass
 from typing import List, Union
 
+from config import DEFAULT_REGION_ID
+
 # Pending-days buckets: (report column label, Excel COUNTIFS criterion)
 BUCKETS = [
     ("< 1day", "<1"),
@@ -126,7 +128,7 @@ PREPAID_INTERNET = "Internet Issue"   # ADL prepaid  = Issue Service Type == "In
                                        # ADTv prepaid = Issue Service Type <> "Internet Issue"
 
 
-def get_layout_for_region(region_id: str = "thrissur"):
+def get_layout_for_region(region_id: str = DEFAULT_REGION_ID):
     """Loads declarative row layout for a specific region from SQLite, or falls back to Thrissur defaults."""
     try:
         from db_manager import get_team_leaders, get_acsos

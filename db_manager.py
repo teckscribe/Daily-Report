@@ -971,7 +971,7 @@ def restore_from_file(filepath: str | Path, target_region: Optional[str] = None)
     return restore_backup(data, target_region=target_region)
 
 
-def load_sample_preset(region_id: str = "thrissur") -> Dict[str, int]:
+def load_sample_preset(region_id: str = DEFAULT_REGION_ID) -> Dict[str, int]:
     """Loads a sample configuration preset into the specified region."""
     seed_paths = [
         DATA_DIR / "seeds" / "thrissur_config_backup.json",
@@ -1378,7 +1378,7 @@ def add_unified_directory_row(region_id: str, data: Dict[str, Any]) -> int:
     return row_id
 
 
-def update_unified_directory_row(row_id: int, data: Dict[str, Any], region_id: str = "thrissur") -> bool:
+def update_unified_directory_row(row_id: int, data: Dict[str, Any], region_id: str = DEFAULT_REGION_ID) -> bool:
     """Updates an existing employee directory row (TL or ACSO)."""
     entry_type = data.get("entry_type", "tl")
     emp_code = str(data.get("emp_code") or "").strip()
@@ -1459,7 +1459,7 @@ def update_unified_directory_row(row_id: int, data: Dict[str, Any], region_id: s
 
 
 
-def delete_unified_directory_row(row_id: int, entry_type: str = "tl", region_id: str = "thrissur") -> bool:
+def delete_unified_directory_row(row_id: int, entry_type: str = "tl", region_id: str = DEFAULT_REGION_ID) -> bool:
     """Deletes an employee directory row and keeps JSON synced."""
     conn = get_connection()
     c = conn.cursor()
@@ -1492,7 +1492,7 @@ def delete_unified_directory_row(row_id: int, entry_type: str = "tl", region_id:
     return success
 
 
-def bulk_delete_unified_directory(items: List[Dict[str, Any]], region_id: str = "thrissur") -> int:
+def bulk_delete_unified_directory(items: List[Dict[str, Any]], region_id: str = DEFAULT_REGION_ID) -> int:
     """
     Bulk deletes multiple employee directory rows and keeps JSON synced.
     items: [{"id": 1, "entry_type": "tl"}, {"id": 2, "entry_type": "acso"}, ...]
