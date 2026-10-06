@@ -640,133 +640,68 @@
       </button>
     </div>
 
-    <!-- COMBINED TAB: Employee Directory (Includes Team Leaders, Centers & ACSOs, and Employee Codes) -->
+    <!-- COMBINED TAB: Single Unified Employee Directory -->
     <div id="tab-directory" class="tab-pane active">
       <div class="section-card">
         <!-- Section Toolbar -->
-        <div class="section-toolbar" style="flex-wrap: wrap; gap: 0.75rem; justify-content: space-between;">
+        <div class="section-toolbar" style="flex-wrap: wrap; gap: 0.75rem; justify-content: space-between; align-items: center;">
           <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; flex: 1; min-width: 320px;">
-            <div class="search-box" style="flex: 1; max-width: 340px;">
+            <div class="search-box" style="flex: 1; max-width: 360px;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              <input type="text" id="dir-search" placeholder="Search Name, Center, Emp Code, Role, Keys..." oninput="filterDirectory()">
+              <input type="text" id="dir-search" placeholder="Search Emp Code, Name, Center, CRM keys..." oninput="filterDirectory()">
             </div>
-            <!-- Sub-filter Segmented Buttons -->
-            <div class="dir-filters">
-              <button type="button" class="dir-filter-btn active" id="filter-dir-all" onclick="setDirectoryFilter('all')">
-                <span>All Personnel</span> <span class="tab-badge" id="badge-dir-all" style="background: #e2e8f0; color: #1e293b; font-size: 0.75rem;">0</span>
-              </button>
-              <button type="button" class="dir-filter-btn" id="filter-dir-tls" onclick="setDirectoryFilter('tls')">
-                <span>👔 Team Leaders</span> <span class="tab-badge" id="badge-dir-tls" style="background: #dbeafe; color: #1e40af; font-size: 0.75rem;">0</span>
-              </button>
-              <button type="button" class="dir-filter-btn" id="filter-dir-centers" onclick="setDirectoryFilter('centers')">
-                <span>🏢 Centers & ACSOs</span> <span class="tab-badge" id="badge-dir-centers" style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem;">0</span>
-              </button>
-              <button type="button" class="dir-filter-btn" id="filter-dir-emps" onclick="setDirectoryFilter('emps')">
-                <span>📋 Employee Codes</span> <span class="tab-badge" id="badge-dir-emps" style="background: #dcfce7; color: #15803d; font-size: 0.75rem;">0</span>
-              </button>
+            <div style="font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem;">
+              <span>Showing: <strong id="dir-count-label" style="color: var(--text-main);">0</strong> personnel</span>
             </div>
           </div>
 
-          <!-- Add Buttons Group -->
-          <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-            <button class="btn btn-primary" onclick="openAddTLModal()">
-              <span>&#43;</span> Add Team Leader
+          <!-- Action Buttons Group -->
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <button class="btn btn-secondary" onclick="downloadDirectoryTemplate()" title="Download Excel template (Employee_Directory_Template.xlsx)">
+              <span>📥</span> Download Template
             </button>
-            <button class="btn btn-secondary" onclick="openAddACSOModal()">
-              <span>&#43;</span> Add Center & ACSO
+            <button class="btn btn-secondary" onclick="openUploadDirectoryModal()" title="Upload Excel/CSV file to update the Employee Directory">
+              <span>📤</span> Upload Employee Directory
             </button>
-            <button class="btn btn-secondary" onclick="openAddEmpModal()">
-              <span>&#43;</span> Add Emp Code
+            <button class="btn btn-primary" onclick="openAddDirectoryModal()" title="Add an employee or officer">
+              <span>&#43;</span> Add Employee
             </button>
           </div>
         </div>
 
-        <!-- Hidden inputs & badge bridges for backwards-compatibility -->
+        <!-- Hidden elements for legacy script compatibility -->
         <input type="hidden" id="tl-search">
         <input type="hidden" id="center-search">
         <input type="hidden" id="emp-search">
         <span id="badge-tls" style="display: none;">0</span>
         <span id="badge-centers" style="display: none;">0</span>
         <span id="badge-emps" style="display: none;">0</span>
+        <span id="badge-dir-all" style="display: none;">0</span>
+        <span id="badge-dir-tls" style="display: none;">0</span>
+        <span id="badge-dir-centers" style="display: none;">0</span>
+        <span id="badge-dir-emps" style="display: none;">0</span>
 
-        <!-- VIEW 1: All Personnel (Unified Comprehensive Table) -->
-        <div id="view-dir-all" class="table-responsive dir-view">
-          <table class="data-table">
+        <!-- UNIFIED EMPLOYEE DIRECTORY TABLE -->
+        <div class="table-responsive">
+          <table class="data-table" id="directory-unified-table">
             <thead>
               <tr>
-                <th>#</th>
-                <th>Role / Category</th>
-                <th>Employee / Officer Name</th>
-                <th>Assigned Center</th>
+                <th style="width: 40px;">#</th>
                 <th>Emp Code</th>
-                <th>ADL Key / Area</th>
-                <th>ADTv Key / AMO</th>
-                <th>Prepaid Code / Area</th>
-                <th>Phone</th>
-                <th style="text-align: right;">Actions</th>
+                <th>Employee Display Name</th>
+                <th>Position</th>
+                <th>Phone Number</th>
+                <th>Gmail</th>
+                <th>Center Display Name</th>
+                <th>Name in Postpaid CRM</th>
+                <th>Center Name in Postpaid ADL</th>
+                <th>Center Name in Postpaid ADTv</th>
+                <th>Center Name in Prepaid</th>
+                <th style="text-align: right; width: 120px;">Actions</th>
               </tr>
             </thead>
-            <tbody id="dir-all-tbody">
-              <!-- Rendered via JS -->
-            </tbody>
-          </table>
-        </div>
-
-        <!-- VIEW 2: Team Leaders Dedicated View -->
-        <div id="view-dir-tls" class="table-responsive dir-view" style="display: none;">
-          <table class="data-table" id="tl-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Center</th>
-                <th>Display Name</th>
-                <th>ADL Key (Postpaid)</th>
-                <th>ADTv Key (Postpaid)</th>
-                <th>Emp Code (Prepaid)</th>
-                <th style="text-align: right;">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="tl-tbody">
-              <!-- Rendered via JS -->
-            </tbody>
-          </table>
-        </div>
-
-        <!-- VIEW 3: Centers & ACSOs Dedicated View -->
-        <div id="view-dir-centers" class="table-responsive dir-view" style="display: none;">
-          <table class="data-table" id="center-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Center Display</th>
-                <th>ACSO Name</th>
-                <th>ADL Area Key</th>
-                <th>ADTv AMO Key</th>
-                <th>Prepaid Area Key</th>
-                <th style="text-align: right;">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="center-tbody">
-              <!-- Rendered via JS -->
-            </tbody>
-          </table>
-        </div>
-
-        <!-- VIEW 4: Employee Codes Dedicated View -->
-        <div id="view-dir-emps" class="table-responsive dir-view" style="display: none;">
-          <table class="data-table" id="emp-table">
-            <thead>
-              <tr>
-                <th>Emp Code</th>
-                <th>Name</th>
-                <th>Role</th>
-                <th>Assigned Center</th>
-                <th>Phone</th>
-                <th style="text-align: right;">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="emp-tbody">
-              <!-- Rendered via JS -->
+            <tbody id="directory-unified-tbody">
+              <!-- Rendered via JavaScript -->
             </tbody>
           </table>
         </div>
@@ -1302,6 +1237,132 @@
     </div>
   </main>
 
+  <!-- MODAL: Upload Employee Directory -->
+  <dialog id="modal-upload-directory" class="modal" style="max-width: 580px;">
+    <div class="modal-header">
+      <h3 style="display: flex; align-items: center; gap: 0.5rem;">
+        <span>📤</span> Upload Employee Directory
+      </h3>
+      <button class="modal-close" onclick="closeModal('modal-upload-directory')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Upload an Excel (<code>.xlsx</code>, <code>.xls</code>) or CSV (<code>.csv</code>) file to update the personnel roster, positions, and center mapping keys for the active region.
+      </p>
+
+      <div style="background: #f8fafc; border: 1px dashed var(--border); border-radius: 8px; padding: 1.25rem; text-align: center; margin-bottom: 1.25rem;">
+        <input type="file" id="directory-file-input" accept=".xlsx,.xls,.csv" style="display: none;" onchange="handleDirectoryFileSelect(this)">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📄</div>
+        <p style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem;" id="directory-file-name">Click or drag file here to upload</p>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Supports .xlsx, .xls, and .csv files</p>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('directory-file-input').click()">Browse File</button>
+      </div>
+
+      <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 0.85rem; font-size: 0.82rem; color: #1e40af;">
+        <div style="font-weight: 600; margin-bottom: 0.25rem;">ℹ️ Official Column Format:</div>
+        <div><code>Emp Code</code>, <code>Employee Display name</code>, <code>Position</code> (Team Leader / ACSO), <code>Phone Number</code>, <code>Gmail</code>, <code>Center Display name</code>, <code>Name in Postpaid CRM</code>, <code>Center Name in Postpaid ADL</code>, <code>Center Name in Postpaid ADTv</code>, <code>Center name in Prepaid</code></div>
+        <div style="margin-top: 0.5rem;">
+          <a href="/api/employee-directory/download-template" style="color: #2563eb; font-weight: 600; text-decoration: underline;" download>
+            📥 Download Official Template (.xlsx)
+          </a>
+        </div>
+      </div>
+
+      <div id="upload-directory-status" style="margin-top: 0.75rem; font-size: 0.85rem; display: none;"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('modal-upload-directory')">Cancel</button>
+      <button type="button" class="btn btn-primary" id="btn-submit-upload-directory" onclick="submitDirectoryUpload()">
+        <span>🚀</span> Import Directory
+      </button>
+    </div>
+  </dialog>
+
+  <!-- MODAL: Add/Edit Unified Employee Directory Entry -->
+  <dialog id="modal-directory-entry" class="modal" style="max-width: 650px;">
+    <div class="modal-header">
+      <h3 id="modal-dir-entry-title">Add Employee</h3>
+      <button class="modal-close" onclick="closeModal('modal-directory-entry')">&times;</button>
+    </div>
+    <form id="form-directory-entry" onsubmit="saveDirectoryEntry(event)">
+      <input type="hidden" id="dir-entry-id">
+      <input type="hidden" id="dir-entry-type" value="tl">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Position *</label>
+            <select id="dir-entry-position" required>
+              <option value="Team Leader">Team Leader</option>
+              <option value="ACSO">ACSO</option>
+            </select>
+            <span class="hint">Role designation in the regional operations</span>
+          </div>
+          <div class="form-group">
+            <label>Emp Code</label>
+            <input type="text" id="dir-entry-emp-code" placeholder="e.g. 980, 2874 (Prepaid Alloted To)">
+            <span class="hint">Prepaid CRM Employee Code (sms.ali)</span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Employee Display Name *</label>
+            <input type="text" id="dir-entry-emp-name" required placeholder="e.g. SHYAMKUMAR, Arun .A.R">
+            <span class="hint">Name shown in daily reports</span>
+          </div>
+          <div class="form-group">
+            <label>Center Display Name *</label>
+            <input type="text" id="dir-entry-center-name" required placeholder="e.g. Chalakudy, Guruvayoor">
+            <span class="hint">Center assigned to this employee/officer</span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Phone Number</label>
+            <input type="text" id="dir-entry-phone" placeholder="e.g. 9847012345 (10-digit mobile)">
+            <span class="hint">Used for WhatsApp dispatches and alerts</span>
+          </div>
+          <div class="form-group">
+            <label>Gmail / Email</label>
+            <input type="email" id="dir-entry-email" placeholder="e.g. employee@gmail.com">
+            <span class="hint">Used for email reports and Google Drive sync</span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Name in Postpaid CRM *</label>
+            <input type="text" id="dir-entry-crm-name" required placeholder="Exact name in Portal.asianet.co.in">
+            <span class="hint">Portal: Portal.asianet.co.in/portal</span>
+          </div>
+          <div class="form-group">
+            <label>Center Name in Postpaid ADL</label>
+            <input type="text" id="dir-entry-adl-center" placeholder="Matches AREA in ADL sheet">
+            <span class="hint">Portal: Portal.asianet.co.in/portal</span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Center Name in Postpaid ADTv</label>
+            <input type="text" id="dir-entry-adtv-center" placeholder="Matches SERVICEAMO in ADTv sheet">
+            <span class="hint">Portal: Portal.asianet.co.in/portal</span>
+          </div>
+          <div class="form-group">
+            <label>Center Name in Prepaid</label>
+            <input type="text" id="dir-entry-prepaid-center" placeholder="Matches Area in Prepaid sheet">
+            <span class="hint">Prepaid Portal: sms.ali</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-directory-entry')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Entry</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- MODAL: Add/Edit Team Leader -->
   <dialog id="modal-tl" class="modal">
     <div class="modal-header">
@@ -1727,6 +1788,21 @@
       }
     }
 
+    let allDirectory = [];
+    let selectedDirectoryFile = null;
+
+    async function loadDirectoryData(regionId) {
+      try {
+        const res = await fetch(`/api/regions/${regionId}/directory`);
+        if (res.ok) {
+          allDirectory = await res.json();
+          renderDirectory();
+        }
+      } catch (err) {
+        console.error("Failed to load unified directory:", err);
+      }
+    }
+
     async function loadRegionConfig(regionId) {
       currentRegion = regionId;
       document.getElementById('active-reg-label').innerText = document.getElementById('regionSelect').options[document.getElementById('regionSelect').selectedIndex]?.text.split('(')[0].trim() || regionId;
@@ -1735,10 +1811,7 @@
         const data = await res.json();
         allData = { ...allData, ...data };
         updateStats();
-        renderDirectoryAll();
-        renderTeamLeaders();
-        renderCenters();
-        renderEmployees();
+        await loadDirectoryData(regionId);
         loadAutomationData();
       } catch (err) {
         showToast("Failed to load region data", "error");
@@ -1753,7 +1826,7 @@
       const tlCount = (allData.tls || []).length;
       const acsoCount = (allData.acsos || []).length;
       const empCount = (allData.emps || []).length;
-      const totalDirectory = tlCount + acsoCount;
+      const totalDirectory = allDirectory.length || (tlCount + acsoCount);
 
       if (document.getElementById('stat-centers')) document.getElementById('stat-centers').innerText = acsoCount;
       if (document.getElementById('stat-tls')) document.getElementById('stat-tls').innerText = tlCount;
@@ -1771,267 +1844,276 @@
       if (document.getElementById('badge-emps')) document.getElementById('badge-emps').innerText = empCount;
     }
 
-    // --- Directory Sub-Filter & Navigation ---
-    let currentDirFilter = 'all';
-
-    function setDirectoryFilter(filterType) {
-      currentDirFilter = filterType;
-      document.querySelectorAll('.dir-filter-btn').forEach(btn => btn.classList.remove('active'));
-      const activeBtn = document.getElementById('filter-dir-' + filterType);
-      if (activeBtn) activeBtn.classList.add('active');
-
-      document.querySelectorAll('.dir-view').forEach(v => v.style.display = 'none');
-      const targetView = document.getElementById('view-dir-' + filterType);
-      if (targetView) targetView.style.display = 'block';
-
-      filterDirectory();
-    }
-
     function filterDirectory() {
       const q = (document.getElementById('dir-search')?.value || '').toLowerCase().trim();
-      if (document.getElementById('tl-search')) document.getElementById('tl-search').value = q;
-      if (document.getElementById('center-search')) document.getElementById('center-search').value = q;
-      if (document.getElementById('emp-search')) document.getElementById('emp-search').value = q;
-
-      renderDirectoryAll(q);
-      renderTeamLeaders();
-      renderCenters();
-      renderEmployees();
+      renderDirectory(q);
     }
 
-    // --- Render Tables ---
-    function renderDirectoryAll(query) {
+    function renderDirectory(query) {
       const q = query !== undefined ? query : (document.getElementById('dir-search')?.value || '').toLowerCase().trim();
-      const tbody = document.getElementById('dir-all-tbody');
+      const tbody = document.getElementById('directory-unified-tbody');
       if (!tbody) return;
 
-      const tls = allData.tls || [];
-      const acsos = allData.acsos || [];
-      const emps = allData.emps || [];
-
-      const empMap = {};
-      emps.forEach(e => {
-        if (e.emp_code) empMap[String(e.emp_code).trim()] = e;
-        if (e.name) empMap[String(e.name).trim().toLowerCase()] = e;
-      });
-
-      const unifiedRows = [];
-
-      // 1. Add Team Leaders
-      tls.forEach(t => {
-        const empMatch = empMap[String(t.pp_adl_emp_code).trim()] || empMap[String(t.name).trim().toLowerCase()];
-        unifiedRows.push({
-          type: 'tl',
-          id: t.id,
-          roleLabel: 'Team Leader',
-          roleBadgeBg: '#dbeafe',
-          roleBadgeColor: '#1e40af',
-          roleIcon: '👔',
-          name: t.name,
-          subName: (t.adtv_name && t.adtv_name !== t.name) ? `ADTv: ${t.adtv_name}` : '',
-          center: t.center_name,
-          empCode: t.pp_adl_emp_code || '',
-          adlKey: t.pd_adl_name_key || '',
-          adtvKey: t.pd_adtv_name_key || '',
-          prepaidKey: t.pp_adl_emp_code || '',
-          phone: empMatch ? (empMatch.phone || '') : '',
-          raw: t
-        });
-      });
-
-      // 2. Add ACSO Officers
-      acsos.forEach(c => {
-        unifiedRows.push({
-          type: 'acso',
-          id: c.id,
-          roleLabel: 'ACSO Officer',
-          roleBadgeBg: '#ede9fe',
-          roleBadgeColor: '#6d28d9',
-          roleIcon: '🏢',
-          name: c.acso_name,
-          subName: (c.adtv_acso_name && c.adtv_acso_name !== c.acso_name) ? `ADTv: ${c.adtv_acso_name}` : '',
-          center: c.adl_center_display || c.center_name,
-          empCode: '',
-          adlKey: c.pd_adl_center_key || '',
-          adtvKey: c.pd_adtv_center_key || '',
-          prepaidKey: c.pp_adl_center_key || '',
-          phone: '',
-          raw: c
-        });
-      });
-
-      // 3. Add standalone employees (who are not already listed as TLs)
-      const tlCodes = new Set(tls.map(t => String(t.pp_adl_emp_code).trim()).filter(Boolean));
-      const tlNames = new Set(tls.map(t => String(t.name).trim().toLowerCase()));
-      emps.forEach(e => {
-        const code = String(e.emp_code || '').trim();
-        const name = String(e.name || '').trim().toLowerCase();
-        if (!tlCodes.has(code) && !tlNames.has(name)) {
-          unifiedRows.push({
-            type: 'emp',
-            id: e.id,
-            roleLabel: e.role || 'Employee',
-            roleBadgeBg: '#dcfce7',
-            roleBadgeColor: '#15803d',
-            roleIcon: '📋',
-            name: e.name,
-            subName: '',
-            center: e.center_name || '—',
-            empCode: e.emp_code || '',
-            adlKey: '',
-            adtvKey: '',
-            prepaidKey: e.emp_code || '',
-            phone: e.phone || '',
-            raw: e
-          });
-        }
-      });
-
-      // Filter by query
-      const filtered = unifiedRows.filter(r => {
+      const filtered = allDirectory.filter(r => {
         if (!q) return true;
         return (
-          (r.name || '').toLowerCase().includes(q) ||
-          (r.center || '').toLowerCase().includes(q) ||
-          (r.empCode || '').toLowerCase().includes(q) ||
-          (r.roleLabel || '').toLowerCase().includes(q) ||
-          (r.adlKey || '').toLowerCase().includes(q) ||
-          (r.adtvKey || '').toLowerCase().includes(q) ||
-          (r.phone || '').toLowerCase().includes(q)
+          (r.emp_code || '').toLowerCase().includes(q) ||
+          (r.emp_name || '').toLowerCase().includes(q) ||
+          (r.position || '').toLowerCase().includes(q) ||
+          (r.phone || '').toLowerCase().includes(q) ||
+          (r.email || '').toLowerCase().includes(q) ||
+          (r.center_name || '').toLowerCase().includes(q) ||
+          (r.crm_name || '').toLowerCase().includes(q) ||
+          (r.adl_center || '').toLowerCase().includes(q) ||
+          (r.adtv_center || '').toLowerCase().includes(q) ||
+          (r.prepaid_center || '').toLowerCase().includes(q)
         );
       });
 
+      const countLabel = document.getElementById('dir-count-label');
+      if (countLabel) countLabel.innerText = filtered.length;
+      const badge = document.getElementById('badge-directory');
+      if (badge) badge.innerText = allDirectory.length;
+
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 2.5rem;">No directory entries match your search. Click "+ Add Team Leader", "+ Add Center & ACSO", or "+ Add Emp Code" above.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; color: var(--text-muted); padding: 2.5rem;">
+          No employee directory entries found matching "${escapeHtml(q)}". Click "+ Add Employee" or "📤 Upload Employee Directory" above to get started.
+        </td></tr>`;
         return;
       }
 
-      tbody.innerHTML = filtered.map((r, idx) => `
-        <tr>
-          <td><strong>${idx + 1}</strong></td>
-          <td>
-            <span class="tab-badge" style="background: ${r.roleBadgeBg}; color: ${r.roleBadgeColor}; font-weight: 700; white-space: nowrap;">
-              ${r.roleIcon} ${escapeHtml(r.roleLabel)}
-            </span>
-          </td>
-          <td>
-            <strong style="color: var(--text-main); font-size: 0.92rem;">${escapeHtml(r.name)}</strong>
-            ${r.subName ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem;">${escapeHtml(r.subName)}</div>` : ''}
-          </td>
-          <td><span class="center-tag">${escapeHtml(r.center)}</span></td>
-          <td>${r.empCode ? `<span class="code-pill" style="background: #e0f2fe; color: #0369a1; font-weight: 700;">${escapeHtml(r.empCode)}</span>` : '<span style="color: #94a3b8;">—</span>'}</td>
-          <td>${r.adlKey ? `<span class="code-pill">${escapeHtml(r.adlKey)}</span>` : '<span style="color: #94a3b8;">—</span>'}</td>
-          <td>${r.adtvKey ? `<span class="code-pill">${escapeHtml(r.adtvKey)}</span>` : '<span style="color: #94a3b8;">—</span>'}</td>
-          <td>${r.prepaidKey ? `<span class="code-pill" style="background: #fef3c7; color: #92400e;">${escapeHtml(r.prepaidKey)}</span>` : '<span style="color: #94a3b8;">—</span>'}</td>
-          <td>${r.phone ? `<span style="font-size: 0.82rem; font-family: monospace;">${escapeHtml(r.phone)}</span>` : '<span style="color: #94a3b8;">—</span>'}</td>
-          <td class="actions-cell">
-            ${r.type === 'tl' ? `
-              <button class="btn btn-secondary btn-sm" onclick="editTL(${Number(r.id)})">Edit</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteTL(${Number(r.id)})">Delete</button>
-            ` : r.type === 'acso' ? `
-              <button class="btn btn-secondary btn-sm" onclick="editACSO(${Number(r.id)})">Edit</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteACSO(${Number(r.id)})">Delete</button>
-            ` : `
-              <button class="btn btn-secondary btn-sm" onclick="editEmp(${Number(r.id)})">Edit</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteEmp(${Number(r.id)})">Delete</button>
-            `}
-          </td>
-        </tr>
-      `).join('');
+      tbody.innerHTML = filtered.map((r, idx) => {
+        const isAcso = (r.position || '').toLowerCase().includes('acso');
+        const posBadgeBg = isAcso ? '#ede9fe' : '#dbeafe';
+        const posBadgeColor = isAcso ? '#6d28d9' : '#1e40af';
+        const posIcon = isAcso ? '🏢' : '👔';
+
+        return `
+          <tr>
+            <td><strong>${idx + 1}</strong></td>
+            <td>
+              ${r.emp_code ? `<span class="code-pill" style="background: #e0f2fe; color: #0369a1; font-weight: 700;">${escapeHtml(r.emp_code)}</span>` : '<span style="color: #94a3b8;">—</span>'}
+            </td>
+            <td>
+              <strong style="color: var(--text-main); font-size: 0.92rem;">${escapeHtml(r.emp_name)}</strong>
+            </td>
+            <td>
+              <span class="tab-badge" style="background: ${posBadgeBg}; color: ${posBadgeColor}; font-weight: 700; white-space: nowrap;">
+                ${posIcon} ${escapeHtml(r.position || (isAcso ? 'ACSO' : 'Team Leader'))}
+              </span>
+            </td>
+            <td>
+              ${r.phone ? `<a href="tel:${escapeHtml(r.phone)}" style="color: #2563eb; text-decoration: none; font-size: 0.85rem; font-family: monospace;">📞 ${escapeHtml(r.phone)}</a>` : '<span style="color: #94a3b8;">—</span>'}
+            </td>
+            <td>
+              ${r.email ? `<a href="mailto:${escapeHtml(r.email)}" style="color: #4b5563; text-decoration: none; font-size: 0.85rem;">✉️ ${escapeHtml(r.email)}</a>` : '<span style="color: #94a3b8;">—</span>'}
+            </td>
+            <td>
+              <span class="center-tag">${escapeHtml(r.center_name)}</span>
+            </td>
+            <td>
+              <span style="font-family: monospace; font-size: 0.85rem; color: #334155;">${escapeHtml(r.crm_name || r.emp_name)}</span>
+            </td>
+            <td>
+              ${r.adl_center ? `<span class="code-pill">${escapeHtml(r.adl_center)}</span>` : '<span style="color: #94a3b8;">—</span>'}
+            </td>
+            <td>
+              ${r.adtv_center ? `<span class="code-pill">${escapeHtml(r.adtv_center)}</span>` : '<span style="color: #94a3b8;">—</span>'}
+            </td>
+            <td>
+              ${r.prepaid_center ? `<span class="code-pill" style="background: #fef3c7; color: #92400e;">${escapeHtml(r.prepaid_center)}</span>` : '<span style="color: #94a3b8;">—</span>'}
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+              <button class="btn btn-secondary btn-sm" onclick="editDirectoryRow(${r.id}, '${r.entry_type || (isAcso ? 'acso' : 'tl')}')">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteDirectoryRow(${r.id}, '${r.entry_type || (isAcso ? 'acso' : 'tl')}')">Delete</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
     }
 
-    function renderTeamLeaders() {
-      const q = (document.getElementById('tl-search')?.value || '').toLowerCase();
-      const tbody = document.getElementById('tl-tbody');
-      if (!tbody) return;
-      const filtered = allData.tls.filter(t => 
-        (t.name || '').toLowerCase().includes(q) || (t.center_name || '').toLowerCase().includes(q) || (t.pp_adl_emp_code || '').toLowerCase().includes(q)
-      );
+    // --- Directory Template Download & File Upload ---
+    function downloadDirectoryTemplate() {
+      window.location.href = `/api/employee-directory/download-template?region_id=${currentRegion}`;
+    }
 
-      if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No Team Leaders configured for this region. Click "+ Add Team Leader" to add one.</td></tr>`;
+    function openUploadDirectoryModal() {
+      const input = document.getElementById('directory-file-input');
+      if (input) input.value = '';
+      selectedDirectoryFile = null;
+      const nameEl = document.getElementById('directory-file-name');
+      if (nameEl) nameEl.innerText = 'Click or drag file here to upload';
+      const statusEl = document.getElementById('upload-directory-status');
+      if (statusEl) {
+        statusEl.style.display = 'none';
+        statusEl.innerText = '';
+      }
+      openModal('modal-upload-directory');
+    }
+
+    function handleDirectoryFileSelect(input) {
+      if (input.files && input.files[0]) {
+        selectedDirectoryFile = input.files[0];
+        document.getElementById('directory-file-name').innerText = `Selected: ${selectedDirectoryFile.name} (${(selectedDirectoryFile.size / 1024).toFixed(1)} KB)`;
+      }
+    }
+
+    async function submitDirectoryUpload() {
+      const fileInput = document.getElementById('directory-file-input');
+      const file = fileInput?.files?.[0] || selectedDirectoryFile;
+      if (!file) {
+        showToast("Please choose an Excel or CSV file first", "error");
         return;
       }
 
-      tbody.innerHTML = filtered.map((t, idx) => `
-        <tr>
-          <td><strong>${idx + 1}</strong></td>
-          <td><span class="center-tag">${escapeHtml(t.center_name)}</span></td>
-          <td><strong>${escapeHtml(t.name)}</strong></td>
-          <td><span class="code-pill">${escapeHtml(t.pd_adl_name_key)}</span></td>
-          <td><span class="code-pill">${escapeHtml(t.pd_adtv_name_key)}</span></td>
-          <td><span class="code-pill" style="background: #e0f2fe; color: #0369a1;">${escapeHtml(t.pp_adl_emp_code)}</span></td>
-          <td class="actions-cell">
-            <button class="btn btn-secondary btn-sm" onclick="editTL(${Number(t.id)})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteTL(${Number(t.id)})">Delete</button>
-          </td>
-        </tr>
-      `).join('');
-    }
-
-    function renderCenters() {
-      const q = (document.getElementById('center-search')?.value || '').toLowerCase();
-      const tbody = document.getElementById('center-tbody');
-      if (!tbody) return;
-      const filtered = allData.acsos.filter(c => 
-        (c.center_name || '').toLowerCase().includes(q) || (c.acso_name || '').toLowerCase().includes(q)
-      );
-
-      if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No Centers or ACSOs configured for this region. Click "+ Add Center & ACSO" to add one.</td></tr>`;
-        return;
+      const btn = document.getElementById('btn-submit-upload-directory');
+      const statusEl = document.getElementById('upload-directory-status');
+      if (btn) btn.disabled = true;
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.style.color = '#2563eb';
+        statusEl.innerText = 'Uploading and importing employee roster...';
       }
 
-      tbody.innerHTML = filtered.map((c, idx) => `
-        <tr>
-          <td><strong>${idx + 1}</strong></td>
-          <td><span class="center-tag">${escapeHtml(c.center_name)}</span></td>
-          <td>
-            <strong>${escapeHtml(c.acso_name)}</strong>
-            ${c.adtv_acso_name && c.adtv_acso_name !== c.acso_name ? `<div style="font-size: 0.75rem; color: var(--text-muted);">ADTv: ${escapeHtml(c.adtv_acso_name)}</div>` : ''}
-          </td>
-          <td><span class="code-pill">${escapeHtml(c.pd_adl_center_key)}</span></td>
-          <td><span class="code-pill">${escapeHtml(c.pd_adtv_center_key)}</span></td>
-          <td><span class="code-pill" style="background: #fef3c7; color: #92400e;">${escapeHtml(c.pp_adl_center_key)}</span></td>
-          <td class="actions-cell">
-            <button class="btn btn-secondary btn-sm" onclick="editACSO(${Number(c.id)})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteACSO(${Number(c.id)})">Delete</button>
-          </td>
-        </tr>
-      `).join('');
-    }
+      const formData = new FormData();
+      formData.append('file', file);
 
-    function renderEmployees() {
-      const q = (document.getElementById('emp-search')?.value || '').toLowerCase();
-      const tbody = document.getElementById('emp-tbody');
-      if (!tbody) return;
-      const filtered = allData.emps.filter(e => 
-        (e.emp_code || '').toLowerCase().includes(q) || (e.name || '').toLowerCase().includes(q) || (e.role || '').toLowerCase().includes(q)
-      );
-
-      if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">No employee codes added. Click "+ Add Employee Code" to register.</td></tr>`;
-        return;
+      try {
+        const res = await fetch(`/api/regions/${currentRegion}/upload-directory`, {
+          method: 'POST',
+          body: formData
+        });
+        const result = await res.json();
+        if (res.ok) {
+          showToast(result.message || "Employee directory imported successfully", "success");
+          closeModal('modal-upload-directory');
+          await loadRegionConfig(currentRegion);
+        } else {
+          statusEl.style.color = '#dc2626';
+          statusEl.innerText = result.detail || 'Upload failed';
+          showToast(result.detail || 'Upload failed', 'error');
+        }
+      } catch (err) {
+        statusEl.style.color = '#dc2626';
+        statusEl.innerText = 'Network error during upload';
+        showToast("Upload failed due to network error", "error");
+      } finally {
+        if (btn) btn.disabled = false;
       }
-
-      tbody.innerHTML = filtered.map(e => `
-        <tr>
-          <td><span class="code-pill" style="background: #e0f2fe; color: #0369a1; font-size: 0.9rem;">${escapeHtml(e.emp_code)}</span></td>
-          <td><strong>${escapeHtml(e.name)}</strong></td>
-          <td><span class="tab-badge" style="background: #ede9fe; color: #6d28d9;">${escapeHtml(e.role)}</span></td>
-          <td>${escapeHtml(e.center_name || '—')}</td>
-          <td>${escapeHtml(e.phone || '—')}</td>
-          <td class="actions-cell">
-            <button class="btn btn-secondary btn-sm" onclick="editEmp(${Number(e.id)})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteEmp(${Number(e.id)})">Delete</button>
-          </td>
-        </tr>
-      `).join('');
     }
 
-    function filterTeamLeaders() { renderTeamLeaders(); }
-    function filterCenters() { renderCenters(); }
-    function filterEmployees() { renderEmployees(); }
+    // --- Unified Directory Add/Edit/Delete ---
+    function openAddDirectoryModal() {
+      document.getElementById('modal-dir-entry-title').innerText = "Add Employee";
+      document.getElementById('dir-entry-id').value = "";
+      document.getElementById('dir-entry-type').value = "tl";
+      document.getElementById('dir-entry-position').value = "Team Leader";
+      document.getElementById('dir-entry-emp-code').value = "";
+      document.getElementById('dir-entry-emp-name').value = "";
+      document.getElementById('dir-entry-phone').value = "";
+      document.getElementById('dir-entry-email').value = "";
+      document.getElementById('dir-entry-center-name').value = "";
+      document.getElementById('dir-entry-crm-name').value = "";
+      document.getElementById('dir-entry-adl-center').value = "";
+      document.getElementById('dir-entry-adtv-center').value = "";
+      document.getElementById('dir-entry-prepaid-center').value = "";
+      openModal('modal-directory-entry');
+    }
+
+    function editDirectoryRow(id, entryType) {
+      const row = allDirectory.find(r => r.id === id && (r.entry_type === entryType || !r.entry_type));
+      if (!row) return;
+
+      document.getElementById('modal-dir-entry-title').innerText = "Edit Employee";
+      document.getElementById('dir-entry-id').value = row.id;
+      document.getElementById('dir-entry-type').value = row.entry_type || entryType || "tl";
+      document.getElementById('dir-entry-position').value = row.position || (entryType === 'acso' ? 'ACSO' : 'Team Leader');
+      document.getElementById('dir-entry-emp-code').value = row.emp_code || "";
+      document.getElementById('dir-entry-emp-name').value = row.emp_name || "";
+      document.getElementById('dir-entry-phone').value = row.phone || "";
+      document.getElementById('dir-entry-email').value = row.email || "";
+      document.getElementById('dir-entry-center-name').value = row.center_name || "";
+      document.getElementById('dir-entry-crm-name').value = row.crm_name || row.emp_name || "";
+      document.getElementById('dir-entry-adl-center').value = row.adl_center || "";
+      document.getElementById('dir-entry-adtv-center').value = row.adtv_center || "";
+      document.getElementById('dir-entry-prepaid-center').value = row.prepaid_center || "";
+      openModal('modal-directory-entry');
+    }
+
+    async function saveDirectoryEntry(event) {
+      event.preventDefault();
+      const id = document.getElementById('dir-entry-id').value;
+      const entryType = document.getElementById('dir-entry-type').value || "tl";
+      const payload = {
+        emp_code: document.getElementById('dir-entry-emp-code').value.trim(),
+        emp_name: document.getElementById('dir-entry-emp-name').value.trim(),
+        position: document.getElementById('dir-entry-position').value.trim(),
+        phone: document.getElementById('dir-entry-phone').value.trim(),
+        email: document.getElementById('dir-entry-email').value.trim(),
+        center_name: document.getElementById('dir-entry-center-name').value.trim(),
+        crm_name: document.getElementById('dir-entry-crm-name').value.trim() || document.getElementById('dir-entry-emp-name').value.trim(),
+        adl_center: document.getElementById('dir-entry-adl-center').value.trim() || document.getElementById('dir-entry-center-name').value.trim(),
+        adtv_center: document.getElementById('dir-entry-adtv-center').value.trim() || document.getElementById('dir-entry-center-name').value.trim(),
+        prepaid_center: document.getElementById('dir-entry-prepaid-center').value.trim() || document.getElementById('dir-entry-center-name').value.trim(),
+        entry_type: entryType
+      };
+
+      try {
+        let res;
+        if (id) {
+          res = await fetch(`/api/regions/${currentRegion}/directory/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          res = await fetch(`/api/regions/${currentRegion}/directory`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        if (res.ok) {
+          showToast(id ? "Employee updated successfully!" : "Employee added successfully!", "success");
+          closeModal('modal-directory-entry');
+          await loadRegionConfig(currentRegion);
+        } else {
+          const err = await res.json();
+          showToast(err.detail || "Failed to save entry", "error");
+        }
+      } catch (err) {
+        showToast("Error saving employee entry", "error");
+      }
+    }
+
+    async function deleteDirectoryRow(id, entryType) {
+      if (!confirm("Are you sure you want to delete this employee directory entry?")) return;
+      try {
+        const res = await fetch(`/api/regions/${currentRegion}/directory/${id}?entry_type=${entryType}`, {
+          method: 'DELETE'
+        });
+        if (res.ok) {
+          showToast("Entry deleted successfully!", "success");
+          await loadRegionConfig(currentRegion);
+        } else {
+          showToast("Failed to delete entry", "error");
+        }
+      } catch (e) {
+        showToast("Error deleting entry", "error");
+      }
+    }
+
+    // --- Legacy compatibility helpers ---
+    function renderDirectoryAll() { renderDirectory(); }
+    function renderTeamLeaders() {}
+    function renderCenters() {}
+    function renderEmployees() {}
+    function setDirectoryFilter() {}
+    function filterTeamLeaders() {}
+    function filterCenters() {}
+    function filterEmployees() {}
+
 
     // --- Team Leader CRUD ---
     function openAddTLModal() {

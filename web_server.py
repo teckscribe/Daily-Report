@@ -19,6 +19,7 @@ import os
 import sys
 
 import json
+from io import BytesIO
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, Response, FileResponse
@@ -112,6 +113,20 @@ class EmployeePayload(BaseModel):
     role: Optional[str] = "Technician"
     center_name: Optional[str] = ""
     phone: Optional[str] = ""
+
+
+class DirectoryRowPayload(BaseModel):
+    emp_code: Optional[str] = ""
+    emp_name: str
+    position: Optional[str] = "Team Leader"
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    center_name: str
+    crm_name: Optional[str] = ""
+    adl_center: Optional[str] = ""
+    adtv_center: Optional[str] = ""
+    prepaid_center: Optional[str] = ""
+    entry_type: Optional[str] = "tl"
 
 
 class DispatchRulePayload(BaseModel):
@@ -278,6 +293,175 @@ async def remove_employee(region_id: str, emp_id: int):
     """Deletes an employee record."""
     db_manager.delete_employee(emp_id)
     return {"status": "OK"}
+
+
+# --- Unified Employee Directory Endpoints (7-Column Format) ---
+
+@app.get("/api/regions/{region_id}/directory")
+def get_region_directory_endpoint(region_id: str):
+    """Fetches the unified employee directory in the 7-column schema."""
+    return db_manager.get_unified_directory(region_id)
+
+
+@app.post("/api/regions/{region_id}/directory")
+def add_directory_entry_endpoint(region_id: str, payload: DirectoryRowPayload):
+    """Adds a single employee directory entry."""
+    row_id = db_manager.add_unified_directory_row(region_id, payload.dict())
+    return {"status": "OK", "id": row_id}
+
+
+@app.put("/api/regions/{region_id}/directory/{row_id}")
+def update_directory_entry_endpoint(region_id: str, row_id: int, payload: DirectoryRowPayload):
+    """Updates a single employee directory entry."""
+    db_manager.update_unified_directory_row(row_id, payload.dict())
+    return {"status": "OK", "id": row_id}
+
+
+@app.delete("/api/regions/{region_id}/directory/{row_id}")
+def delete_directory_entry_endpoint(region_id: str, row_id: int, entry_type: Optional[str] = "tl"):
+    """Deletes an employee directory entry."""
+    db_manager.delete_unified_directory_row(row_id, entry_type=entry_type)
+    return {"status": "OK"}
+
+
+@app.get("/api/employee-directory/download-template")
+def download_directory_template_endpoint(region_id: Optional[str] = "thrissur"):
+    """Downloads formatted Excel template for uploading the Employee Directory."""
+    template_path = BASE_DIR / "Employee_Directory_Template.xlsx"
+    if not template_path.exists():
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Employee Directory"
+        ws.append([
+            "Emp Code", "Employee Display name", "Position", "Phone Number", "Gmail",
+            "Center Display name", "Name in Postpaid CRM", "Center Name in Postpaid ADL",
+            "Center Name in Postpaid ADTv", "Center name in Prepaid"
+        ])
+        wb.save(template_path)
+
+    return FileResponse(
+        path=str(template_path),
+        filename="Employee_Directory_Template.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
+@app.post("/api/regions/{region_id}/upload-directory")
+async def upload_directory_endpoint(region_id: str, file: UploadFile = File(...)):
+    """Uploads and imports Excel or CSV file into the Employee Directory database."""
+    if not file.filename.lower().endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="Only Excel (.xlsx, .xls) and CSV (.csv) files are supported.")
+
+    content = await file.read()
+    try:
+        if file.filename.lower().endswith(".csv"):
+            df = pd.read_csv(BytesIO(content))
+        else:
+            excel_file = pd.ExcelFile(BytesIO(content))
+            sheet = "Employee Directory" if "Employee Directory" in excel_file.sheet_names else 0
+            df = pd.read_excel(excel_file, sheet_name=sheet)
+    except Exception as e_parse:
+        raise HTTPException(status_code=400, detail=f"Failed to parse uploaded spreadsheet: {e_parse}")
+
+    col_map = {}
+    for c in df.columns:
+        clean = str(c).lower().strip()
+        if "emp code" in clean or clean == "code":
+            col_map[c] = "emp_code"
+        elif "position" in clean or "role" in clean or "designation" in clean:
+            col_map[c] = "position"
+        elif "phone" in clean or "mobile" in clean or "contact" in clean:
+            col_map[c] = "phone"
+        elif "gmail" in clean or "email" in clean or "mail" in clean:
+            col_map[c] = "email"
+        elif "employee" in clean or ("display" in clean and "center" not in clean) or clean == "name":
+            col_map[c] = "emp_name"
+        elif "center display" in clean or clean == "center":
+            col_map[c] = "center_name"
+        elif "postpaid crm" in clean or "crm name" in clean:
+            col_map[c] = "crm_name"
+        elif "postpaid adl" in clean or "adl center" in clean:
+            col_map[c] = "adl_center"
+        elif "postpaid adtv" in clean or "adtv center" in clean:
+            col_map[c] = "adtv_center"
+        elif "prepaid" in clean or "sms" in clean:
+            col_map[c] = "prepaid_center"
+
+    df_renamed = df.rename(columns=col_map)
+    required = ["emp_name", "center_name"]
+    missing = [r for r in required if r not in df_renamed.columns]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Uploaded sheet is missing required columns: {', '.join(missing)}. "
+                   f"Please use the official template."
+        )
+
+    records = []
+    for _, row in df_renamed.iterrows():
+        emp_name = str(row.get("emp_name", "")).strip()
+        center_name = str(row.get("center_name", "")).strip()
+        if not emp_name or emp_name.lower() == "nan" or not center_name or center_name.lower() == "nan":
+            continue
+
+        emp_code = str(row.get("emp_code", "")).strip()
+        if emp_code.lower() == "nan":
+            emp_code = ""
+
+        position = str(row.get("position", "Team Leader")).strip()
+        if position.lower() == "nan" or not position:
+            position = "Team Leader"
+
+        phone = str(row.get("phone", "")).strip()
+        if phone.lower() == "nan":
+            phone = ""
+
+        email = str(row.get("email", "")).strip()
+        if email.lower() == "nan":
+            email = ""
+
+        crm_name = str(row.get("crm_name", emp_name)).strip()
+        if crm_name.lower() == "nan" or not crm_name:
+            crm_name = emp_name
+
+        adl_center = str(row.get("adl_center", center_name)).strip()
+        if adl_center.lower() == "nan" or not adl_center:
+            adl_center = center_name
+
+        adtv_center = str(row.get("adtv_center", center_name)).strip()
+        if adtv_center.lower() == "nan" or not adtv_center:
+            adtv_center = center_name
+
+        prepaid_center = str(row.get("prepaid_center", center_name)).strip()
+        if prepaid_center.lower() == "nan" or not prepaid_center:
+            prepaid_center = center_name
+
+        records.append({
+            "emp_code": emp_code,
+            "emp_name": emp_name,
+            "position": position,
+            "phone": phone,
+            "email": email,
+            "center_name": center_name,
+            "crm_name": crm_name,
+            "adl_center": adl_center,
+            "adtv_center": adtv_center,
+            "prepaid_center": prepaid_center,
+        })
+
+    if not records:
+        raise HTTPException(status_code=400, detail="No valid employee rows found in the uploaded file.")
+
+    res = db_manager.import_unified_directory(region_id, records)
+    total = res.get("total_employees_imported", res.get("employees_imported", len(records)))
+    return {
+        "status": "OK",
+        "message": f"Successfully imported {total} employee(s) across {res['centers_configured']} center(s) for region '{region_id}'.",
+        "details": res
+    }
+
+
 
 
 # --- Live Engine & Report Operations ---

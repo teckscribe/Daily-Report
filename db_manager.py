@@ -84,6 +84,8 @@ def init_db():
         pd_adtv_center_key TEXT NOT NULL,
         pp_adl_center_key TEXT NOT NULL,
         pp_adtv_center_key TEXT NOT NULL,
+        phone TEXT DEFAULT '',
+        email TEXT DEFAULT '',
         sort_order INTEGER DEFAULT 0,
         FOREIGN KEY (region_id) REFERENCES regions (id) ON DELETE CASCADE
     )
@@ -101,6 +103,8 @@ def init_db():
         pd_adtv_name_key TEXT NOT NULL,
         pp_adl_emp_code TEXT NOT NULL,
         pp_adtv_emp_code TEXT NOT NULL,
+        phone TEXT DEFAULT '',
+        email TEXT DEFAULT '',
         sort_order INTEGER DEFAULT 0,
         FOREIGN KEY (region_id) REFERENCES regions (id) ON DELETE CASCADE
     )
@@ -115,6 +119,7 @@ def init_db():
         role TEXT NOT NULL,
         center_name TEXT,
         phone TEXT,
+        email TEXT,
         FOREIGN KEY (region_id) REFERENCES regions (id) ON DELETE CASCADE
     )
     """)
@@ -137,18 +142,34 @@ def init_db():
     """)
 
     # Dynamic migrations for existing databases
+    c.execute("PRAGMA table_info(team_leaders)")
+    tl_cols = [r[1] for r in c.fetchall()]
+    if "phone" not in tl_cols:
+        c.execute("ALTER TABLE team_leaders ADD COLUMN phone TEXT DEFAULT ''")
+    if "email" not in tl_cols:
+        c.execute("ALTER TABLE team_leaders ADD COLUMN email TEXT DEFAULT ''")
+
     c.execute("PRAGMA table_info(acsos)")
     acso_cols = [r[1] for r in c.fetchall()]
     if "adtv_acso_name" not in acso_cols:
         c.execute("ALTER TABLE acsos ADD COLUMN adtv_acso_name TEXT")
         c.execute("UPDATE acsos SET adtv_acso_name = acso_name WHERE adtv_acso_name IS NULL")
-        conn.commit()
+    if "phone" not in acso_cols:
+        c.execute("ALTER TABLE acsos ADD COLUMN phone TEXT DEFAULT ''")
+    if "email" not in acso_cols:
+        c.execute("ALTER TABLE acsos ADD COLUMN email TEXT DEFAULT ''")
+
+    c.execute("PRAGMA table_info(employees)")
+    emp_cols = [r[1] for r in c.fetchall()]
+    if "email" not in emp_cols:
+        c.execute("ALTER TABLE employees ADD COLUMN email TEXT DEFAULT ''")
 
     c.execute("PRAGMA table_info(dispatch_rules)")
     rule_cols = [r[1] for r in c.fetchall()]
     if "description" not in rule_cols:
         c.execute("ALTER TABLE dispatch_rules ADD COLUMN description TEXT")
         conn.commit()
+
 
     c.execute("""
     CREATE TABLE IF NOT EXISTS schedule_times (
@@ -266,8 +287,8 @@ def add_team_leader(region_id: str, data: Dict[str, Any]) -> int:
     c = conn.cursor()
     c.execute("""
     INSERT INTO team_leaders 
-    (region_id, center_name, name, adtv_center, adtv_name, pd_adl_name_key, pd_adtv_name_key, pp_adl_emp_code, pp_adtv_emp_code, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (region_id, center_name, name, adtv_center, adtv_name, pd_adl_name_key, pd_adtv_name_key, pp_adl_emp_code, pp_adtv_emp_code, phone, email, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         region_id,
         data.get("center_name", "").strip(),
@@ -278,6 +299,8 @@ def add_team_leader(region_id: str, data: Dict[str, Any]) -> int:
         data.get("pd_adtv_name_key", data.get("adtv_name", data.get("name", ""))),
         str(data.get("pp_adl_emp_code", "")).strip(),
         str(data.get("pp_adtv_emp_code", data.get("pp_adl_emp_code", ""))).strip(),
+        str(data.get("phone", "")).strip(),
+        str(data.get("email", data.get("gmail", ""))).strip(),
         int(data.get("sort_order", 0))
     ))
     tl_id = c.lastrowid
@@ -299,6 +322,8 @@ def update_team_leader(tl_id: int, data: Dict[str, Any]) -> bool:
         pd_adtv_name_key = ?,
         pp_adl_emp_code = ?,
         pp_adtv_emp_code = ?,
+        phone = ?,
+        email = ?,
         sort_order = ?
     WHERE id = ?
     """, (
@@ -310,6 +335,8 @@ def update_team_leader(tl_id: int, data: Dict[str, Any]) -> bool:
         data.get("pd_adtv_name_key", ""),
         str(data.get("pp_adl_emp_code", "")).strip(),
         str(data.get("pp_adtv_emp_code", "")).strip(),
+        str(data.get("phone", "")).strip(),
+        str(data.get("email", data.get("gmail", ""))).strip(),
         int(data.get("sort_order", 0)),
         tl_id
     ))
@@ -343,8 +370,8 @@ def add_acso(region_id: str, data: Dict[str, Any]) -> int:
     c = conn.cursor()
     c.execute("""
     INSERT INTO acsos 
-    (region_id, center_name, acso_name, adtv_acso_name, adl_center_display, adtv_center_display, pd_adl_center_key, pd_adtv_center_key, pp_adl_center_key, pp_adtv_center_key, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (region_id, center_name, acso_name, adtv_acso_name, adl_center_display, adtv_center_display, pd_adl_center_key, pd_adtv_center_key, pp_adl_center_key, pp_adtv_center_key, phone, email, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         region_id,
         data.get("center_name", "").strip(),
@@ -356,6 +383,8 @@ def add_acso(region_id: str, data: Dict[str, Any]) -> int:
         data.get("pd_adtv_center_key", data.get("adtv_center_display", data.get("center_name", ""))).strip(),
         data.get("pp_adl_center_key", data.get("center_name", "")).strip(),
         data.get("pp_adtv_center_key", data.get("center_name", "")).strip(),
+        str(data.get("phone", "")).strip(),
+        str(data.get("email", data.get("gmail", ""))).strip(),
         int(data.get("sort_order", 0))
     ))
     acso_id = c.lastrowid
@@ -378,6 +407,8 @@ def update_acso(acso_id: int, data: Dict[str, Any]) -> bool:
         pd_adtv_center_key = ?,
         pp_adl_center_key = ?,
         pp_adtv_center_key = ?,
+        phone = ?,
+        email = ?,
         sort_order = ?
     WHERE id = ?
     """, (
@@ -390,6 +421,8 @@ def update_acso(acso_id: int, data: Dict[str, Any]) -> bool:
         data.get("pd_adtv_center_key", "").strip(),
         data.get("pp_adl_center_key", "").strip(),
         data.get("pp_adtv_center_key", "").strip(),
+        str(data.get("phone", "")).strip(),
+        str(data.get("email", data.get("gmail", ""))).strip(),
         int(data.get("sort_order", 0)),
         acso_id
     ))
@@ -486,15 +519,16 @@ def add_employee(region_id: str, data: Dict[str, Any]) -> int:
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
-    INSERT INTO employees (region_id, emp_code, name, role, center_name, phone)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO employees (region_id, emp_code, name, role, center_name, phone, email)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
         region_id,
         str(data.get("emp_code", "")).strip(),
         data.get("name", "").strip(),
         data.get("role", "Technician").strip(),
         data.get("center_name", "").strip(),
-        data.get("phone", "").strip()
+        data.get("phone", "").strip(),
+        str(data.get("email", data.get("gmail", ""))).strip()
     ))
     eid = c.lastrowid
     conn.commit()
@@ -511,7 +545,8 @@ def update_employee(emp_id: int, data: Dict[str, Any]) -> bool:
         name = ?,
         role = ?,
         center_name = ?,
-        phone = ?
+        phone = ?,
+        email = ?
     WHERE id = ?
     """, (
         str(data.get("emp_code", "")).strip(),
@@ -519,6 +554,7 @@ def update_employee(emp_id: int, data: Dict[str, Any]) -> bool:
         data.get("role", "").strip(),
         data.get("center_name", "").strip(),
         data.get("phone", "").strip(),
+        str(data.get("email", data.get("gmail", ""))).strip(),
         emp_id
     ))
     conn.commit()
@@ -858,6 +894,380 @@ def load_sample_preset(region_id: str = "thrissur") -> Dict[str, int]:
         if sp.exists():
             return restore_from_file(sp, target_region=region_id)
     raise FileNotFoundError("Thrissur sample seed file not found.")
+
+
+# --- Unified Employee Directory Functions ---
+
+def get_unified_directory(region_id: str) -> List[Dict[str, Any]]:
+    """Returns employee directory in unified format with Position matching user template."""
+    tls = get_team_leaders(region_id)
+    acsos_list = get_acsos(region_id)
+    acso_map = {a["center_name"].lower().strip(): a for a in acsos_list}
+    emps = get_employees(region_id)
+    emp_map = {}
+    for e in emps:
+        code = str(e.get("emp_code") or "").strip()
+        name = str(e.get("name") or "").strip().lower()
+        if code:
+            emp_map[code] = e
+        if name:
+            emp_map[name] = e
+
+    result = []
+    # 1. Team Leaders
+    for t in tls:
+        c = acso_map.get(t["center_name"].lower().strip(), {})
+        code = str(t.get("pp_adl_emp_code", "")).strip()
+        name_key = str(t.get("name", "")).strip().lower()
+        matched_emp = emp_map.get(code) or emp_map.get(name_key) or {}
+        phone = str(t.get("phone") or matched_emp.get("phone") or "").strip()
+        email = str(t.get("email") or matched_emp.get("email") or "").strip()
+
+        result.append({
+            "id": t["id"],
+            "entry_type": "tl",
+            "position": "Team Leader",
+            "emp_code": code,
+            "emp_name": t.get("name", "").strip(),
+            "phone": phone,
+            "email": email,
+            "center_name": t.get("center_name", "").strip(),
+            "crm_name": t.get("pd_adl_name_key", t.get("name", "")).strip(),
+            "adl_center": c.get("pd_adl_center_key", t.get("center_name", "")).strip(),
+            "adtv_center": c.get("pd_adtv_center_key", t.get("adtv_center", t.get("center_name", ""))).strip(),
+            "prepaid_center": c.get("pp_adl_center_key", t.get("center_name", "")).strip(),
+        })
+
+    # 2. ACSOs
+    for a in acsos_list:
+        name_key = str(a.get("acso_name", "")).strip().lower()
+        matched_emp = emp_map.get(name_key) or {}
+        phone = str(a.get("phone") or matched_emp.get("phone") or "").strip()
+        email = str(a.get("email") or matched_emp.get("email") or "").strip()
+        code = str(a.get("emp_code") or matched_emp.get("emp_code") or "").strip()
+
+        result.append({
+            "id": a["id"],
+            "entry_type": "acso",
+            "position": "ACSO",
+            "emp_code": code,
+            "emp_name": a.get("acso_name", "").strip(),
+            "phone": phone,
+            "email": email,
+            "center_name": a.get("center_name", "").strip(),
+            "crm_name": a.get("acso_name", "").strip(),
+            "adl_center": a.get("pd_adl_center_key", a.get("center_name", "")).strip(),
+            "adtv_center": a.get("pd_adtv_center_key", a.get("adtv_center_display", a.get("center_name", ""))).strip(),
+            "prepaid_center": a.get("pp_adl_center_key", a.get("center_name", "")).strip(),
+        })
+
+    return result
+
+
+def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Imports complete employee directory for a region from uploaded template data.
+    Automatically categorizes by Position ('Team Leader' vs 'ACSO') and keeps
+    team_leaders, employees, and acsos tables perfectly synchronized with contact details.
+    """
+    conn = get_connection()
+    c = conn.cursor()
+
+    # Clear existing data for this region
+    c.execute("DELETE FROM team_leaders WHERE region_id = ?", (region_id,))
+    c.execute("DELETE FROM employees WHERE region_id = ?", (region_id,))
+    c.execute("DELETE FROM acsos WHERE region_id = ?", (region_id,))
+
+    centers_map = {}
+    tl_count = 0
+    acso_count = 0
+
+    for idx, r in enumerate(rows):
+        emp_code = str(r.get("emp_code") or r.get("Emp Code") or "").strip()
+        emp_name = str(r.get("emp_name") or r.get("Employee Display name") or "").strip()
+        position = str(r.get("position") or r.get("Position") or "Team Leader").strip()
+        phone = str(r.get("phone") or r.get("Phone Number") or r.get("Phone") or r.get("Mobile") or "").strip()
+        if phone.lower() == "nan":
+            phone = ""
+        email = str(r.get("email") or r.get("gmail") or r.get("Gmail") or r.get("Email") or r.get("Email / Gmail") or "").strip()
+        if email.lower() == "nan":
+            email = ""
+        center_name = str(r.get("center_name") or r.get("Center Display name") or "").strip()
+        crm_name = str(r.get("crm_name") or r.get("Name in Postpaid CRM") or emp_name).strip()
+        adl_center = str(r.get("adl_center") or r.get("Center Name in Postpaid ADL") or center_name).strip()
+        adtv_center = str(r.get("adtv_center") or r.get("Center Name in Postpaid ADTv") or center_name).strip()
+        prepaid_center = str(r.get("prepaid_center") or r.get("Center name in Prepaid") or center_name).strip()
+
+        if not emp_name and not center_name:
+            continue
+
+        is_acso = "acso" in position.lower()
+
+        # Update center details in centers_map
+        c_key = center_name.lower().strip()
+        if c_key:
+            if c_key not in centers_map:
+                centers_map[c_key] = {
+                    "center_name": center_name,
+                    "acso_name": emp_name if is_acso else center_name,
+                    "adtv_acso_name": emp_name if is_acso else center_name,
+                    "adl_center_display": center_name,
+                    "adtv_center_display": adtv_center,
+                    "pd_adl_center_key": adl_center,
+                    "pd_adtv_center_key": adtv_center,
+                    "pp_adl_center_key": prepaid_center,
+                    "pp_adtv_center_key": prepaid_center,
+                    "phone": phone if is_acso else "",
+                    "email": email if is_acso else "",
+                    "sort_order": len(centers_map) + 1
+                }
+            elif is_acso:
+                centers_map[c_key]["acso_name"] = emp_name
+                centers_map[c_key]["adtv_acso_name"] = emp_name
+                if phone:
+                    centers_map[c_key]["phone"] = phone
+                if email:
+                    centers_map[c_key]["email"] = email
+                if adtv_center:
+                    centers_map[c_key]["adtv_center_display"] = adtv_center
+                    centers_map[c_key]["pd_adtv_center_key"] = adtv_center
+                if adl_center:
+                    centers_map[c_key]["pd_adl_center_key"] = adl_center
+                if prepaid_center:
+                    centers_map[c_key]["pp_adl_center_key"] = prepaid_center
+                    centers_map[c_key]["pp_adtv_center_key"] = prepaid_center
+
+        if is_acso:
+            acso_count += 1
+            c.execute("""
+            INSERT INTO employees (region_id, emp_code, name, role, center_name, phone, email)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                region_id,
+                emp_code,
+                emp_name,
+                "ACSO",
+                center_name,
+                phone,
+                email
+            ))
+        else:
+            tl_count += 1
+            c.execute("""
+            INSERT INTO team_leaders 
+            (region_id, center_name, name, adtv_center, adtv_name, pd_adl_name_key, pd_adtv_name_key, pp_adl_emp_code, pp_adtv_emp_code, phone, email, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                region_id,
+                center_name,
+                emp_name,
+                adtv_center,
+                emp_name,
+                crm_name,
+                crm_name,
+                emp_code,
+                emp_code,
+                phone,
+                email,
+                tl_count
+            ))
+
+            c.execute("""
+            INSERT INTO employees (region_id, emp_code, name, role, center_name, phone, email)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                region_id,
+                emp_code,
+                emp_name,
+                "Team Leader",
+                center_name,
+                phone,
+                email
+            ))
+
+    # Auto-resolve cross-center adtv_acso_name (e.g. Olavakkod ADTv center OTTAPALAM -> Binoy .B)
+    for c_key, c_info in centers_map.items():
+        adtv_c = str(c_info.get("adtv_center_display") or "").strip().lower()
+        if adtv_c and adtv_c != c_key:
+            target = next((v for k, v in centers_map.items() if k in adtv_c or adtv_c in k), None)
+            if target and target.get("acso_name"):
+                c_info["adtv_acso_name"] = target["acso_name"]
+
+    # Insert ACSOs for all unique centers
+    for c_key, c_info in centers_map.items():
+        c.execute("""
+        INSERT INTO acsos
+        (region_id, center_name, acso_name, adtv_acso_name, adl_center_display, adtv_center_display,
+         pd_adl_center_key, pd_adtv_center_key, pp_adl_center_key, pp_adtv_center_key, phone, email, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            region_id,
+            c_info["center_name"],
+            c_info["acso_name"],
+            c_info["adtv_acso_name"],
+            c_info["adl_center_display"],
+            c_info["adtv_center_display"],
+            c_info["pd_adl_center_key"],
+            c_info["pd_adtv_center_key"],
+            c_info["pp_adl_center_key"],
+            c_info["pp_adtv_center_key"],
+            c_info.get("phone", ""),
+            c_info.get("email", ""),
+            c_info["sort_order"]
+        ))
+
+    conn.commit()
+    conn.close()
+    return {
+        "team_leaders_imported": tl_count,
+        "acsos_imported": acso_count,
+        "total_employees_imported": tl_count + acso_count,
+        "centers_configured": len(centers_map)
+    }
+
+
+def add_unified_directory_row(region_id: str, data: Dict[str, Any]) -> int:
+    """Adds a single employee directory row."""
+    emp_code = str(data.get("emp_code") or "").strip()
+    emp_name = str(data.get("emp_name") or "").strip()
+    position = str(data.get("position") or "Team Leader").strip()
+    phone = str(data.get("phone") or "").strip()
+    email = str(data.get("email") or data.get("gmail") or "").strip()
+    center_name = str(data.get("center_name") or "").strip()
+    crm_name = str(data.get("crm_name") or emp_name).strip()
+    adl_center = str(data.get("adl_center") or center_name).strip()
+    adtv_center = str(data.get("adtv_center") or center_name).strip()
+    prepaid_center = str(data.get("prepaid_center") or center_name).strip()
+
+    is_acso = "acso" in position.lower()
+
+    if is_acso:
+        row_id = add_acso(region_id, {
+            "center_name": center_name,
+            "acso_name": emp_name,
+            "adtv_acso_name": emp_name,
+            "adl_center_display": center_name,
+            "adtv_center_display": adtv_center,
+            "pd_adl_center_key": adl_center,
+            "pd_adtv_center_key": adtv_center,
+            "pp_adl_center_key": prepaid_center,
+            "pp_adtv_center_key": prepaid_center,
+            "phone": phone,
+            "email": email,
+        })
+        add_employee(region_id, {
+            "emp_code": emp_code,
+            "name": emp_name,
+            "role": "ACSO",
+            "center_name": center_name,
+            "phone": phone,
+            "email": email,
+        })
+    else:
+        row_id = add_team_leader(region_id, {
+            "center_name": center_name,
+            "name": emp_name,
+            "adtv_center": adtv_center,
+            "adtv_name": emp_name,
+            "pd_adl_name_key": crm_name,
+            "pd_adtv_name_key": crm_name,
+            "pp_adl_emp_code": emp_code,
+            "pp_adtv_emp_code": emp_code,
+            "phone": phone,
+            "email": email,
+        })
+        add_employee(region_id, {
+            "emp_code": emp_code,
+            "name": emp_name,
+            "role": "Team Leader",
+            "center_name": center_name,
+            "phone": phone,
+            "email": email,
+        })
+        # Ensure center exists in acsos
+        acsos = get_acsos(region_id)
+        if not any(a["center_name"].lower().strip() == center_name.lower().strip() for a in acsos):
+            add_acso(region_id, {
+                "center_name": center_name,
+                "acso_name": center_name,
+                "adtv_acso_name": center_name,
+                "adl_center_display": center_name,
+                "adtv_center_display": adtv_center,
+                "pd_adl_center_key": adl_center,
+                "pd_adtv_center_key": adtv_center,
+                "pp_adl_center_key": prepaid_center,
+                "pp_adtv_center_key": prepaid_center,
+                "phone": phone,
+                "email": email,
+            })
+
+    return row_id
+
+
+def update_unified_directory_row(row_id: int, data: Dict[str, Any]) -> bool:
+    """Updates an existing employee directory row (TL or ACSO)."""
+    entry_type = data.get("entry_type", "tl")
+    emp_code = str(data.get("emp_code") or "").strip()
+    emp_name = str(data.get("emp_name") or "").strip()
+    phone = str(data.get("phone") or "").strip()
+    email = str(data.get("email") or data.get("gmail") or "").strip()
+    center_name = str(data.get("center_name") or "").strip()
+    crm_name = str(data.get("crm_name") or emp_name).strip()
+    adl_center = str(data.get("adl_center") or center_name).strip()
+    adtv_center = str(data.get("adtv_center") or center_name).strip()
+    prepaid_center = str(data.get("prepaid_center") or center_name).strip()
+
+    if entry_type == "acso":
+        update_acso(row_id, {
+            "center_name": center_name,
+            "acso_name": emp_name,
+            "adtv_acso_name": emp_name,
+            "adl_center_display": center_name,
+            "adtv_center_display": adtv_center,
+            "pd_adl_center_key": adl_center,
+            "pd_adtv_center_key": adtv_center,
+            "pp_adl_center_key": prepaid_center,
+            "pp_adtv_center_key": prepaid_center,
+            "phone": phone,
+            "email": email,
+        })
+    else:
+        update_team_leader(row_id, {
+            "center_name": center_name,
+            "name": emp_name,
+            "adtv_center": adtv_center,
+            "adtv_name": emp_name,
+            "pd_adl_name_key": crm_name,
+            "pd_adtv_name_key": crm_name,
+            "pp_adl_emp_code": emp_code,
+            "pp_adtv_emp_code": emp_code,
+            "phone": phone,
+            "email": email,
+        })
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("""
+        UPDATE acsos SET
+            adtv_center_display = ?,
+            pd_adl_center_key = ?,
+            pd_adtv_center_key = ?,
+            pp_adl_center_key = ?,
+            pp_adtv_center_key = ?
+        WHERE LOWER(TRIM(center_name)) = LOWER(TRIM(?))
+        """, (adtv_center, adl_center, adtv_center, prepaid_center, prepaid_center, center_name))
+        conn.commit()
+        conn.close()
+
+    return True
+
+
+
+def delete_unified_directory_row(row_id: int, entry_type: str = "tl") -> bool:
+    """Deletes an employee directory row."""
+    if entry_type == "acso":
+        return delete_acso(row_id)
+    return delete_team_leader(row_id)
+
 
 
 if __name__ == "__main__":
