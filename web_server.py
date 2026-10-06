@@ -1460,6 +1460,7 @@ async def restore_configuration_endpoint(request: Request, target_region: Option
 @app.post("/api/backup/load-sample")
 def load_sample_preset_endpoint(region_id: str = "thrissur"):
     """Loads the bundled Thrissur sample roster and configuration."""
+    db_manager.ensure_region_exists(region_id)
     try:
         counts = db_manager.load_sample_preset(region_id)
         return {"status": "OK", "message": f"Thrissur preset loaded into '{region_id}'", "counts": counts}
@@ -1470,6 +1471,7 @@ def load_sample_preset_endpoint(region_id: str = "thrissur"):
 @app.post("/api/backup/clear")
 def clear_region_configuration_endpoint(region_id: str):
     """Clears all configured roster data for a region."""
+    db_manager.ensure_region_exists(region_id)
     conn = db_manager.get_connection()
     c = conn.cursor()
     for t in ["centers", "acsos", "team_leaders", "employees", "schedule_times", "dispatch_rules"]:

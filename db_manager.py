@@ -15,22 +15,10 @@ from config import DATA_DIR
 
 DB_PATH = DATA_DIR / "region_config.db"
 
-KERALA_DISTRICTS = [
+DEFAULT_REGIONS = [
     ("thrissur", "Thrissur", "Thrissur", "Thrissur"),
-    ("ernakulam", "Ernakulam (Kochi)", "Ernakulam", "Ernakulam"),
-    ("kozhikode", "Kozhikode (Calicut)", "Kozhikode", "Kozhikode"),
-    ("trivandrum", "Thiruvananthapuram", "Trivandrum", "Trivandrum"),
-    ("kannur", "Kannur", "Kannur", "Kannur"),
-    ("palakkad", "Palakkad", "Palakkad", "Palakkad"),
-    ("kollam", "Kollam", "Kollam", "Kollam"),
-    ("kottayam", "Kottayam", "Kottayam", "Kottayam"),
-    ("malappuram", "Malappuram", "Malappuram", "Malappuram"),
-    ("alappuzha", "Alappuzha", "Alappuzha", "Alappuzha"),
-    ("pathanamthitta", "Pathanamthitta", "Pathanamthitta", "Pathanamthitta"),
-    ("idukki", "Idukki", "Idukki", "Idukki"),
-    ("wayanad", "Wayanad", "Wayanad", "Wayanad"),
-    ("kasaragod", "Kasaragod", "Kasaragod", "Kasaragod"),
 ]
+KERALA_DISTRICTS = DEFAULT_REGIONS
 
 
 def get_connection() -> sqlite3.Connection:
@@ -207,13 +195,25 @@ def init_db():
 
     conn.commit()
 
-    # Seed Regions
+    # Seed Regions (Thrissur default)
     now_str = datetime.now().isoformat()
-    for r_id, r_name, sc_reg, pp_reg in KERALA_DISTRICTS:
+    for r_id, r_name, sc_reg, pp_reg in DEFAULT_REGIONS:
         c.execute("""
         INSERT OR IGNORE INTO regions (id, name, softcode_region, prepaid_region, is_active, created_at, updated_at)
         VALUES (?, ?, ?, ?, 1, ?, ?)
         """, (r_id, r_name, sc_reg, pp_reg, now_str, now_str))
+
+    # Clean up empty placeholder regions that have 0 employees, 0 TLs, 0 ACSOs, and 0 centers
+    c.execute("""
+    DELETE FROM regions 
+    WHERE id != 'thrissur'
+      AND (SELECT COUNT(*) FROM team_leaders WHERE region_id = regions.id) = 0
+      AND (SELECT COUNT(*) FROM acsos WHERE region_id = regions.id) = 0
+      AND (SELECT COUNT(*) FROM centers WHERE region_id = regions.id) = 0
+      AND (SELECT COUNT(*) FROM employees WHERE region_id = regions.id) = 0
+      AND (SELECT COUNT(*) FROM schedule_times WHERE region_id = regions.id) = 0
+      AND (SELECT COUNT(*) FROM dispatch_rules WHERE region_id = regions.id) = 0
+    """)
     conn.commit()
     # Seed Default Master Setting if empty
     c.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('scheduler_enabled', '1')")
@@ -223,6 +223,24 @@ def init_db():
 
 
 # --- Database Operations ---
+
+def ensure_region_exists(region_id: str, name: Optional[str] = None) -> bool:
+    """Ensures a region exists in the database, automatically creating it if necessary."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id FROM regions WHERE id = ?", (region_id.lower().strip(),))
+    row = c.fetchone()
+    if not row:
+        now_str = datetime.now().isoformat()
+        r_name = name or region_id.capitalize()
+        c.execute("""
+        INSERT INTO regions (id, name, softcode_region, prepaid_region, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 1, ?, ?)
+        """, (region_id.lower().strip(), r_name, r_name, r_name, now_str, now_str))
+        conn.commit()
+    conn.close()
+    return True
+
 
 def get_all_regions() -> List[Dict[str, Any]]:
     conn = get_connection()
@@ -290,6 +308,7 @@ def get_team_leaders(region_id: str) -> List[Dict[str, Any]]:
 
 
 def add_team_leader(region_id: str, data: Dict[str, Any]) -> int:
+    ensure_region_exists(region_id)
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
@@ -373,6 +392,7 @@ def get_acsos(region_id: str) -> List[Dict[str, Any]]:
 
 
 def add_acso(region_id: str, data: Dict[str, Any]) -> int:
+    ensure_region_exists(region_id)
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
@@ -465,6 +485,7 @@ def get_centers(region_id: str) -> List[Dict[str, Any]]:
 
 
 def add_center(region_id: str, data: Dict[str, Any]) -> int:
+    ensure_region_exists(region_id)
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
@@ -529,6 +550,7 @@ def get_employees(region_id: str) -> List[Dict[str, Any]]:
 
 
 def add_employee(region_id: str, data: Dict[str, Any]) -> int:
+    ensure_region_exists(region_id)
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
@@ -859,6 +881,8 @@ def restore_backup(data: Dict[str, Any], target_region: Optional[str] = None, cl
     Restores database tables from a backup dictionary.
     Safe and idempotent with column validation.
     """
+    if target_region:
+        ensure_region_exists(target_region)
     conn = get_connection()
     c = conn.cursor()
     counts = {}
@@ -1026,6 +1050,7 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
     Automatically categorizes by Position ('Team Leader' vs 'ACSO') and keeps
     team_leaders, employees, and acsos tables perfectly synchronized with contact details.
     """
+    ensure_region_exists(region_id)
     conn = get_connection()
     c = conn.cursor()
 
