@@ -636,36 +636,48 @@ async def upload_directory_endpoint(region_id: str, file: UploadFile = File(...)
     col_map = {}
     for c in df.columns:
         clean = str(c).lower().strip().replace('_', ' ').replace('-', ' ')
-        if any(k in clean for k in ['emp code', 'code', 'emp_code', 'emp id', 'employee code', 'alloted', 'emp no', 'staff id', 'employee id']):
-            if "emp_code" not in col_map.values():
-                col_map[c] = "emp_code"
-        elif any(k in clean for k in ['position', 'role', 'designation', 'job title', 'post']):
-            if "position" not in col_map.values():
-                col_map[c] = "position"
-        elif any(k in clean for k in ['phone', 'mobile', 'contact', 'cell', 'tel']):
-            if "phone" not in col_map.values():
-                col_map[c] = "phone"
-        elif any(k in clean for k in ['gmail', 'email', 'mail']):
-            if "email" not in col_map.values():
-                col_map[c] = "email"
-        elif any(k in clean for k in ['adl center', 'postpaid adl', 'adl']) and ("center" in clean or "adl center" in clean or "postpaid adl" in clean):
-            if "adl_center" not in col_map.values():
-                col_map[c] = "adl_center"
-        elif any(k in clean for k in ['adtv center', 'postpaid adtv', 'adtv']) and ("center" in clean or "adtv center" in clean or "postpaid adtv" in clean):
-            if "adtv_center" not in col_map.values():
-                col_map[c] = "adtv_center"
-        elif any(k in clean for k in ['prepaid center', 'prepaid', 'sms']):
-            if "prepaid_center" not in col_map.values():
-                col_map[c] = "prepaid_center"
-        elif any(k in clean for k in ['postpaid crm', 'crm name']) or clean == 'crm' or 'name in postpaid crm' in clean:
-            if "crm_name" not in col_map.values():
-                col_map[c] = "crm_name"
-        elif any(k in clean for k in ['employee', 'emp name', 'staff', 'officer', 'tl name', 'acso name', 'full name', 'team leader', 'personnel']) or clean in ('name', 'tl', 'acso') or ('display' in clean and 'center' not in clean):
-            if "emp_name" not in col_map.values():
-                col_map[c] = "emp_name"
-        elif any(k in clean for k in ['center', 'hub', 'branch', 'location', 'area', 'station']):
-            if "center_name" not in col_map.values():
-                col_map[c] = "center_name"
+        # 1. Exact canonical matches first
+        if clean in ['emp code', 'employee code', 'emp id', 'employee id', 'staff id', 'alloted to', 'code']:
+            col_map[c] = 'emp_code'
+        elif clean in ['position', 'designation', 'role', 'job title', 'post']:
+            col_map[c] = 'position'
+        elif clean in ['phone number', 'phone', 'mobile', 'mobile number', 'contact', 'cell', 'tel']:
+            col_map[c] = 'phone'
+        elif clean in ['gmail', 'email', 'mail', 'email address', 'gmail / email']:
+            col_map[c] = 'email'
+        elif clean in ['name in postpaid crm', 'postpaid crm name', 'crm name', 'postpaid crm']:
+            col_map[c] = 'crm_name'
+        elif clean in ['center name in postpaid adl', 'postpaid adl center', 'adl center']:
+            col_map[c] = 'adl_center'
+        elif clean in ['center name in postpaid adtv', 'postpaid adtv center', 'adtv center']:
+            col_map[c] = 'adtv_center'
+        elif clean in ['center name in prepaid', 'prepaid center', 'sms center', 'center in prepaid']:
+            col_map[c] = 'prepaid_center'
+        elif clean in ['center display name', 'center name', 'center', 'hub', 'location', 'station']:
+            col_map[c] = 'center_name'
+        elif clean in ['employee display name', 'employee name', 'emp name', 'display name', 'full name', 'name', 'staff', 'officer']:
+            col_map[c] = 'emp_name'
+        # 2. Resilient fallback for informal or variant column headers
+        elif 'crm' in clean and 'name' in clean:
+            col_map[c] = 'crm_name'
+        elif 'adl' in clean and 'center' in clean:
+            col_map[c] = 'adl_center'
+        elif 'adtv' in clean and 'center' in clean:
+            col_map[c] = 'adtv_center'
+        elif 'prepaid' in clean and 'center' in clean:
+            col_map[c] = 'prepaid_center'
+        elif any(k in clean for k in ['emp code', 'alloted', 'emp no']):
+            col_map[c] = 'emp_code'
+        elif any(k in clean for k in ['phone', 'mobile', 'contact']):
+            col_map[c] = 'phone'
+        elif any(k in clean for k in ['email', 'gmail']):
+            col_map[c] = 'email'
+        elif any(k in clean for k in ['position', 'role', 'designation']):
+            col_map[c] = 'position'
+        elif 'center' in clean:
+            col_map[c] = 'center_name'
+        elif any(k in clean for k in ['employee', 'staff', 'name']):
+            col_map[c] = 'emp_name'
 
     df_renamed = df.rename(columns=col_map)
     if "emp_name" not in df_renamed.columns:
