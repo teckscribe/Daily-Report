@@ -733,7 +733,7 @@
             <button class="btn btn-secondary" onclick="runCalculationTest()" title="Verify Complaint mathematical parity formulas against CRM sheets">
               <span>⚙️</span> Parity Test
             </button>
-            <a href="/api/service-request/download-excel" class="btn btn-secondary" download title="Download calculated Service Request Excel workbook">
+            <a href="/api/service-request/download-excel?region_id=__DEFAULT_REGION_ID__" class="btn btn-secondary" download title="Download calculated Service Request Excel workbook">
               <span>📥</span> SR Excel
             </a>
             <label class="btn btn-secondary" style="margin-bottom: 0; cursor: pointer;" title="Upload raw Complaints Excel workbook (Daily Complint pending Report.xls)">
@@ -1701,7 +1701,7 @@
       return nativeFetch(input, init);
     };
 
-    let currentRegion = "thrissur";
+    let currentRegion = "__DEFAULT_REGION_ID__";
     let allData = { tls: [], acsos: [], centers: [], emps: [], regions: [] };
 
     function escapeHtml(str) {

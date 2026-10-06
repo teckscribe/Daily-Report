@@ -31,6 +31,7 @@ from config import (
     DOWNLOADS_DIR,
     OUTPUT_DIR,
     TARGET_REGION,
+    DEFAULT_REGION_ID,
 )
 import db_manager
 
@@ -217,6 +218,7 @@ def find_service_request_raw_file() -> Optional[Path]:
 
 def compute_service_request_reports(
     raw_path: Optional[Path] = None,
+    region_id: str = DEFAULT_REGION_ID,
 ) -> Dict[str, pd.DataFrame]:
     """
     Reads the raw Excel workbook (ADL Postpaid, ADTv, Prepaid) and returns
@@ -245,6 +247,26 @@ def compute_service_request_reports(
         prepaid_df = pd.read_excel(xl, sheet_name=prep_sheet)
     else:
         prepaid_df = pd.DataFrame()
+
+    # CRM exports contain a REGION column for postpaid/TV. Resolve the
+    # configured display name from the region record instead of assuming
+    # Thrissur. Prepaid exports may already be region-scoped; filter them too
+    # when a region column is present.
+    region_row = db_manager.get_region_by_id(region_id) or {}
+    softcode_region = str(region_row.get("softcode_region") or region_id).strip()
+    prepaid_region = str(region_row.get("prepaid_region") or softcode_region).strip()
+
+    def _filter_region(frame: pd.DataFrame, region_name: str) -> pd.DataFrame:
+        if frame.empty:
+            return frame
+        region_col = next((c for c in frame.columns if str(c).strip().casefold() == "region"), None)
+        if not region_col:
+            return frame
+        return frame[frame[region_col].astype(str).str.strip().str.casefold() == region_name.casefold()].copy()
+
+    adl_df = _filter_region(adl_df, softcode_region)
+    adtv_df = _filter_region(adtv_df, softcode_region)
+    prepaid_df = _filter_region(prepaid_df, prepaid_region)
 
     # Process ADL Postpaid
     adl_postpaid = prepare_source(
@@ -301,9 +323,9 @@ def compute_service_request_reports(
     }
 
 
-def calculate_sr_pending_reports(raw_path: Optional[Path] = None) -> Dict[str, Any]:
+def calculate_sr_pending_reports(raw_path: Optional[Path] = None, region_id: str = DEFAULT_REGION_ID) -> Dict[str, Any]:
     """Convenience wrapper returning computed records dictionary."""
-    sections = compute_service_request_reports(raw_path)
+    sections = compute_service_request_reports(raw_path, region_id=region_id)
     adl_records = sections["ADL Service Request Pending"].to_dict(orient="records")
     adtv_records = sections["ADTv Service Request Pending"].to_dict(orient="records")
     return {
@@ -314,9 +336,9 @@ def calculate_sr_pending_reports(raw_path: Optional[Path] = None) -> Dict[str, A
     }
 
 
-def generate_sr_excel_report(raw_path: Optional[Path] = None) -> Path:
+def generate_sr_excel_report(raw_path: Optional[Path] = None, region_id: str = DEFAULT_REGION_ID) -> Path:
     """Convenience wrapper computing and generating the formatted Excel workbook."""
-    sections = compute_service_request_reports(raw_path)
+    sections = compute_service_request_reports(raw_path, region_id=region_id)
     return create_excel_output(sections)
 
 
@@ -765,14 +787,17 @@ def generate_sr_table_html(title: str, report_df: pd.DataFrame) -> str:
     """
 
 
-def render_sr_report_images(sections: Optional[Dict[str, pd.DataFrame]] = None) -> List[Path]:
+def render_sr_report_images(
+    sections: Optional[Dict[str, pd.DataFrame]] = None,
+    region_id: str = DEFAULT_REGION_ID,
+) -> List[Path]:
     """
     Renders high-definition Retina report images (1600px+ width) using Playwright.
     Generates ADL_SR_Pending.jpg, ADTv_SR_Pending.jpg, and combined Daily_SR_Report_latest.jpg.
     """
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     if not sections:
-        sections = compute_service_request_reports()
+        sections = compute_service_request_reports(region_id=region_id)
 
     html_adl = generate_sr_table_html("ADL Service Request Pending", sections["ADL Service Request Pending"])
     html_adtv = generate_sr_table_html("ADTv Service Request Pending", sections["ADTv Service Request Pending"])
@@ -829,7 +854,7 @@ def render_sr_report_images(sections: Optional[Dict[str, pd.DataFrame]] = None) 
 
 # --- Automated Cycle & WhatsApp Dispatch ---
 
-def execute_automated_sr_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
+def execute_automated_sr_cycle(region_id: str = DEFAULT_REGION_ID) -> Dict[str, Any]:
     """
     Complete end-to-end automated cycle for Service Requests:
     1. Reads/loads raw ticket data
@@ -844,7 +869,7 @@ def execute_automated_sr_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
 
     try:
         # 1. Compute reports
-        sections = compute_service_request_reports()
+        sections = compute_service_request_reports(region_id=region_id)
 
         # 2. Write Excel output
         excel_path = create_excel_output(sections)

@@ -45,6 +45,11 @@ An enterprise automation engine that logs into Softcode CRMS and Prepaid SMS por
    SOFTCODE_PASS=your_crm_pass
    PREPAID_USER=your_prepaid_user
    PREPAID_PASS=your_prepaid_pass
+   # Region used by startup sync, legacy CLI, and default report endpoints
+   DEFAULT_REGION_ID=thrissur
+   DEFAULT_REGION_NAME=Thrissur
+   TARGET_REGION=Thrissur
+   PREPAID_REGION=Thrissur
    WHATSAPP_GROUPS=NW Team TCR- REGION, +919633889430
    WEB_API_TOKEN=generate-a-long-random-token
    PORT=8201

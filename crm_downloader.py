@@ -32,6 +32,7 @@ from config import (
     DOWNLOADS_DIR,
     DATA_DIR,
     DATA_RETENTION_HOURS,
+    TARGET_REGION,
 )
 
 
@@ -102,7 +103,7 @@ def get_latest_local_downloads() -> Tuple[Optional[Path], Optional[Path], Option
 last_crm_error: Optional[str] = None
 
 
-def download_via_http_session(region: str = "Thrissur") -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
+def download_via_http_session(region: str = TARGET_REGION) -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
     """
     Direct, ultra-fast headless HTTP session downloader for Softcode and Prepaid portals.
     Executes in 2-3 seconds without browser overhead or profile lock issues.
@@ -243,7 +244,7 @@ def download_via_http_session(region: str = "Thrissur") -> Tuple[Optional[Path],
     return adl_path, adtv_path, prep_path
 
 
-def download_via_playwright(headless: bool = False, region: str = "Thrissur") -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
+def download_via_playwright(headless: bool = False, region: str = TARGET_REGION) -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
     """
     Playwright browser automation fallback.
     Launches browser, fills login fields, clicks elements, and captures file chooser downloads.
@@ -367,7 +368,7 @@ def download_via_playwright(headless: bool = False, region: str = "Thrissur") ->
 
 def download_from_crm(
     headless: bool = True,
-    region: str = "Thrissur",
+    region: str = TARGET_REGION,
     allow_stale: bool = False,
 ) -> Tuple[Path, Path, Path]:
     """
@@ -377,8 +378,18 @@ def download_from_crm(
     3. If still missing files, falls back to latest local downloads from Downloads/ or data/ (if allow_stale=True).
     """
     global last_crm_error
+    crm_region = region
+    try:
+        # The UI and database use stable region IDs; CRM portals usually expect
+        # the configured display value (for example, "Ernakulam").
+        from db_manager import get_region_by_id
+        configured = get_region_by_id(region)
+        if configured:
+            crm_region = configured.get("softcode_region") or region
+    except Exception:
+        pass
     print("=" * 60)
-    print(f"[CRM Downloader] Starting Automated Portal Download Pipeline for Region: {region}")
+    print(f"[CRM Downloader] Starting Automated Portal Download Pipeline for Region: {crm_region}")
     print("=" * 60)
 
     adl_path = None
@@ -388,13 +399,13 @@ def download_from_crm(
     # Step 1: Fast HTTP session
     credentials_configured = bool((SOFTCODE_USER and SOFTCODE_PWD) or (PREPAID_USER and PREPAID_PWD))
     if credentials_configured:
-        adl_path, adtv_path, prep_path = download_via_http_session(region=region)
+        adl_path, adtv_path, prep_path = download_via_http_session(region=crm_region)
 
     # Step 2: Browser automation fallback if any file missing
     if not (adl_path and adtv_path and prep_path):
         if credentials_configured:
             print("\n[CRM Downloader] Some files not retrieved via HTTP. Attempting Playwright browser fallback...")
-            b_adl, b_adtv, b_prep = download_via_playwright(headless=headless, region=region)
+            b_adl, b_adtv, b_prep = download_via_playwright(headless=headless, region=crm_region)
             adl_path = adl_path or b_adl
             adtv_path = adtv_path or b_adtv
             prep_path = prep_path or b_prep

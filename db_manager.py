@@ -11,13 +11,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
-from config import DATA_DIR
+from config import DATA_DIR, DEFAULT_REGION_ID, DEFAULT_REGION_NAME
 
 DB_PATH = DATA_DIR / "region_config.db"
 
 DEFAULT_REGIONS = [
     ("thrissur", "Thrissur", "Thrissur", "Thrissur"),
 ]
+if DEFAULT_REGION_ID != "thrissur":
+    DEFAULT_REGIONS.append((DEFAULT_REGION_ID, DEFAULT_REGION_NAME, DEFAULT_REGION_NAME, DEFAULT_REGION_NAME))
 KERALA_DISTRICTS = DEFAULT_REGIONS
 
 
@@ -206,14 +208,14 @@ def init_db():
     # Clean up empty placeholder regions that have 0 employees, 0 TLs, 0 ACSOs, and 0 centers
     c.execute("""
     DELETE FROM regions 
-    WHERE id != 'thrissur'
+    WHERE id != 'thrissur' AND id != ?
       AND (SELECT COUNT(*) FROM team_leaders WHERE region_id = regions.id) = 0
       AND (SELECT COUNT(*) FROM acsos WHERE region_id = regions.id) = 0
       AND (SELECT COUNT(*) FROM centers WHERE region_id = regions.id) = 0
       AND (SELECT COUNT(*) FROM employees WHERE region_id = regions.id) = 0
       AND (SELECT COUNT(*) FROM schedule_times WHERE region_id = regions.id) = 0
       AND (SELECT COUNT(*) FROM dispatch_rules WHERE region_id = regions.id) = 0
-    """)
+    """, (DEFAULT_REGION_ID,))
     conn.commit()
     # Seed Default Master Setting if empty
     c.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('scheduler_enabled', '1')")
@@ -984,7 +986,7 @@ def load_sample_preset(region_id: str = "thrissur") -> Dict[str, int]:
 
 # --- Unified Employee Directory Functions ---
 
-def get_unified_directory(region_id: str = "thrissur", auto_sync: bool = True) -> List[Dict[str, Any]]:
+def get_unified_directory(region_id: str = DEFAULT_REGION_ID, auto_sync: bool = True) -> List[Dict[str, Any]]:
     """Returns employee directory in unified format with Position matching user template."""
     if auto_sync:
         try:
@@ -992,6 +994,8 @@ def get_unified_directory(region_id: str = "thrissur", auto_sync: bool = True) -
         except Exception:
             pass
     tls = get_team_leaders(region_id)
+    region = get_region_by_id(region_id) or {}
+    region_name = region.get("name") or region_id
     acsos_list = get_acsos(region_id)
     acso_map = {a["center_name"].lower().strip(): a for a in acsos_list}
     emps = get_employees(region_id)
@@ -1016,6 +1020,8 @@ def get_unified_directory(region_id: str = "thrissur", auto_sync: bool = True) -
 
         result.append({
             "id": t["id"],
+            "region_id": region_id,
+            "region_name": region_name,
             "entry_type": "tl",
             "position": "Team Leader",
             "emp_code": code,
@@ -1042,6 +1048,8 @@ def get_unified_directory(region_id: str = "thrissur", auto_sync: bool = True) -
 
         result.append({
             "id": a["id"],
+            "region_id": region_id,
+            "region_name": region_name,
             "entry_type": "acso",
             "position": "ACSO",
             "emp_code": code,
@@ -1529,7 +1537,7 @@ def bulk_delete_unified_directory(items: List[Dict[str, Any]], region_id: str = 
     return deleted_count
 
 
-def sync_directory_to_json(region_id: str = "thrissur", file_path: Optional[str | Path] = None) -> str:
+def sync_directory_to_json(region_id: str = DEFAULT_REGION_ID, file_path: Optional[str | Path] = None) -> str:
     """
     Saves the entire Employee Directory for a region into a standalone, human-readable JSON file.
     Default destination: data/employee_directory.json (or data/employee_directory_{region_id}.json).
@@ -1546,7 +1554,7 @@ def sync_directory_to_json(region_id: str = "thrissur", file_path: Optional[str 
     return str(target.resolve())
 
 
-def load_directory_from_json(file_path: Optional[str | Path] = None, region_id: str = "thrissur") -> Dict[str, Any]:
+def load_directory_from_json(file_path: Optional[str | Path] = None, region_id: str = DEFAULT_REGION_ID) -> Dict[str, Any]:
     """
     Imports and synchronizes the employee directory for a region from a standalone JSON file.
     """
@@ -1567,7 +1575,7 @@ def load_directory_from_json(file_path: Optional[str | Path] = None, region_id: 
     raise ValueError("JSON file must contain an array of employee directory objects.")
 
 
-def auto_sync_directory_from_disk(region_id: str = "thrissur") -> bool:
+def auto_sync_directory_from_disk(region_id: str = DEFAULT_REGION_ID) -> bool:
     """
     Automatically synchronizes Employee Directory between disk JSON and SQLite without fail.
 
@@ -1588,10 +1596,11 @@ def auto_sync_directory_from_disk(region_id: str = "thrissur") -> bool:
        - Automatically generates and saves data/employee_directory.json from SQLite.
     """
     try:
-        candidates = [
-            DATA_DIR / f"employee_directory_{region_id}.json",
-            DATA_DIR / "employee_directory.json",
-        ]
+        candidates = [DATA_DIR / f"employee_directory_{region_id}.json"]
+        # The historical generic filename belongs to the Thrissur baseline.
+        # Never copy it into another region during first-start auto-sync.
+        if region_id == "thrissur":
+            candidates.append(DATA_DIR / "employee_directory.json")
 
         target: Optional[Path] = None
         for p in candidates:
@@ -1661,7 +1670,7 @@ def auto_sync_directory_from_disk(region_id: str = "thrissur") -> bool:
 
 # Auto-sync directory on module load
 try:
-    auto_sync_directory_from_disk("thrissur")
+    auto_sync_directory_from_disk(DEFAULT_REGION_ID)
 except Exception:
     pass
 

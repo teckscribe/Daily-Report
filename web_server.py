@@ -43,6 +43,7 @@ from config import (
     SR_REPORT_IMAGE_PATH,
     SR_EXCEL_REPORT_PATH,
     WEB_API_TOKEN,
+    DEFAULT_REGION_ID,
 )
 import db_manager
 from report_engine import compute_report, load_inputs_from_workbook
@@ -145,14 +146,14 @@ class DispatchRulePayload(BaseModel):
     report_type: str
     target_recipients: str
     description: Optional[str] = ""
-    region_id: Optional[str] = "thrissur"
+    region_id: Optional[str] = DEFAULT_REGION_ID
     is_enabled: Optional[bool] = True
 
 
 class ScheduleTimePayload(BaseModel):
     run_time: str
     label: Optional[str] = ""
-    region_id: Optional[str] = "thrissur"
+    region_id: Optional[str] = DEFAULT_REGION_ID
     is_enabled: Optional[bool] = True
     report_type: Optional[str] = "complaint"
 
@@ -164,7 +165,7 @@ class GenerateAndSendPayload(BaseModel):
 
 
 class CycleRunPayload(BaseModel):
-    region_id: Optional[str] = "thrissur"
+    region_id: Optional[str] = DEFAULT_REGION_ID
     pipeline: Optional[str] = "all"  # 'complaint', 'service_request', or 'all'
 
 
@@ -203,7 +204,8 @@ def api_login(payload: ApiLoginPayload, response: Response):
 async def serve_dashboard():
     """Renders the main operational management interface."""
     html_path = TEMPLATES_DIR / "index.html"
-    response = HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    html = html_path.read_text(encoding="utf-8").replace("__DEFAULT_REGION_ID__", DEFAULT_REGION_ID)
+    response = HTMLResponse(content=html)
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
@@ -510,7 +512,7 @@ def import_directory_json_endpoint(region_id: str, payload: List[Dict[str, Any]]
 
 
 @app.get("/api/employee-directory/download-template")
-def download_directory_template_endpoint(region_id: Optional[str] = "thrissur"):
+def download_directory_template_endpoint(region_id: Optional[str] = DEFAULT_REGION_ID):
     """Downloads a clean, blank formatted Excel template for uploading the Employee Directory."""
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -806,6 +808,9 @@ def test_calculation_engine(region_id: str):
     """
     try:
         df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(resolve_target_excel_path())
+        df_adl = filter_adl(df_adl, region=region_id)
+        df_adtv = filter_adtv(df_adtv, region=region_id)
+        df_prepaid = filter_prepaid(df_prepaid, region=region_id)
         result = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
 
         adl_postpaid = result.pending_days["adl_acso"].total.grand_total if result.pending_days["adl_acso"].total else sum(r.grand_total for r in result.pending_days["adl_acso"].rows)
@@ -846,6 +851,9 @@ def generate_reports(region_id: str, report_type: Optional[str] = "complaint"):
         # 1. Render Complaints if requested
         if r_type in ("all", "suite_all", "complaint", "complaints"):
             df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(resolve_target_excel_path())
+            df_adl = filter_adl(df_adl, region=region_id)
+            df_adtv = filter_adtv(df_adtv, region=region_id)
+            df_prepaid = filter_prepaid(df_prepaid, region=region_id)
             result = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
 
             df_sections = {
@@ -866,7 +874,7 @@ def generate_reports(region_id: str, report_type: Optional[str] = "complaint"):
 
         # 2. Render Service Requests if requested
         if r_type in ("all", "suite_all", "sr", "service_request", "sr_all"):
-            sr_sec = compute_service_request_reports()
+            sr_sec = compute_service_request_reports(region_id=region_id)
             render_sr_report_images(sr_sec)
             rendered_images.extend([
                 "/output/ADL_SR_Pending.jpg",
@@ -921,7 +929,7 @@ def dispatch_whatsapp(region_id: str, report_type: Optional[str] = "complaint"):
             missing = [img for img in imgs if not img.exists()]
             if missing:
                 if is_sr_type(rule_type):
-                    sr_sec = compute_service_request_reports()
+                    sr_sec = compute_service_request_reports(region_id=region_id)
                     render_sr_report_images(sr_sec)
                 else:
                     df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(resolve_target_excel_path())
@@ -961,7 +969,7 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
     try:
         # 1. Service Request only dispatch
         if is_sr_report_type(r_type):
-            sr_sec = compute_service_request_reports()
+            sr_sec = compute_service_request_reports(region_id=region_id)
             render_sr_report_images(sr_sec)
             imgs = get_images_for_report_type(r_type)
             success = flash_report_image(imgs, target_recipients=[target])
@@ -1004,7 +1012,7 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
         # 6. If suite_all, generate SR cards as well
         if r_type in ("suite_all", "everything"):
             try:
-                sr_sec = compute_service_request_reports()
+                sr_sec = compute_service_request_reports(region_id=region_id)
                 render_sr_report_images(sr_sec)
             except Exception as e_sr:
                 print(f"[Generate & Send] SR generation notice: {e_sr}")
@@ -1059,7 +1067,7 @@ def get_images_for_report_type(report_type: str) -> List[Path]:
     return [ADL_REPORT_IMAGE_PATH, ADTV_REPORT_IMAGE_PATH]
 
 
-def execute_automated_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
+def execute_automated_cycle(region_id: str = DEFAULT_REGION_ID) -> Dict[str, Any]:
     """Pulls fresh tickets from CRM, computes report, renders images, and dispatches per rules."""
     ts_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
@@ -1182,10 +1190,13 @@ def trigger_dispatch_rule_endpoint(rule_id: int):
     missing = [i for i in imgs if not i.exists()]
     if missing:
         if is_sr_report_type(r_type):
-            sr_sec = compute_service_request_reports()
+            sr_sec = compute_service_request_reports(region_id=rule["region_id"])
             render_sr_report_images(sr_sec)
         else:
             df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
+            df_adl = filter_adl(df_adl, region=rule["region_id"])
+            df_adtv = filter_adtv(df_adtv, region=rule["region_id"])
+            df_prepaid = filter_prepaid(df_prepaid, region=rule["region_id"])
             result = compute_report(df_adl, df_adtv, df_prepaid, region_id=rule["region_id"])
             df_sections = {
                 "adl_team": result.final["adl_team"].to_frame(),
@@ -1197,7 +1208,7 @@ def trigger_dispatch_rule_endpoint(rule_id: int):
             generate_acso_report_images(df_sections)
             if r_type in ("suite_all", "everything"):
                 try:
-                    sr_sec = compute_service_request_reports()
+                    sr_sec = compute_service_request_reports(region_id=rule["region_id"])
                     render_sr_report_images(sr_sec)
                 except Exception:
                     pass
@@ -1258,8 +1269,9 @@ def get_system_settings():
         "scheduler_enabled": db_manager.get_setting("scheduler_enabled", "1") == "1",
         "last_cycle_timestamp": db_manager.get_setting("last_cycle_timestamp", "Not yet executed"),
         "last_cycle_status": db_manager.get_setting("last_cycle_status", "Scheduler Ready"),
-        "last_sr_cycle_timestamp": db_manager.get_setting("last_sr_cycle_thrissur", "Not yet executed"),
-        "last_sr_cycle_status": db_manager.get_setting("last_sr_cycle_status_thrissur", "Ready"),
+        "default_region_id": DEFAULT_REGION_ID,
+        "last_sr_cycle_timestamp": db_manager.get_setting(f"last_sr_cycle_{DEFAULT_REGION_ID}", "Not yet executed"),
+        "last_sr_cycle_status": db_manager.get_setting(f"last_sr_cycle_status_{DEFAULT_REGION_ID}", "Ready"),
     }
 
 
@@ -1277,7 +1289,7 @@ def run_automated_cycle_now(
     region_id: Optional[str] = None,
     pipeline: Optional[str] = None,
 ):
-    target_region = "thrissur"
+    target_region = DEFAULT_REGION_ID
     target_pipeline = "all"
 
     if payload:
@@ -1312,10 +1324,11 @@ def run_automated_cycle_now(
 # --- Service Request (SR) Endpoints ---
 
 @app.get("/api/service-request/reports")
-def get_service_request_reports_endpoint():
+def get_service_request_reports_endpoint(region_id: Optional[str] = None):
     """Returns preview tables for ADL and ADTv Service Request Pending."""
     try:
-        sections = compute_service_request_reports()
+        target_region = region_id or DEFAULT_REGION_ID
+        sections = compute_service_request_reports(region_id=target_region)
         return {
             "status": "OK",
             "adl": sections["ADL Service Request Pending"].to_dict(orient="records"),
@@ -1329,7 +1342,7 @@ def get_service_request_reports_endpoint():
 @app.post("/api/service-request/run-cycle")
 def run_service_request_cycle_endpoint(payload: Optional[CycleRunPayload] = None, region_id: Optional[str] = None):
     """Triggers the full automated cycle for Service Requests."""
-    target_region = "thrissur"
+    target_region = DEFAULT_REGION_ID
     if payload and payload.region_id:
         target_region = payload.region_id
     elif region_id:
@@ -1341,11 +1354,11 @@ def run_service_request_cycle_endpoint(payload: Optional[CycleRunPayload] = None
 
 
 @app.get("/api/service-request/download-excel")
-def download_service_request_excel_endpoint():
+def download_service_request_excel_endpoint(region_id: Optional[str] = None):
     """Downloads the generated Daily Service Request Pending Excel report."""
     if not SR_EXCEL_REPORT_PATH.exists():
         try:
-            sections = compute_service_request_reports()
+            sections = compute_service_request_reports(region_id=region_id or DEFAULT_REGION_ID)
             create_sr_excel_output(sections)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Cannot generate Excel: {e}")
@@ -1374,7 +1387,10 @@ async def upload_complaints_raw_endpoint(file: UploadFile = File(...)):
             pass
 
         df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(str(target_file))
-        result = compute_report(df_adl, df_adtv, df_prepaid, region_id="thrissur")
+        df_adl = filter_adl(df_adl, region=DEFAULT_REGION_ID)
+        df_adtv = filter_adtv(df_adtv, region=DEFAULT_REGION_ID)
+        df_prepaid = filter_prepaid(df_prepaid, region=DEFAULT_REGION_ID)
+        result = compute_report(df_adl, df_adtv, df_prepaid, region_id=DEFAULT_REGION_ID)
         df_sections = {
             "adl_team": result.final["adl_team"].to_frame(),
             "adtv_team": result.final["adtv_team"].to_frame(),
@@ -1398,7 +1414,7 @@ async def upload_complaints_raw_endpoint(file: UploadFile = File(...)):
 
 
 @app.post("/api/service-request/upload-raw")
-async def upload_service_request_raw_endpoint(file: UploadFile = File(...)):
+async def upload_service_request_raw_endpoint(file: UploadFile = File(...), region_id: Optional[str] = None):
     """Uploads a fresh raw Excel file and re-computes the reports immediately."""
     try:
         suffix = Path(file.filename).suffix or ".xls"
@@ -1406,7 +1422,7 @@ async def upload_service_request_raw_endpoint(file: UploadFile = File(...)):
         content = await file.read()
         target_file.write_bytes(content)
 
-        sections = compute_service_request_reports(target_file)
+        sections = compute_service_request_reports(target_file, region_id=region_id or DEFAULT_REGION_ID)
         create_sr_excel_output(sections)
         render_sr_report_images(sections)
 
@@ -1421,14 +1437,14 @@ async def upload_service_request_raw_endpoint(file: UploadFile = File(...)):
 
 
 @app.post("/api/service-request/generate-and-send")
-def send_service_request_to_phone_endpoint(payload: GenerateAndSendPayload):
+def send_service_request_to_phone_endpoint(payload: GenerateAndSendPayload, region_id: Optional[str] = None):
     """Generates Service Request reports and dispatches to specific phone number or WhatsApp group."""
     target = payload.target_phone.strip()
     if not target:
         raise HTTPException(status_code=400, detail="Target recipient cannot be empty.")
 
     try:
-        sections = compute_service_request_reports()
+        sections = compute_service_request_reports(region_id=region_id or DEFAULT_REGION_ID)
         create_sr_excel_output(sections)
         render_sr_report_images(sections)
 
@@ -1621,7 +1637,7 @@ async def background_scheduler_loop():
 @app.on_event("startup")
 async def start_scheduler_task():
     try:
-        db_manager.auto_sync_directory_from_disk("thrissur")
+        db_manager.auto_sync_directory_from_disk(DEFAULT_REGION_ID)
     except Exception as e:
         print(f"[Startup Directory Auto-Sync] {e}")
     asyncio.create_task(background_scheduler_loop())

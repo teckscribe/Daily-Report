@@ -26,6 +26,7 @@ from config import (
     PREPAID_REGION,
     TARGET_EXCEL_PATH,
     TARGET_REGION,
+    DEFAULT_REGION_ID,
 )
 from report_engine import ReportResult, compute_report, validate_inputs
 from report_layout import BUCKET_LABELS
@@ -84,7 +85,7 @@ def filter_prepaid(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFra
 # --- Report computation ---
 
 def compute_report_result(df_adl: pd.DataFrame, df_adtv: pd.DataFrame, df_prepaid: pd.DataFrame,
-                          region_id: str = "thrissur", strict: bool = True) -> ReportResult:
+                          region_id: str = DEFAULT_REGION_ID, strict: bool = True) -> ReportResult:
     """Validate inputs, then compute all three report sheets exactly like the Excel workbook."""
     warnings = validate_inputs(df_adl, df_adtv, df_prepaid)
     for w in warnings:
@@ -95,7 +96,7 @@ def compute_report_result(df_adl: pd.DataFrame, df_adtv: pd.DataFrame, df_prepai
 
 
 def compute_all_sections(df_adl: pd.DataFrame, df_adtv: pd.DataFrame, df_prepaid: pd.DataFrame,
-                         region_id: str = "thrissur", strict: bool = True) -> Dict[str, pd.DataFrame]:
+                         region_id: str = DEFAULT_REGION_ID, strict: bool = True) -> Dict[str, pd.DataFrame]:
     """Backward-compatible wrapper: final 'Post Paid & Prepaid' tables as DataFrames."""
     result = compute_report_result(df_adl, df_adtv, df_prepaid, region_id=region_id, strict=strict)
     return {k: t.to_frame() for k, t in result.final.items()}

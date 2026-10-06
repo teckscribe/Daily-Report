@@ -135,11 +135,13 @@ CRM_SSL_VERIFY = os.getenv("CRM_SSL_VERIFY", "true").lower() in ("true", "1", "y
 WEB_API_TOKEN = os.getenv("WEB_API_TOKEN", "").strip()
 
 # --- Filter Criteria ---
-TARGET_REGION = "Thrissur"
+DEFAULT_REGION_ID = os.getenv("DEFAULT_REGION_ID", "thrissur").strip().lower()
+DEFAULT_REGION_NAME = os.getenv("DEFAULT_REGION_NAME", DEFAULT_REGION_ID.replace("_", " ").title()).strip()
+TARGET_REGION = os.getenv("TARGET_REGION", DEFAULT_REGION_NAME).strip()
 ADL_COMPLAINT_TYPE = "Network"
 ADL_PROBLEM_TYPES = ["network complaint", "onsite visit"]
 ADTV_COMPLAINT_TYPE = "Network"
-PREPAID_REGION = "Thrissur"
+PREPAID_REGION = os.getenv("PREPAID_REGION", DEFAULT_REGION_NAME).strip()
 PREPAID_COMPLAINT_TYPE = "Network"
 
 # --- WhatsApp Configuration ---
