@@ -28,6 +28,7 @@ from config import (
     SOFTCODE_PWD,
     PREPAID_USER,
     PREPAID_PWD,
+    CRM_SSL_VERIFY,
     DOWNLOADS_DIR,
     DATA_DIR,
     DATA_RETENTION_HOURS,
@@ -36,13 +37,10 @@ from config import (
 
 def cleanup_old_download_files(hours: int = DATA_RETENTION_HOURS) -> int:
     """
-    Cleans up raw downloaded Excel / CSV files in DATA_DIR older than `hours` (default 24h).
-    Never touches critical directory configurations, backups, or seeds.
+    Cleans up raw downloaded Excel / CSV files older than `hours` (default 24h).
+    Scans both DATA_DIR and DOWNLOADS_DIR. Never touches critical directory configurations.
     Preserves at least the single latest file of each type as a fallback.
     """
-    if not DATA_DIR.exists():
-        return 0
-
     from datetime import datetime, timedelta
     cutoff = datetime.now() - timedelta(hours=hours)
     patterns = [
@@ -54,20 +52,22 @@ def cleanup_old_download_files(hours: int = DATA_RETENTION_HOURS) -> int:
         "Daily_Service_Request_*.xlsx",
     ]
     deleted_count = 0
-    for pat in patterns:
-        matching = sorted(DATA_DIR.glob(pat), key=lambda f: f.stat().st_mtime)
-        if len(matching) <= 1:
-            # Always keep at least the latest file as a local fallback
+    for search_dir in [DATA_DIR, DOWNLOADS_DIR]:
+        if not search_dir or not search_dir.exists():
             continue
-        # Check all except the most recent
-        for f in matching[:-1]:
-            try:
-                mtime = datetime.fromtimestamp(f.stat().st_mtime)
-                if mtime < cutoff:
-                    f.unlink(missing_ok=True)
-                    deleted_count += 1
-            except Exception as e:
-                pass
+        for pat in patterns:
+            matching = sorted(search_dir.glob(pat), key=lambda f: f.stat().st_mtime)
+            if len(matching) <= 1:
+                # Always keep at least the latest file as a local fallback
+                continue
+            for f in matching[:-1]:
+                try:
+                    mtime = datetime.fromtimestamp(f.stat().st_mtime)
+                    if mtime < cutoff:
+                        f.unlink(missing_ok=True)
+                        deleted_count += 1
+                except Exception:
+                    pass
 
     if deleted_count > 0:
         print(f"[Data Retention] Automatically purged {deleted_count} CRM export file(s) older than {hours} hours.")
@@ -120,7 +120,7 @@ def download_via_http_session(region: str = "Thrissur") -> Tuple[Optional[Path],
         try:
             print("[CRM Downloader] Connecting to Softcode Portal (portal.asianet.co.in)...")
             s = requests.Session()
-            s.verify = False
+            s.verify = CRM_SSL_VERIFY
             s.headers.update({
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
             })
@@ -195,7 +195,7 @@ def download_via_http_session(region: str = "Thrissur") -> Tuple[Optional[Path],
         try:
             print("[CRM Downloader] Connecting to Prepaid SMS Portal (sms.ali.asianetindia.com)...")
             s_prep = requests.Session()
-            s_prep.verify = False
+            s_prep.verify = CRM_SSL_VERIFY
             s_prep.headers.update({
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
             })

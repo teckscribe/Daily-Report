@@ -14,9 +14,20 @@ ENV/
 data/whatsapp_session/
 *.session
 
-# Temporary ticket downloads
+# Temporary ticket downloads & local workbooks
 data/Pending*.xlsx
 data/Pending*.csv
+data/Pending*
+data/*pending*
+data/*Pending*
+*Complint pending Report*.xls*
+*complaint*.xls*
+*Complaint*.xls*
+Employee_Directory_*.xlsx
+*Directory_Thrissur*.xlsx
+!Daily Complint Tracker.xls
+!Employee_Directory_Template.xlsx
+!Service Request - Raw Data.xls
 
 # Temporary generated reports & working copies
 output/*.jpg

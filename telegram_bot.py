@@ -634,11 +634,9 @@ def format_test_numbers_manager_message(numbers: List[str]) -> str:
 def is_user_authorized(user_id: int, chat_id: int) -> bool:
     global authorized_users_cache
     if not authorized_users_cache:
-        # Auto-authorize first caller if no admin IDs are configured in .env
-        authorized_users_cache.add(user_id)
-        print(f"[Telegram Bot] [!] No TELEGRAM_ALLOWED_USERS in .env. Auto-authorized user: {user_id}")
-        db_manager.register_telegram_alert_recipient(chat_id)
-        return True
+        # Strict security: deny access if no admin IDs are configured in .env
+        print(f"[Telegram Bot] [!] Access denied for user {user_id}. TELEGRAM_ALLOWED_USERS is not configured in .env.")
+        return False
     authorized = (user_id in authorized_users_cache or chat_id in authorized_users_cache)
     if authorized:
         db_manager.register_telegram_alert_recipient(chat_id)
