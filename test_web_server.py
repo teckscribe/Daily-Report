@@ -316,14 +316,22 @@ def test_routes():
     from telegram_bot import (
         TelegramAPI,
         format_status_message,
+        format_main_menu_message,
+        format_render_send_menu_message,
         get_confirmation_keyboard,
         get_main_menu_keyboard,
-        get_phone_selection_keyboard,
+        get_control_menu_keyboard,
+        get_render_send_menu_keyboard,
+        get_test_selection_keyboard,
+        get_test_numbers_manager_keyboard,
+        get_preconfigured_test_numbers,
+        add_preconfigured_test_number,
+        remove_preconfigured_test_number,
         get_service_status,
         is_user_authorized,
     )
 
-    # Test Telegram API client initialization
+    # Test Telegram API client initialization & delete_message
     api = TelegramAPI("123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ")
     assert api.is_configured() is True
     assert api.base_url == "https://api.telegram.org/bot123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
@@ -331,39 +339,79 @@ def test_routes():
     assert dummy_api.is_configured() is False
     print("   [OK] Telegram API client initialization and token validator verified.")
 
-    # Test Main Menu Keyboard Layout & Button Labels
-    kb = get_main_menu_keyboard(service_active=True)
-    flat_buttons = [btn for row in kb["inline_keyboard"] for btn in row]
-    btn_texts = [b["text"] for b in flat_buttons]
-    btn_callbacks = [b["callback_data"] for b in flat_buttons]
+    # Test Main Menu Keyboard Layout (Control Buttons, Render and Send, Close)
+    kb = get_main_menu_keyboard()
+    flat_main_btns = [btn for row in kb["inline_keyboard"] for btn in row]
+    main_btn_texts = [b["text"] for b in flat_main_btns]
+    main_btn_callbacks = [b["callback_data"] for b in flat_main_btns]
 
-    assert "▶️ Start Service" in btn_texts
-    assert "⏹️ Stop Service" in btn_texts
-    assert "🔄 Restart Service" in btn_texts
-    assert "🚀 Report-to-Group Dispatch Rules" in btn_texts
-    assert "📲 Test Delivery: Generate & Send to Specific Number" in btn_texts
-    assert "srv:start" in btn_callbacks
-    assert "srv:stop" in btn_callbacks
-    assert "srv:restart" in btn_callbacks
-    assert "action:dispatch_groups" in btn_callbacks
-    assert "action:test_delivery" in btn_callbacks
-    print("   [OK] Main menu keyboard verified: Start, Stop, Restart, Group Dispatch, Test Delivery buttons intact.")
+    assert any("Control Buttons" in t for t in main_btn_texts)
+    assert any("Render and Send" in t for t in main_btn_texts)
+    assert any("Close" in t for t in main_btn_texts)
+    assert "menu:control" in main_btn_callbacks
+    assert "menu:render_send" in main_btn_callbacks
+    assert "menu:close_prompt" in main_btn_callbacks
+    print("   [OK] Main menu keyboard verified: Control Buttons, Render and Send, Close buttons intact.")
 
-    # Test Phone Quick-Select Keyboard
-    phone_kb = get_phone_selection_keyboard("+919999999999")
-    phone_btns = [btn for row in phone_kb["inline_keyboard"] for btn in row]
-    assert any("9999999999" in b["text"] for b in phone_btns)
-    assert any("Custom Mobile Number" in b["text"] for b in phone_btns)
-    print("   [OK] Phone selection keyboard layout verified.")
+    # Test Sub Menu 1: Control Buttons Keyboard (Start, Stop, Restart, Status, Back)
+    ctrl_kb = get_control_menu_keyboard(service_active=True)
+    flat_ctrl_btns = [btn for row in ctrl_kb["inline_keyboard"] for btn in row]
+    ctrl_btn_texts = [b["text"] for b in flat_ctrl_btns]
+    ctrl_btn_callbacks = [b["callback_data"] for b in flat_ctrl_btns]
+
+    assert any("Start" in t for t in ctrl_btn_texts)
+    assert any("Stop" in t for t in ctrl_btn_texts)
+    assert any("Restart" in t for t in ctrl_btn_texts)
+    assert any("Status" in t for t in ctrl_btn_texts)
+    assert any("Back to Main Menu" in t for t in ctrl_btn_texts)
+    assert "srv:start" in ctrl_btn_callbacks
+    assert "srv:stop" in ctrl_btn_callbacks
+    assert "srv:restart" in ctrl_btn_callbacks
+    assert "srv:status" in ctrl_btn_callbacks
+    assert "menu:main" in ctrl_btn_callbacks
+    print("   [OK] Control Buttons submenu keyboard verified: Start, Stop, Restart, Status, Back intact.")
+
+    # Test Sub Menu 2: Render and Send Keyboard (Send Complaint, Send SR, Test Send Complaint, Test Send SR, Send Reports in Telegram, Update the Test Numbers)
+    rs_kb = get_render_send_menu_keyboard()
+    flat_rs_btns = [btn for row in rs_kb["inline_keyboard"] for btn in row]
+    rs_btn_texts = [b["text"] for b in flat_rs_btns]
+    rs_btn_callbacks = [b["callback_data"] for b in flat_rs_btns]
+
+    assert any("Send Complaint" in t for t in rs_btn_texts)
+    assert any("Send SR" in t for t in rs_btn_texts)
+    assert any("Test Send Complaint" in t for t in rs_btn_texts)
+    assert any("Test Send SR" in t for t in rs_btn_texts)
+    assert any("Send Reports in Telegram" in t for t in rs_btn_texts)
+    assert any("Update the Test Numbers" in t for t in rs_btn_texts)
+    assert any("Back to Main Menu" in t for t in rs_btn_texts)
+    assert "action:send_complaint" in rs_btn_callbacks
+    assert "action:send_sr" in rs_btn_callbacks
+    assert "action:test_complaint" in rs_btn_callbacks
+    assert "action:test_sr" in rs_btn_callbacks
+    assert "action:send_reports_telegram" in rs_btn_callbacks
+    assert "action:manage_test_numbers" in rs_btn_callbacks
+    assert "menu:main" in rs_btn_callbacks
+    print("   [OK] Render and Send submenu keyboard verified: All 6 actions + Back intact.")
+
+    # Test Preconfigured Test Numbers SQLite Persistence
+    initial_nums = get_preconfigured_test_numbers()
+    assert len(initial_nums) >= 2
+    test_mobile = "+919988776655"
+    add_preconfigured_test_number(test_mobile)
+    updated_nums = get_preconfigured_test_numbers()
+    assert test_mobile in updated_nums
+    remove_preconfigured_test_number(test_mobile)
+    assert test_mobile not in get_preconfigured_test_numbers()
+    print("   [OK] Preconfigured test numbers SQLite manager (add/remove/retrieve) verified.")
 
     # Test Confirmation Keyboard
-    conf_kb = get_confirmation_keyboard(confirm_data="exec:srv_stop", cancel_data="menu:cancel")
+    conf_kb = get_confirmation_keyboard(confirm_data="exec:srv_stop", cancel_data="menu:control")
     conf_btns = [btn for row in conf_kb["inline_keyboard"] for btn in row]
     assert len(conf_btns) == 2
     assert conf_btns[0]["text"] == "✅ Confirm"
     assert conf_btns[0]["callback_data"] == "exec:srv_stop"
     assert conf_btns[1]["text"] == "❌ Cancel"
-    assert conf_btns[1]["callback_data"] == "menu:cancel"
+    assert conf_btns[1]["callback_data"] == "menu:control"
     print("   [OK] Confirmation & cancellation dialog keyboard verified.")
 
     # Test Service Status & Formatting
@@ -371,7 +419,7 @@ def test_routes():
     assert "is_active" in st
     assert "web_connected" in st
     formatted = format_status_message(st)
-    assert "Daily QOS Tracker — Control Center" in formatted
+    assert "Daily QOS Tracker — Control Center" in formatted or "Control Center — Background Services" in formatted
     print("   [OK] Service status collector and Telegram HTML formatting verified.")
 
     # Test Authorization Check
@@ -467,10 +515,10 @@ def test_routes():
     sr_btn_texts = [b["text"] for b in flat_sr_btns]
     sr_btn_callbacks = [b["callback_data"] for b in flat_sr_btns]
 
-    assert any("Dispatch SR Reports to Groups" in t for t in sr_btn_texts)
-    assert any("Send SR Test Delivery" in t for t in sr_btn_texts)
-    assert "action:sr_dispatch" in sr_btn_callbacks
-    assert "action:sr_test_delivery" in sr_btn_callbacks
+    assert any("Send SR" in t for t in sr_btn_texts)
+    assert any("Test Send SR" in t for t in sr_btn_texts)
+    assert "action:send_sr" in sr_btn_callbacks
+    assert "action:test_sr" in sr_btn_callbacks
     assert "menu:main" in sr_btn_callbacks
     print("   [OK] Verified Telegram SR menu keyboard schema and callbacks.")
 

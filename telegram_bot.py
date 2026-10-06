@@ -3,23 +3,30 @@ telegram_bot.py
 ===============
 Interactive Telegram Operations Control Bot for Daily QOS Tracker.
 
-UI Buttons provided:
-1. Service Management:
-   - ▶️ Start Service    (systemctl start daily-work-report)
-   - ⏹️ Stop Service     (systemctl stop daily-work-report)
-   - 🔄 Restart Service  (systemctl restart daily-work-report)
-   - 📊 Service Status   (checks systemd state & scheduler health)
-2. Report Dispatches:
-   - 🚀 Report-to-Group Dispatch Rules (triggers live CRM sync & sends to active WhatsApp groups)
-   - 📲 Test Delivery: Generate & Send to Specific Number (preset quick-click or custom phone entry)
-   - 🖼️ Send Report Photos Here (delivers all 4 High-DPI cards straight into Telegram chat)
+Menu Hierarchy:
+1. Main Menu:
+   - ⚙️ Control Buttons       (opens Sub Menu: Control Buttons)
+   - 🚀 Render and Send        (opens Sub Menu: Render and Send)
+   - ❌ Close                  (vanishes the menu UI)
 
-Configuration:
-All credentials are read from .env:
-  TELEGRAM_BOT_TOKEN=...
-  TELEGRAM_ALLOWED_USERS=... (comma-separated admin Telegram user IDs)
-  TELEGRAM_TEST_PHONE=...   (default test number)
-  TELEGRAM_WEB_URL=...      (default http://127.0.0.1:8201)
+2. Sub Menu 1 (Control Buttons):
+   - ▶️ Start                  (starts daily-work-report systemd service)
+   - ⏹️ Stop                   (stops daily-work-report systemd service)
+   - 🔄 Restart                (restarts daily-work-report systemd service)
+   - 📊 Status                 (queries service state, uptime & scheduler health)
+   - 🔙 Back to Main Menu
+
+3. Sub Menu 2 (Render and Send):
+   - 📊 Send Complaint         (dispatches Complaint reports to preconfigured WhatsApp groups/numbers)
+   - 📋 Send SR                (dispatches Service Request reports to preconfigured WhatsApp groups/numbers)
+   - 📱 Test Send Complaint    (sends Complaint reports to preconfigured test WhatsApp numbers)
+   - 📲 Test Send SR           (sends Service Request reports to preconfigured test WhatsApp numbers)
+   - 🖼️ Send Reports in Telegram (delivers all High-DPI cards straight into Telegram chat)
+   - ✏️ Update the Test Numbers (manage / add / remove / reset preconfigured test WhatsApp numbers)
+   - 🔙 Back to Main Menu
+
+Mandatory Safety Guardrail:
+- Every action prompts an explicit "Confirm" and "Cancel" question before executing.
 """
 
 import json
@@ -34,6 +41,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import requests
 
+import db_manager
 from config import (
     ADL_ACSO_REPORT_IMAGE_PATH,
     ADL_REPORT_IMAGE_PATH,
@@ -116,6 +124,23 @@ class TelegramAPI:
             return res.json()
         except Exception as e:
             print(f"[Telegram API] edit_message_text error: {e}")
+            return {"ok": False, "description": str(e)}
+
+    def delete_message(
+        self,
+        chat_id: int | str,
+        message_id: int,
+    ) -> Dict[str, Any]:
+        url = f"{self.base_url}/deleteMessage"
+        payload: Dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+        }
+        try:
+            res = requests.post(url, json=payload, timeout=10)
+            return res.json()
+        except Exception as e:
+            print(f"[Telegram API] delete_message error: {e}")
             return {"ok": False, "description": str(e)}
 
     def answer_callback_query(
@@ -277,10 +302,10 @@ def restart_system_service() -> Tuple[bool, str]:
 # --- Report Dispatches via Web API ---
 
 def trigger_group_dispatch(region_id: str = "thrissur") -> Tuple[bool, str]:
-    """Calls web server endpoint to run automated cycle and dispatch to groups."""
+    """Calls web server endpoint to run automated Complaint cycle and dispatch to groups."""
     try:
         url = f"{TELEGRAM_WEB_URL}/api/system/run-automated-cycle-now?region_id={region_id}"
-        res = requests.post(url, json={"region_id": region_id}, timeout=300)
+        res = requests.post(url, json={"region_id": region_id, "pipeline": "complaint"}, timeout=300)
         data = res.json()
         if res.status_code == 200 and data.get("status") == "OK":
             return True, data.get("message", "All active dispatch rules triggered successfully.")
@@ -338,69 +363,115 @@ def trigger_sr_test_delivery(target_phone: str, region_id: str = "thrissur") -> 
         return False, f"Could not connect to web server: {e}"
 
 
+# --- Preconfigured Test WhatsApp Numbers Management ---
+
+DEFAULT_TEST_NUMBERS = ["+919633889430", "+917591920200"]
+
+
+def get_preconfigured_test_numbers() -> List[str]:
+    """Retrieves list of preconfigured test numbers from persistent SQLite settings."""
+    raw = db_manager.get_setting("telegram_test_numbers", "").strip()
+    if raw:
+        try:
+            nums = json.loads(raw)
+            if isinstance(nums, list) and nums:
+                return [str(n).strip() for n in nums if str(n).strip()]
+        except Exception:
+            nums = [n.strip() for n in raw.split(",") if n.strip()]
+            if nums:
+                return nums
+
+    # Seed defaults if not set
+    defaults: List[str] = []
+    if TELEGRAM_TEST_PHONE and TELEGRAM_TEST_PHONE.strip():
+        defaults.append(TELEGRAM_TEST_PHONE.strip())
+    for d in DEFAULT_TEST_NUMBERS:
+        if d not in defaults:
+            defaults.append(d)
+    return defaults
+
+
+def set_preconfigured_test_numbers(numbers: List[str]) -> bool:
+    """Saves list of test numbers to SQLite system_settings."""
+    clean: List[str] = []
+    for n in numbers:
+        cleaned = str(n).strip()
+        if cleaned and cleaned not in clean:
+            clean.append(cleaned)
+    return db_manager.set_setting("telegram_test_numbers", json.dumps(clean))
+
+
+def add_preconfigured_test_number(number: str) -> bool:
+    """Adds a test number to persistent list."""
+    nums = get_preconfigured_test_numbers()
+    cleaned = number.strip()
+    if cleaned and cleaned not in nums:
+        nums.append(cleaned)
+        return set_preconfigured_test_numbers(nums)
+    return True
+
+
+def remove_preconfigured_test_number(number: str) -> bool:
+    """Removes a test number from persistent list."""
+    nums = get_preconfigured_test_numbers()
+    cleaned = number.strip()
+    if cleaned in nums:
+        nums.remove(cleaned)
+        return set_preconfigured_test_numbers(nums)
+    return True
+
+
+def reset_preconfigured_test_numbers() -> bool:
+    """Resets test numbers back to system defaults."""
+    defaults: List[str] = []
+    if TELEGRAM_TEST_PHONE and TELEGRAM_TEST_PHONE.strip():
+        defaults.append(TELEGRAM_TEST_PHONE.strip())
+    for d in DEFAULT_TEST_NUMBERS:
+        if d not in defaults:
+            defaults.append(d)
+    return set_preconfigured_test_numbers(defaults)
+
+
 # --- Keyboard Layouts (UI Buttons) ---
 
-def get_main_menu_keyboard(service_active: bool) -> Dict[str, Any]:
-    active_indicator = "🟢 Running" if service_active else "🛑 Stopped"
+def get_main_menu_keyboard(service_active: Optional[bool] = None) -> Dict[str, Any]:
+    """
+    Main Menu:
+    • Control Buttons
+    • Render and Send
+    • Close
+    """
     return {
         "inline_keyboard": [
             [
-                {"text": "▶️ Start Service", "callback_data": "srv:start"},
-                {"text": "⏹️ Stop Service", "callback_data": "srv:stop"},
+                {"text": "⚙️ Control Buttons", "callback_data": "menu:control"},
             ],
             [
-                {"text": "🔄 Restart Service", "callback_data": "srv:restart"},
-                {"text": f"📊 Status ({active_indicator})", "callback_data": "srv:status"},
+                {"text": "🚀 Render and Send", "callback_data": "menu:render_send"},
             ],
             [
-                {
-                    "text": "🚀 Report-to-Group Dispatch Rules",
-                    "callback_data": "action:dispatch_groups",
-                }
-            ],
-            [
-                {
-                    "text": "📲 Test Delivery: Generate & Send to Specific Number",
-                    "callback_data": "action:test_delivery",
-                }
-            ],
-            [
-                {
-                    "text": "📋 Service Request Pending Report",
-                    "callback_data": "menu:sr",
-                }
-            ],
-            [
-                {
-                    "text": "🖼️ Send Reports in Telegram",
-                    "callback_data": "action:send_photos",
-                },
-                {"text": "🔄 Refresh", "callback_data": "menu:refresh"},
+                {"text": "❌ Close", "callback_data": "menu:close_prompt"},
             ],
         ]
     }
 
 
-def get_sr_menu_keyboard() -> Dict[str, Any]:
+def get_control_menu_keyboard(service_active: bool = True) -> Dict[str, Any]:
+    """
+    Sub Menu: Control Buttons
+    • Start, Stop, Restart, Status
+    • Back to Main Menu
+    """
+    active_indicator = "🟢 Running" if service_active else "🛑 Stopped"
     return {
         "inline_keyboard": [
             [
-                {
-                    "text": "🚀 Dispatch SR Reports to Groups",
-                    "callback_data": "action:sr_dispatch",
-                }
+                {"text": "▶️ Start", "callback_data": "srv:start"},
+                {"text": "⏹️ Stop", "callback_data": "srv:stop"},
             ],
             [
-                {
-                    "text": "📲 Send SR Test Delivery",
-                    "callback_data": "action:sr_test_delivery",
-                }
-            ],
-            [
-                {
-                    "text": "🖼️ Send SR Report Cards Here",
-                    "callback_data": "action:sr_send_photos",
-                }
+                {"text": "🔄 Restart", "callback_data": "srv:restart"},
+                {"text": f"📊 Status ({active_indicator})", "callback_data": "srv:status"},
             ],
             [
                 {"text": "🔙 Back to Main Menu", "callback_data": "menu:main"},
@@ -409,19 +480,82 @@ def get_sr_menu_keyboard() -> Dict[str, Any]:
     }
 
 
-def get_phone_selection_keyboard(default_phone: str, prefix: str = "num") -> Dict[str, Any]:
+def get_render_send_menu_keyboard() -> Dict[str, Any]:
+    """
+    Sub Menu: Render and Send
+    • Send Complaint
+    • Send SR
+    • Test Send Complaint
+    • Test Send SR
+    • Send Reports in telegram
+    • Update the Test Numbers
+    • Back to Main Menu
+    """
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "📊 Send Complaint", "callback_data": "action:send_complaint"},
+            ],
+            [
+                {"text": "📋 Send SR", "callback_data": "action:send_sr"},
+            ],
+            [
+                {"text": "📱 Test Send Complaint", "callback_data": "action:test_complaint"},
+            ],
+            [
+                {"text": "📲 Test Send SR", "callback_data": "action:test_sr"},
+            ],
+            [
+                {"text": "🖼️ Send Reports in Telegram", "callback_data": "action:send_reports_telegram"},
+            ],
+            [
+                {"text": "✏️ Update the Test Numbers", "callback_data": "action:manage_test_numbers"},
+            ],
+            [
+                {"text": "🔙 Back to Main Menu", "callback_data": "menu:main"},
+            ],
+        ]
+    }
+
+
+def get_test_selection_keyboard(action_type: str, test_numbers: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Displays selection of preconfigured test numbers or enter custom number."""
+    nums = test_numbers if test_numbers is not None else get_preconfigured_test_numbers()
     buttons = []
-    if default_phone:
-        buttons.append([{"text": f"📞 Send to {default_phone} (Default)", "callback_data": f"{prefix}:{default_phone}"}])
-    buttons.append([{"text": "📞 Send to +919633889430", "callback_data": f"{prefix}:+919633889430"}])
-    buttons.append([{"text": "📞 Send to +917591920200", "callback_data": f"{prefix}:+917591920200"}])
-    buttons.append([{"text": "✏️ Type Custom Mobile Number", "callback_data": f"{prefix}:custom"}])
-    back_target = "menu:sr" if prefix.startswith("sr") else "menu:main"
-    buttons.append([{"text": "🔙 Back", "callback_data": back_target}])
+    if len(nums) > 1:
+        buttons.append([{"text": f"🚀 Send to ALL Test Numbers ({len(nums)})", "callback_data": f"test_sel:{action_type}:ALL"}])
+    for n in nums:
+        buttons.append([{"text": f"📞 Send to {n}", "callback_data": f"test_sel:{action_type}:{n}"}])
+    buttons.append([{"text": "✏️ Enter Custom Mobile Number", "callback_data": f"test_sel:{action_type}:custom"}])
+    buttons.append([{"text": "🔙 Back to Render & Send", "callback_data": "menu:render_send"}])
     return {"inline_keyboard": buttons}
 
 
-def get_confirmation_keyboard(confirm_data: str, cancel_data: str = "menu:cancel") -> Dict[str, Any]:
+def get_test_numbers_manager_keyboard(test_numbers: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Keyboard for managing preconfigured test numbers."""
+    nums = test_numbers if test_numbers is not None else get_preconfigured_test_numbers()
+    buttons = [
+        [{"text": "➕ Add Test Number", "callback_data": "tnum:add_prompt"}],
+    ]
+    if nums:
+        buttons.append([{"text": "➖ Remove a Test Number", "callback_data": "tnum:remove_menu"}])
+    buttons.append([{"text": "🔄 Reset to Defaults", "callback_data": "tnum:reset_prompt"}])
+    buttons.append([{"text": "🔙 Back to Render & Send", "callback_data": "menu:render_send"}])
+    return {"inline_keyboard": buttons}
+
+
+def get_remove_test_numbers_keyboard(test_numbers: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Keyboard listing test numbers to delete."""
+    nums = test_numbers if test_numbers is not None else get_preconfigured_test_numbers()
+    buttons = []
+    for num in nums:
+        buttons.append([{"text": f"➖ Remove {num}", "callback_data": f"tnum:del_prompt:{num}"}])
+    buttons.append([{"text": "🔙 Back", "callback_data": "action:manage_test_numbers"}])
+    return {"inline_keyboard": buttons}
+
+
+def get_confirmation_keyboard(confirm_data: str, cancel_data: str = "menu:main") -> Dict[str, Any]:
+    """Standard Confirm & Cancel confirmation modal keyboard."""
     return {
         "inline_keyboard": [
             [
@@ -432,6 +566,27 @@ def get_confirmation_keyboard(confirm_data: str, cancel_data: str = "menu:cancel
     }
 
 
+def get_sr_menu_keyboard() -> Dict[str, Any]:
+    """Legacy helper maintained for backward compatibility."""
+    return get_render_send_menu_keyboard()
+
+
+def get_phone_selection_keyboard(default_phone: str = "", prefix: str = "num") -> Dict[str, Any]:
+    """Legacy helper maintained for backward compatibility."""
+    act = "sr" if "sr" in prefix else "complaint"
+    return get_test_selection_keyboard(act)
+
+
+# --- Message Formatting Helpers ---
+
+def format_main_menu_message() -> str:
+    return (
+        "🎛 <b>Daily QOS Tracker — Control Center</b>\n\n"
+        "Please select a category from the menu below:\n\n"
+        "• <b>⚙️ Control Buttons:</b> Start, Stop, Restart, or check Service Status\n"
+        "• <b>🚀 Render and Send:</b> Dispatch reports, test delivery, or update test numbers\n"
+        "• <b>❌ Close:</b> Dismiss this menu interface"
+    )
 
 
 def format_status_message(status_info: Dict[str, Any]) -> str:
@@ -442,14 +597,43 @@ def format_status_message(status_info: Dict[str, Any]) -> str:
     web_badge = "🟢 Connected" if status_info["web_connected"] else "🔴 Disconnected"
 
     return (
-        "🎛 <b>Daily QOS Tracker — Control Center</b>\n\n"
+        "⚙️ <b>Control Center — Background Services</b>\n\n"
         f"<b>System Service:</b> {act_badge}\n"
         f"<b>Web Server API:</b> {web_badge} (<code>{TELEGRAM_WEB_URL}</code>)\n"
         f"<b>Scheduler Engine:</b> {sched_badge}\n"
         f"<b>Last Auto-Run:</b> <code>{status_info.get('last_cycle', 'None')}</code>\n"
         f"<b>Last Status:</b> <i>{status_info.get('last_status', 'Ready')}</i>\n\n"
-        "<i>Select an action below to manage services or execute dispatches:</i>"
+        "<i>Select an action below to control the service or check status:</i>"
     )
+
+
+def format_control_menu_message(status_info: Dict[str, Any]) -> str:
+    return format_status_message(status_info)
+
+
+def format_render_send_menu_message() -> str:
+    return (
+        "🚀 <b>Render and Send Center</b>\n\n"
+        "Select an action below to dispatch reports, send test deliveries, or update test numbers:\n\n"
+        "• <b>📊 Send Complaint:</b> To preconfigured WhatsApp groups/numbers\n"
+        "• <b>📋 Send SR:</b> To preconfigured WhatsApp groups/numbers\n"
+        "• <b>📱 Test Send Complaint:</b> To preconfigured test WhatsApp numbers\n"
+        "• <b>📲 Test Send SR:</b> To preconfigured test WhatsApp numbers\n"
+        "• <b>🖼️ Send Reports in Telegram:</b> Deliver high-resolution report cards here\n"
+        "• <b>✏️ Update the Test Numbers:</b> Add, remove, or reset test numbers"
+    )
+
+
+def format_test_numbers_manager_message(numbers: List[str]) -> str:
+    msg = "📱 <b>Preconfigured Test WhatsApp Numbers</b>\n\n"
+    if numbers:
+        msg += "Registered test recipients:\n"
+        for i, num in enumerate(numbers, 1):
+            msg += f"{i}. <code>{num}</code>\n"
+    else:
+        msg += "<i>No test numbers currently configured.</i>\n"
+    msg += "\nSelect an option below to add, remove, or reset:"
+    return msg
 
 
 # --- Authorization Helper ---
@@ -548,8 +732,9 @@ class TelegramBotRunner:
     def handle_message(self, chat_id: int, user_id: int, text: str):
         global user_states
 
-        # Check if user is in interactive custom phone input mode
-        if user_states.get(chat_id) == "WAITING_FOR_PHONE":
+        # Check interactive user state inputs
+        state = user_states.get(chat_id)
+        if state:
             user_states.pop(chat_id, None)
             clean_digits = re.sub(r"\D", "", text)
             if len(clean_digits) < 10:
@@ -557,117 +742,196 @@ class TelegramBotRunner:
                     chat_id,
                     "❌ <b>Invalid Phone Number</b>\nPlease provide a valid 10-digit mobile number.",
                 )
-                self.send_main_menu(chat_id)
+                self.send_render_send_menu(chat_id)
                 return
-
             formatted_num = f"+91{clean_digits[-10:]}"
-            prompt = (
-                "⚠️ <b>Confirm Action: Test Delivery</b>\n\n"
-                f"Are you sure you want to generate reports and send to:\n"
-                f"📱 <b>{formatted_num}</b>?"
-            )
-            kb = get_confirmation_keyboard(confirm_data=f"exec:test_delivery:{formatted_num}")
-            self.api.send_message(chat_id, prompt, reply_markup=kb)
-            return
 
-        elif user_states.get(chat_id) == "WAITING_FOR_SR_PHONE":
-            user_states.pop(chat_id, None)
-            clean_digits = re.sub(r"\D", "", text)
-            if len(clean_digits) < 10:
-                self.api.send_message(
-                    chat_id,
-                    "❌ <b>Invalid Phone Number</b>\nPlease provide a valid 10-digit mobile number.",
+            if state in ("WAITING_FOR_COMPLAINT_TEST_PHONE", "WAITING_FOR_PHONE"):
+                prompt = (
+                    "⚠️ <b>Confirm Action: Test Send Complaint</b>\n\n"
+                    f"Are you sure you want to generate Complaint reports and send to:\n"
+                    f"📱 <b>{formatted_num}</b>?"
                 )
-                self.send_main_menu(chat_id)
+                kb = get_confirmation_keyboard(
+                    confirm_data=f"exec:test_complaint:{formatted_num}",
+                    cancel_data="action:test_complaint",
+                )
+                self.api.send_message(chat_id, prompt, reply_markup=kb)
                 return
 
-            formatted_num = f"+91{clean_digits[-10:]}"
-            prompt = (
-                "⚠️ <b>Confirm Action: Service Request Test Delivery</b>\n\n"
-                f"Are you sure you want to generate SR reports and send to:\n"
-                f"📱 <b>{formatted_num}</b>?"
-            )
-            kb = get_confirmation_keyboard(confirm_data=f"exec:sr_test_delivery:{formatted_num}", cancel_data="menu:sr")
-            self.api.send_message(chat_id, prompt, reply_markup=kb)
-            return
+            elif state in ("WAITING_FOR_SR_TEST_PHONE", "WAITING_FOR_SR_PHONE"):
+                prompt = (
+                    "⚠️ <b>Confirm Action: Test Send Service Request</b>\n\n"
+                    f"Are you sure you want to generate Service Request reports and send to:\n"
+                    f"📱 <b>{formatted_num}</b>?"
+                )
+                kb = get_confirmation_keyboard(
+                    confirm_data=f"exec:test_sr:{formatted_num}",
+                    cancel_data="action:test_sr",
+                )
+                self.api.send_message(chat_id, prompt, reply_markup=kb)
+                return
 
-        # Commands (All command triggers require confirmation)
+            elif state == "WAITING_FOR_ADD_TEST_PHONE":
+                prompt = (
+                    "⚠️ <b>Confirm Action: Add Test Number</b>\n\n"
+                    f"Are you sure you want to add <b>{formatted_num}</b> to preconfigured test numbers?"
+                )
+                kb = get_confirmation_keyboard(
+                    confirm_data=f"exec:add_tnum:{formatted_num}",
+                    cancel_data="action:manage_test_numbers",
+                )
+                self.api.send_message(chat_id, prompt, reply_markup=kb)
+                return
+
+        # Commands (All command triggers require confirmation before execution)
         if text.startswith("/start") or text.startswith("/menu") or text.startswith("/help"):
             self.send_main_menu(chat_id)
+        elif text.startswith("/control"):
+            self.send_control_menu(chat_id)
+        elif text.startswith("/render"):
+            self.send_render_send_menu(chat_id)
         elif text.startswith("/status"):
-            st = get_service_status()
-            msg = format_status_message(st)
-            kb = get_main_menu_keyboard(st["is_active"])
-            self.api.send_message(chat_id, msg, reply_markup=kb)
-        elif text.startswith("/sr") or text.startswith("/service_request"):
-            kb = get_sr_menu_keyboard()
             prompt = (
-                "📋 <b>Service Request Pending Reports (ACSO-wise)</b>\n\n"
-                "Select an action below to dispatch Service Request pending reports or send test deliveries:"
+                "⚠️ <b>Confirm Action: Refresh Status</b>\n\n"
+                "Query live systemd service and web server health to refresh status?"
             )
-            self.api.send_message(chat_id, prompt, reply_markup=kb)
+            self.api.send_message(
+                chat_id,
+                prompt,
+                reply_markup=get_confirmation_keyboard("exec:srv_status", cancel_data="menu:control"),
+            )
         elif text.startswith("/start_service"):
             prompt = (
                 "⚠️ <b>Confirm Action: Start Service</b>\n\n"
                 f"Are you sure you want to <b>START</b> <code>{SERVICE_NAME}</code>?"
             )
-            self.api.send_message(chat_id, prompt, reply_markup=get_confirmation_keyboard("exec:srv_start"))
+            self.api.send_message(
+                chat_id,
+                prompt,
+                reply_markup=get_confirmation_keyboard("exec:srv_start", cancel_data="menu:control"),
+            )
         elif text.startswith("/stop_service"):
             prompt = (
                 "⚠️ <b>Confirm Action: Stop Service</b>\n\n"
                 f"Are you sure you want to <b>STOP</b> <code>{SERVICE_NAME}</code>?\n\n"
                 "<i>Note: Automated cycle schedules will be paused until restarted.</i>"
             )
-            self.api.send_message(chat_id, prompt, reply_markup=get_confirmation_keyboard("exec:srv_stop"))
+            self.api.send_message(
+                chat_id,
+                prompt,
+                reply_markup=get_confirmation_keyboard("exec:srv_stop", cancel_data="menu:control"),
+            )
         elif text.startswith("/restart_service"):
             prompt = (
                 "⚠️ <b>Confirm Action: Restart Service</b>\n\n"
                 f"Are you sure you want to <b>RESTART</b> <code>{SERVICE_NAME}</code>?"
             )
-            self.api.send_message(chat_id, prompt, reply_markup=get_confirmation_keyboard("exec:srv_restart"))
-        elif text.startswith("/dispatch"):
-            prompt = (
-                "⚠️ <b>Confirm Action: Report-to-Group Dispatch Rules</b>\n\n"
-                "Are you sure you want to run the automated cycle and dispatch reports to all configured <b>WhatsApp Groups</b> & ACSO contacts?"
+            self.api.send_message(
+                chat_id,
+                prompt,
+                reply_markup=get_confirmation_keyboard("exec:srv_restart", cancel_data="menu:control"),
             )
-            self.api.send_message(chat_id, prompt, reply_markup=get_confirmation_keyboard("exec:dispatch_groups"))
+        elif text.startswith("/send_complaint") or text.startswith("/dispatch"):
+            prompt = (
+                "⚠️ <b>Confirm Action: Send Complaint</b>\n\n"
+                "Are you sure you want to generate Complaint reports and dispatch them to all preconfigured <b>WhatsApp groups/numbers</b>?"
+            )
+            self.api.send_message(
+                chat_id,
+                prompt,
+                reply_markup=get_confirmation_keyboard("exec:send_complaint_groups", cancel_data="menu:render_send"),
+            )
+        elif text.startswith("/send_sr") or text.startswith("/sr"):
+            prompt = (
+                "⚠️ <b>Confirm Action: Send Service Request (SR)</b>\n\n"
+                "Are you sure you want to generate Service Request reports and dispatch them to all preconfigured <b>WhatsApp groups/numbers</b>?"
+            )
+            self.api.send_message(
+                chat_id,
+                prompt,
+                reply_markup=get_confirmation_keyboard("exec:send_sr_groups", cancel_data="menu:render_send"),
+            )
+        elif text.startswith("/close"):
+            prompt = (
+                "⚠️ <b>Confirm Action: Close Menu</b>\n\n"
+                "Are you sure you want to close and dismiss the menu UI?"
+            )
+            self.api.send_message(
+                chat_id,
+                prompt,
+                reply_markup=get_confirmation_keyboard("exec:close", cancel_data="menu:main"),
+            )
         else:
             self.send_main_menu(chat_id)
 
-    def send_main_menu(self, chat_id: int):
+    def send_main_menu(self, chat_id: int, message_id: Optional[int] = None):
+        msg = format_main_menu_message()
+        kb = get_main_menu_keyboard()
+        if message_id:
+            self.api.edit_message_text(chat_id, message_id, msg, reply_markup=kb)
+        else:
+            self.api.send_message(chat_id, msg, reply_markup=kb)
+
+    def send_control_menu(self, chat_id: int, message_id: Optional[int] = None):
         st = get_service_status()
-        msg = format_status_message(st)
-        kb = get_main_menu_keyboard(st["is_active"])
-        self.api.send_message(chat_id, msg, reply_markup=kb)
+        msg = format_control_menu_message(st)
+        kb = get_control_menu_keyboard(st["is_active"])
+        if message_id:
+            self.api.edit_message_text(chat_id, message_id, msg, reply_markup=kb)
+        else:
+            self.api.send_message(chat_id, msg, reply_markup=kb)
+
+    def send_render_send_menu(self, chat_id: int, message_id: Optional[int] = None):
+        msg = format_render_send_menu_message()
+        kb = get_render_send_menu_keyboard()
+        if message_id:
+            self.api.edit_message_text(chat_id, message_id, msg, reply_markup=kb)
+        else:
+            self.api.send_message(chat_id, msg, reply_markup=kb)
 
     def handle_callback(self, cb_id: str, chat_id: int, message_id: int, data: str):
         global user_states
 
-        # 1. Navigation / Cancel Callbacks
-        if data == "menu:cancel":
+        # 1. Navigation / Menu Switching
+        if data == "menu:main":
+            self.api.answer_callback_query(cb_id)
+            self.send_main_menu(chat_id, message_id)
+            return
+
+        if data == "menu:control":
+            self.api.answer_callback_query(cb_id)
+            self.send_control_menu(chat_id, message_id)
+            return
+
+        if data in ("menu:render_send", "menu:sr"):
+            self.api.answer_callback_query(cb_id)
+            self.send_render_send_menu(chat_id, message_id)
+            return
+
+        if data in ("menu:cancel", "cancel"):
             self.api.answer_callback_query(cb_id, text="Action cancelled.")
-            st = get_service_status()
-            msg = "❌ <b>Action Cancelled.</b>\n\n" + format_status_message(st)
-            kb = get_main_menu_keyboard(st["is_active"])
-            self.api.edit_message_text(chat_id, message_id, msg, reply_markup=kb)
+            self.send_main_menu(chat_id, message_id)
             return
 
-        if data in ("srv:status", "menu:refresh", "menu:main"):
-            self.api.answer_callback_query(cb_id, text="Updating status...")
-            st = get_service_status()
-            msg = format_status_message(st)
-            kb = get_main_menu_keyboard(st["is_active"])
-            self.api.edit_message_text(chat_id, message_id, msg, reply_markup=kb)
+        if data == "menu:close_prompt":
+            self.api.answer_callback_query(cb_id)
+            prompt = (
+                "⚠️ <b>Confirm Action: Close Menu</b>\n\n"
+                "Are you sure you want to close and dismiss the menu UI?"
+            )
+            kb = get_confirmation_keyboard(confirm_data="exec:close", cancel_data="menu:main")
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
             return
 
-        # 2. Confirmation Prompts (Before Executing Any Action)
+        # 2. Control Sub Menu Prompts
         if data == "srv:start":
             self.api.answer_callback_query(cb_id)
             prompt = (
                 "⚠️ <b>Confirm Action: Start Service</b>\n\n"
                 f"Are you sure you want to <b>START</b> the background service (<code>{SERVICE_NAME}</code>)?"
             )
-            kb = get_confirmation_keyboard(confirm_data="exec:srv_start")
+            kb = get_confirmation_keyboard(confirm_data="exec:srv_start", cancel_data="menu:control")
             self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
             return
 
@@ -678,7 +942,7 @@ class TelegramBotRunner:
                 f"Are you sure you want to <b>STOP</b> the background service (<code>{SERVICE_NAME}</code>)?\n\n"
                 "<i>Note: Automated cycle schedules will be paused until restarted.</i>"
             )
-            kb = get_confirmation_keyboard(confirm_data="exec:srv_stop")
+            kb = get_confirmation_keyboard(confirm_data="exec:srv_stop", cancel_data="menu:control")
             self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
             return
 
@@ -688,126 +952,182 @@ class TelegramBotRunner:
                 "⚠️ <b>Confirm Action: Restart Service</b>\n\n"
                 f"Are you sure you want to <b>RESTART</b> the background service (<code>{SERVICE_NAME}</code>)?"
             )
-            kb = get_confirmation_keyboard(confirm_data="exec:srv_restart")
+            kb = get_confirmation_keyboard(confirm_data="exec:srv_restart", cancel_data="menu:control")
             self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
             return
 
-        if data == "action:dispatch_groups":
+        if data in ("srv:status", "menu:refresh"):
             self.api.answer_callback_query(cb_id)
             prompt = (
-                "⚠️ <b>Confirm Action: Report-to-Group Dispatch Rules</b>\n\n"
-                "Are you sure you want to run the automated cycle and dispatch reports to all configured <b>WhatsApp Groups</b> & ACSO contacts?"
+                "⚠️ <b>Confirm Action: Refresh Status</b>\n\n"
+                "Query live systemd service and web server health to refresh status?"
             )
-            kb = get_confirmation_keyboard(confirm_data="exec:dispatch_groups")
+            kb = get_confirmation_keyboard(confirm_data="exec:srv_status", cancel_data="menu:control")
             self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
             return
 
-        if data == "action:test_delivery":
+        # 3. Render and Send Sub Menu Prompts
+        if data in ("action:send_complaint", "action:dispatch_groups"):
             self.api.answer_callback_query(cb_id)
-            kb = get_phone_selection_keyboard(TELEGRAM_TEST_PHONE)
             prompt = (
-                "📲 <b>Test Delivery: Generate & Send to Specific Number</b>\n\n"
-                "Select a destination phone number below or enter a custom one:"
+                "⚠️ <b>Confirm Action: Send Complaint</b>\n\n"
+                "Are you sure you want to generate Complaint reports and dispatch them to all preconfigured <b>WhatsApp groups/numbers</b>?"
+            )
+            kb = get_confirmation_keyboard(confirm_data="exec:send_complaint_groups", cancel_data="menu:render_send")
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        if data in ("action:send_sr", "action:sr_dispatch"):
+            self.api.answer_callback_query(cb_id)
+            prompt = (
+                "⚠️ <b>Confirm Action: Send Service Request (SR)</b>\n\n"
+                "Are you sure you want to generate Service Request reports and dispatch them to all preconfigured <b>WhatsApp groups/numbers</b>?"
+            )
+            kb = get_confirmation_keyboard(confirm_data="exec:send_sr_groups", cancel_data="menu:render_send")
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        if data in ("action:test_complaint", "action:test_delivery"):
+            self.api.answer_callback_query(cb_id)
+            nums = get_preconfigured_test_numbers()
+            kb = get_test_selection_keyboard("complaint", nums)
+            prompt = (
+                "📱 <b>Test Send Complaint — Select Destination</b>\n\n"
+                "Choose a preconfigured test WhatsApp number below or enter a custom one:"
             )
             self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
             return
 
+        if data in ("action:test_sr", "action:sr_test_delivery"):
+            self.api.answer_callback_query(cb_id)
+            nums = get_preconfigured_test_numbers()
+            kb = get_test_selection_keyboard("sr", nums)
+            prompt = (
+                "📲 <b>Test Send Service Request — Select Destination</b>\n\n"
+                "Choose a preconfigured test WhatsApp number below or enter a custom one:"
+            )
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        if data.startswith("test_sel:"):
+            # Format: test_sel:{action_type}:{target}
+            parts = data.split(":", 2)
+            act_type = parts[1]
+            target_val = parts[2]
+            label = "Complaint" if act_type == "complaint" else "Service Request"
+            if target_val == "custom":
+                user_states[chat_id] = f"WAITING_FOR_{act_type.upper()}_TEST_PHONE"
+                self.api.answer_callback_query(cb_id)
+                self.api.edit_message_text(
+                    chat_id,
+                    message_id,
+                    f"✏️ <b>Enter Target Mobile Number for {label} Test</b>\n\n"
+                    "Please reply with the 10-digit mobile number (e.g. <code>+919846000000</code> or <code>9846000000</code>):",
+                )
+            else:
+                self.api.answer_callback_query(cb_id)
+                nums_text = "<b>ALL preconfigured test numbers</b>" if target_val == "ALL" else f"📱 <b>{target_val}</b>"
+                prompt = (
+                    f"⚠️ <b>Confirm Action: Test Send {label}</b>\n\n"
+                    f"Are you sure you want to generate {label} reports and send to:\n"
+                    f"{nums_text}?"
+                )
+                kb = get_confirmation_keyboard(
+                    confirm_data=f"exec:test_{act_type}:{target_val}",
+                    cancel_data=f"action:test_{act_type}",
+                )
+                self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        # Legacy phone number callback compatibility
         if data.startswith("num:"):
             target_val = data.split(":", 1)[1]
-            if target_val == "custom":
-                user_states[chat_id] = "WAITING_FOR_PHONE"
-                self.api.answer_callback_query(cb_id)
-                self.api.edit_message_text(
-                    chat_id,
-                    message_id,
-                    "✏️ <b>Enter Target Mobile Number</b>\n\n"
-                    "Please reply with the phone number (e.g. <code>+919846000000</code> or <code>9846000000</code>):",
-                )
-            else:
-                self.api.answer_callback_query(cb_id)
-                prompt = (
-                    "⚠️ <b>Confirm Action: Test Delivery</b>\n\n"
-                    f"Are you sure you want to generate reports and send to:\n"
-                    f"📱 <b>{target_val}</b>?"
-                )
-                kb = get_confirmation_keyboard(confirm_data=f"exec:test_delivery:{target_val}")
-                self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            self.handle_callback(cb_id, chat_id, message_id, f"test_sel:complaint:{target_val}")
             return
-
-        if data == "action:send_photos":
-            self.api.answer_callback_query(cb_id)
-            prompt = (
-                "⚠️ <b>Confirm Action: Send Report Photos Here</b>\n\n"
-                "Are you sure you want to send all 4 high-resolution report cards directly into this chat?"
-            )
-            kb = get_confirmation_keyboard(confirm_data="exec:send_photos")
-            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
-            return
-
-        # --- Service Request Callbacks ---
-        if data == "menu:sr":
-            self.api.answer_callback_query(cb_id)
-            kb = get_sr_menu_keyboard()
-            prompt = (
-                "📋 <b>Service Request Pending Reports (ACSO-wise)</b>\n\n"
-                "Select an action below to dispatch Service Request pending reports or send test deliveries:"
-            )
-            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
-            return
-
-        if data == "action:sr_dispatch":
-            self.api.answer_callback_query(cb_id)
-            prompt = (
-                "⚠️ <b>Confirm Action: Service Request Dispatch Rules</b>\n\n"
-                "Are you sure you want to run the Service Request cycle and dispatch pending reports to all configured <b>WhatsApp Groups</b> & ACSO contacts?"
-            )
-            kb = get_confirmation_keyboard(confirm_data="exec:sr_dispatch", cancel_data="menu:sr")
-            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
-            return
-
-        if data == "action:sr_test_delivery":
-            self.api.answer_callback_query(cb_id)
-            kb = get_phone_selection_keyboard(TELEGRAM_TEST_PHONE, prefix="srnum")
-            prompt = (
-                "📲 <b>Service Request Test Delivery</b>\n\n"
-                "Select a destination phone number below or enter a custom one:"
-            )
-            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
-            return
-
         if data.startswith("srnum:"):
             target_val = data.split(":", 1)[1]
-            if target_val == "custom":
-                user_states[chat_id] = "WAITING_FOR_SR_PHONE"
-                self.api.answer_callback_query(cb_id)
-                self.api.edit_message_text(
-                    chat_id,
-                    message_id,
-                    "✏️ <b>Enter Target Mobile Number for Service Request</b>\n\n"
-                    "Please reply with the phone number (e.g. <code>+919846000000</code> or <code>9846000000</code>):",
-                )
-            else:
-                self.api.answer_callback_query(cb_id)
-                prompt = (
-                    "⚠️ <b>Confirm Action: Service Request Test Delivery</b>\n\n"
-                    f"Are you sure you want to generate SR reports and send to:\n"
-                    f"📱 <b>{target_val}</b>?"
-                )
-                kb = get_confirmation_keyboard(confirm_data=f"exec:sr_test_delivery:{target_val}", cancel_data="menu:sr")
-                self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            self.handle_callback(cb_id, chat_id, message_id, f"test_sel:sr:{target_val}")
             return
 
-        if data == "action:sr_send_photos":
+        if data in ("action:send_reports_telegram", "action:send_photos", "action:sr_send_photos"):
             self.api.answer_callback_query(cb_id)
             prompt = (
-                "⚠️ <b>Confirm Action: Send Service Request Report Cards Here</b>\n\n"
-                "Are you sure you want to send the latest Service Request pending report cards into this chat?"
+                "⚠️ <b>Confirm Action: Send Reports in Telegram</b>\n\n"
+                "Are you sure you want to send all high-resolution report cards (Complaint & Service Request) directly into this chat?"
             )
-            kb = get_confirmation_keyboard(confirm_data="exec:sr_send_photos", cancel_data="menu:sr")
+            kb = get_confirmation_keyboard(confirm_data="exec:send_telegram_reports", cancel_data="menu:render_send")
             self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
             return
 
-        # 3. Confirmed Executions (exec:*)
+        # 4. Test Numbers Management Prompts
+        if data == "action:manage_test_numbers":
+            self.api.answer_callback_query(cb_id)
+            nums = get_preconfigured_test_numbers()
+            msg = format_test_numbers_manager_message(nums)
+            kb = get_test_numbers_manager_keyboard(nums)
+            self.api.edit_message_text(chat_id, message_id, msg, reply_markup=kb)
+            return
+
+        if data == "tnum:add_prompt":
+            user_states[chat_id] = "WAITING_FOR_ADD_TEST_PHONE"
+            self.api.answer_callback_query(cb_id)
+            self.api.edit_message_text(
+                chat_id,
+                message_id,
+                "✏️ <b>Enter New Test Mobile Number</b>\n\n"
+                "Please reply with the 10-digit mobile number to add to preconfigured test recipients:",
+            )
+            return
+
+        if data == "tnum:remove_menu":
+            self.api.answer_callback_query(cb_id)
+            nums = get_preconfigured_test_numbers()
+            kb = get_remove_test_numbers_keyboard(nums)
+            self.api.edit_message_text(
+                chat_id,
+                message_id,
+                "➖ <b>Remove a Test Number</b>\n\nSelect a number below to remove from preconfigured recipients:",
+                reply_markup=kb,
+            )
+            return
+
+        if data.startswith("tnum:del_prompt:"):
+            num_to_del = data.split(":", 2)[2]
+            self.api.answer_callback_query(cb_id)
+            prompt = (
+                "⚠️ <b>Confirm Action: Remove Test Number</b>\n\n"
+                f"Are you sure you want to remove <b>{num_to_del}</b> from preconfigured test numbers?"
+            )
+            kb = get_confirmation_keyboard(
+                confirm_data=f"exec:del_tnum:{num_to_del}",
+                cancel_data="action:manage_test_numbers",
+            )
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        if data == "tnum:reset_prompt":
+            self.api.answer_callback_query(cb_id)
+            prompt = (
+                "⚠️ <b>Confirm Action: Reset Test Numbers</b>\n\n"
+                "Are you sure you want to reset preconfigured test numbers back to system defaults?"
+            )
+            kb = get_confirmation_keyboard(confirm_data="exec:reset_tnum", cancel_data="action:manage_test_numbers")
+            self.api.edit_message_text(chat_id, message_id, prompt, reply_markup=kb)
+            return
+
+        # 5. Confirmed Executions (exec:*)
+        if data == "exec:close":
+            self.api.answer_callback_query(cb_id, text="Menu closed.")
+            del_res = self.api.delete_message(chat_id, message_id)
+            if not del_res.get("ok"):
+                self.api.edit_message_text(
+                    chat_id,
+                    message_id,
+                    "👋 <b>Menu Closed</b>\n\n<i>Use /menu or /start to open the Control Center again.</i>",
+                    reply_markup={"inline_keyboard": [[{"text": "🎛 Open Menu", "callback_data": "menu:main"}]]},
+                )
+            return
+
         if data == "exec:srv_start":
             self.api.answer_callback_query(cb_id, text="Confirmed. Starting service...")
             self.handle_service_action(chat_id, message_id, "start")
@@ -823,36 +1143,80 @@ class TelegramBotRunner:
             self.handle_service_action(chat_id, message_id, "restart")
             return
 
-        if data == "exec:dispatch_groups":
-            self.api.answer_callback_query(cb_id, text="Confirmed. Triggering group dispatch...")
-            self.execute_group_dispatch_async(chat_id, message_id)
+        if data == "exec:srv_status":
+            self.api.answer_callback_query(cb_id, text="Confirmed. Refreshing status...")
+            st = get_service_status()
+            msg = "🔄 <b>Status Refreshed</b>\n\n" + format_control_menu_message(st)
+            kb = get_control_menu_keyboard(st["is_active"])
+            self.api.edit_message_text(chat_id, message_id, msg, reply_markup=kb)
+            return
+
+        if data in ("exec:send_complaint_groups", "exec:dispatch_groups"):
+            self.api.answer_callback_query(cb_id, text="Confirmed. Triggering Complaint dispatch...")
+            self.execute_complaint_group_dispatch_async(chat_id, message_id)
+            return
+
+        if data in ("exec:send_sr_groups", "exec:sr_dispatch"):
+            self.api.answer_callback_query(cb_id, text="Confirmed. Triggering SR dispatch...")
+            self.execute_sr_group_dispatch_async(chat_id, message_id)
+            return
+
+        if data.startswith("exec:test_complaint:"):
+            target = data.split(":", 2)[2]
+            self.api.answer_callback_query(cb_id, text="Confirmed. Delivering Complaint test...")
+            self.execute_test_complaint_async(chat_id, target, message_id)
             return
 
         if data.startswith("exec:test_delivery:"):
-            target_phone = data.split(":", 2)[2]
-            self.api.answer_callback_query(cb_id, text=f"Confirmed. Sending to {target_phone}...")
-            self.execute_test_delivery_async(chat_id, target_phone, message_id)
+            target = data.split(":", 2)[2]
+            self.api.answer_callback_query(cb_id, text="Confirmed. Delivering Complaint test...")
+            self.execute_test_complaint_async(chat_id, target, message_id)
             return
 
-        if data == "exec:send_photos":
-            self.api.answer_callback_query(cb_id, text="Confirmed. Delivering photos...")
-            self.send_report_photos_async(chat_id, message_id)
-            return
-
-        if data == "exec:sr_dispatch":
-            self.api.answer_callback_query(cb_id, text="Confirmed. Triggering SR dispatch...")
-            self.execute_sr_dispatch_async(chat_id, message_id)
+        if data.startswith("exec:test_sr:"):
+            target = data.split(":", 2)[2]
+            self.api.answer_callback_query(cb_id, text="Confirmed. Delivering SR test...")
+            self.execute_test_sr_async(chat_id, target, message_id)
             return
 
         if data.startswith("exec:sr_test_delivery:"):
-            target_phone = data.split(":", 2)[2]
-            self.api.answer_callback_query(cb_id, text=f"Confirmed. Sending SR report to {target_phone}...")
-            self.execute_sr_test_delivery_async(chat_id, target_phone, message_id)
+            target = data.split(":", 2)[2]
+            self.api.answer_callback_query(cb_id, text="Confirmed. Delivering SR test...")
+            self.execute_test_sr_async(chat_id, target, message_id)
             return
 
-        if data == "exec:sr_send_photos":
-            self.api.answer_callback_query(cb_id, text="Confirmed. Delivering SR cards...")
-            self.send_sr_report_photos_async(chat_id, message_id)
+        if data in ("exec:send_telegram_reports", "exec:send_photos", "exec:sr_send_photos"):
+            self.api.answer_callback_query(cb_id, text="Confirmed. Sending reports in Telegram...")
+            self.execute_send_telegram_reports_async(chat_id, message_id)
+            return
+
+        if data.startswith("exec:add_tnum:"):
+            num_to_add = data.split(":", 2)[2]
+            self.api.answer_callback_query(cb_id, text=f"Number added: {num_to_add}")
+            add_preconfigured_test_number(num_to_add)
+            nums = get_preconfigured_test_numbers()
+            msg = f"✅ Added <b>{num_to_add}</b> to test numbers!\n\n" + format_test_numbers_manager_message(nums)
+            kb = get_test_numbers_manager_keyboard(nums)
+            self.api.edit_message_text(chat_id, message_id, msg, reply_markup=kb)
+            return
+
+        if data.startswith("exec:del_tnum:"):
+            num_to_del = data.split(":", 2)[2]
+            self.api.answer_callback_query(cb_id, text=f"Number removed: {num_to_del}")
+            remove_preconfigured_test_number(num_to_del)
+            nums = get_preconfigured_test_numbers()
+            msg = f"✅ Removed <b>{num_to_del}</b> from test numbers.\n\n" + format_test_numbers_manager_message(nums)
+            kb = get_test_numbers_manager_keyboard(nums)
+            self.api.edit_message_text(chat_id, message_id, msg, reply_markup=kb)
+            return
+
+        if data == "exec:reset_tnum":
+            self.api.answer_callback_query(cb_id, text="Reset to defaults.")
+            reset_preconfigured_test_numbers()
+            nums = get_preconfigured_test_numbers()
+            msg = "✅ Test numbers reset to system defaults.\n\n" + format_test_numbers_manager_message(nums)
+            kb = get_test_numbers_manager_keyboard(nums)
+            self.api.edit_message_text(chat_id, message_id, msg, reply_markup=kb)
             return
 
     # --- Asynchronous Action Handlers ---
@@ -877,8 +1241,8 @@ class TelegramBotRunner:
 
             st = get_service_status()
             res_icon = "✅" if ok else "❌"
-            notice = f"{res_icon} <b>{msg}</b>\n\n" + format_status_message(st)
-            kb = get_main_menu_keyboard(st["is_active"])
+            notice = f"{res_icon} <b>{msg}</b>\n\n" + format_control_menu_message(st)
+            kb = get_control_menu_keyboard(st["is_active"])
 
             if message_id:
                 self.api.edit_message_text(chat_id, message_id, notice, reply_markup=kb)
@@ -887,123 +1251,46 @@ class TelegramBotRunner:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def execute_group_dispatch_async(self, chat_id: int, message_id: Optional[int]):
+    def execute_complaint_group_dispatch_async(self, chat_id: int, message_id: Optional[int] = None):
         def worker():
             status_text = (
                 "⏳ <b>Automated Complaint Pipeline Running</b>\n\n"
                 "• Downloading latest tickets from Softcode & SMS portals...\n"
                 "• Computing complaint summary tables...\n"
                 "• Rendering High-DPI Retina report cards...\n"
-                "• Dispatching to configured WhatsApp Groups & ACSO contacts..."
-            )
-            if message_id:
-                self.api.edit_message_text(chat_id, message_id, status_text)
-            else:
-                sent = self.api.send_message(chat_id, status_text)
-                target_msg_id = sent.get("result", {}).get("message_id")
-
-            ok, res_msg = trigger_group_dispatch("thrissur")
-            st = get_service_status()
-            kb = get_main_menu_keyboard(st["is_active"])
-
-            if ok:
-                finish_text = (
-                    "✅ <b>Report-to-Group Dispatch Complete!</b>\n\n"
-                    f"<i>{res_msg}</i>\n\n"
-                    f"{format_status_message(st)}"
-                )
-            else:
-                finish_text = (
-                    "❌ <b>Group Dispatch Error</b>\n\n"
-                    f"<code>{res_msg}</code>\n\n"
-                    f"{format_status_message(st)}"
-                )
-
-            if message_id:
-                self.api.edit_message_text(chat_id, message_id, finish_text, reply_markup=kb)
-            else:
-                self.api.send_message(chat_id, finish_text, reply_markup=kb)
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def execute_test_delivery_async(
-        self, chat_id: int, target_phone: str, message_id: Optional[int] = None
-    ):
-        def worker():
-            status_text = (
-                f"⏳ <b>Generating & Sending Test Delivery</b>\n\n"
-                f"• Target Number: <code>{target_phone}</code>\n"
-                "• Downloading latest CRM complaints...\n"
-                "• Rendering high-resolution Retina cards...\n"
-                "• Dispatching via WhatsApp Web..."
+                "• Dispatching to preconfigured WhatsApp Groups & ACSO contacts..."
             )
             if message_id:
                 self.api.edit_message_text(chat_id, message_id, status_text)
             else:
                 self.api.send_message(chat_id, status_text)
 
-            ok, res_msg = trigger_test_delivery(target_phone, "thrissur")
-            st = get_service_status()
-            kb = get_main_menu_keyboard(st["is_active"])
+            ok, res_msg = trigger_group_dispatch("thrissur")
+            kb = get_render_send_menu_keyboard()
 
             if ok:
                 finish_text = (
-                    f"✅ <b>Test Delivery Succeeded!</b>\n\n"
-                    f"Reports sent to: <code>{target_phone}</code>\n"
-                    f"<i>{res_msg}</i>\n\n"
-                    f"{format_status_message(st)}"
+                    "✅ <b>Complaint Group Dispatch Complete!</b>\n\n"
+                    f"<i>{res_msg}</i>"
                 )
             else:
                 finish_text = (
-                    f"❌ <b>Test Delivery Failed</b>\n\n"
-                    f"Target: <code>{target_phone}</code>\n"
-                    f"Error: <code>{res_msg}</code>\n\n"
-                    f"{format_status_message(st)}"
+                    "❌ <b>Complaint Group Dispatch Error</b>\n\n"
+                    f"<code>{res_msg}</code>"
                 )
 
             self.api.send_message(chat_id, finish_text, reply_markup=kb)
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def send_report_photos_async(self, chat_id: int, message_id: Optional[int] = None):
-        def worker():
-            if message_id:
-                self.api.edit_message_text(
-                    chat_id,
-                    message_id,
-                    "⏳ <b>Delivering High-DPI Report Cards to Telegram...</b>\nPlease wait a moment.",
-                )
-            cards = [
-                ("ADL Broadband — Team Leaders", ADL_REPORT_IMAGE_PATH),
-                ("ADTv Digital TV — Team Leaders", ADTV_REPORT_IMAGE_PATH),
-                ("ADL Broadband — ACSO Centers", ADL_ACSO_REPORT_IMAGE_PATH),
-                ("ADTv Digital TV — ACSO Centers", ADTV_ACSO_REPORT_IMAGE_PATH),
-            ]
-            sent_count = 0
-            for title, path in cards:
-                if path.exists():
-                    self.api.send_photo(chat_id, path, caption=f"📊 <b>{title}</b>")
-                    sent_count += 1
-                    time.sleep(1)
-
-            if sent_count == 0:
-                self.api.send_message(
-                    chat_id,
-                    "⚠️ No report images found in <code>output/</code> directory. Click 'Report-to-Group Dispatch Rules' or 'Test Delivery' to generate fresh reports.",
-                )
-            else:
-                self.send_main_menu(chat_id)
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def execute_sr_dispatch_async(self, chat_id: int, message_id: Optional[int] = None):
+    def execute_sr_group_dispatch_async(self, chat_id: int, message_id: Optional[int] = None):
         def worker():
             status_text = (
                 "⏳ <b>Service Request Pending Pipeline Running</b>\n\n"
                 "• Parsing raw Service Request workbooks...\n"
                 "• Computing ACSO-wise pending days summary...\n"
                 "• Rendering High-DPI Retina report cards...\n"
-                "• Dispatching to configured WhatsApp Groups & ACSO contacts..."
+                "• Dispatching to preconfigured WhatsApp Groups & ACSO contacts..."
             )
             if message_id:
                 self.api.edit_message_text(chat_id, message_id, status_text)
@@ -1011,7 +1298,7 @@ class TelegramBotRunner:
                 self.api.send_message(chat_id, status_text)
 
             ok, res_msg = trigger_sr_dispatch("thrissur")
-            kb = get_sr_menu_keyboard()
+            kb = get_render_send_menu_keyboard()
 
             if ok:
                 finish_text = (
@@ -1024,20 +1311,54 @@ class TelegramBotRunner:
                     f"<code>{res_msg}</code>"
                 )
 
-            if message_id:
-                self.api.edit_message_text(chat_id, message_id, finish_text, reply_markup=kb)
-            else:
-                self.api.send_message(chat_id, finish_text, reply_markup=kb)
+            self.api.send_message(chat_id, finish_text, reply_markup=kb)
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def execute_sr_test_delivery_async(
-        self, chat_id: int, target_phone: str, message_id: Optional[int] = None
+    def execute_test_complaint_async(
+        self, chat_id: int, target: str, message_id: Optional[int] = None
     ):
         def worker():
+            targets = get_preconfigured_test_numbers() if target == "ALL" else [target]
+            status_text = (
+                f"⏳ <b>Generating & Sending Complaint Test Delivery</b>\n\n"
+                f"• Target(s): <code>{', '.join(targets)}</code>\n"
+                "• Downloading latest CRM complaints...\n"
+                "• Rendering high-resolution Retina cards...\n"
+                "• Dispatching via WhatsApp Web..."
+            )
+            if message_id:
+                self.api.edit_message_text(chat_id, message_id, status_text)
+            else:
+                self.api.send_message(chat_id, status_text)
+
+            results: List[Tuple[str, bool, str]] = []
+            for t in targets:
+                ok, res_msg = trigger_test_delivery(t, "thrissur")
+                results.append((t, ok, res_msg))
+
+            kb = get_render_send_menu_keyboard()
+            all_ok = all(r[1] for r in results)
+            status_lines = "\n".join(
+                [f"• {r[0]}: {'✅ ' + str(r[2]) if r[1] else '❌ ' + str(r[2])}" for r in results]
+            )
+            icon = "✅" if all_ok else "⚠️"
+            finish_text = (
+                f"{icon} <b>Complaint Test Delivery Completed</b>\n\n"
+                f"{status_lines}"
+            )
+            self.api.send_message(chat_id, finish_text, reply_markup=kb)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def execute_test_sr_async(
+        self, chat_id: int, target: str, message_id: Optional[int] = None
+    ):
+        def worker():
+            targets = get_preconfigured_test_numbers() if target == "ALL" else [target]
             status_text = (
                 f"⏳ <b>Generating & Sending Service Request Test Delivery</b>\n\n"
-                f"• Target Number: <code>{target_phone}</code>\n"
+                f"• Target(s): <code>{', '.join(targets)}</code>\n"
                 "• Reading Service Request ticket ledger...\n"
                 "• Rendering high-resolution ACSO report cards...\n"
                 "• Dispatching via WhatsApp Web..."
@@ -1047,35 +1368,38 @@ class TelegramBotRunner:
             else:
                 self.api.send_message(chat_id, status_text)
 
-            ok, res_msg = trigger_sr_test_delivery(target_phone, "thrissur")
-            kb = get_sr_menu_keyboard()
+            results: List[Tuple[str, bool, str]] = []
+            for t in targets:
+                ok, res_msg = trigger_sr_test_delivery(t, "thrissur")
+                results.append((t, ok, res_msg))
 
-            if ok:
-                finish_text = (
-                    f"✅ <b>Service Request Test Delivery Succeeded!</b>\n\n"
-                    f"Reports sent to: <code>{target_phone}</code>\n"
-                    f"<i>{res_msg}</i>"
-                )
-            else:
-                finish_text = (
-                    f"❌ <b>Service Request Test Delivery Failed</b>\n\n"
-                    f"Target: <code>{target_phone}</code>\n"
-                    f"Error: <code>{res_msg}</code>"
-                )
-
+            kb = get_render_send_menu_keyboard()
+            all_ok = all(r[1] for r in results)
+            status_lines = "\n".join(
+                [f"• {r[0]}: {'✅ ' + str(r[2]) if r[1] else '❌ ' + str(r[2])}" for r in results]
+            )
+            icon = "✅" if all_ok else "⚠️"
+            finish_text = (
+                f"{icon} <b>Service Request Test Delivery Completed</b>\n\n"
+                f"{status_lines}"
+            )
             self.api.send_message(chat_id, finish_text, reply_markup=kb)
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def send_sr_report_photos_async(self, chat_id: int, message_id: Optional[int] = None):
+    def execute_send_telegram_reports_async(self, chat_id: int, message_id: Optional[int] = None):
         def worker():
             if message_id:
                 self.api.edit_message_text(
                     chat_id,
                     message_id,
-                    "⏳ <b>Delivering High-DPI SR Report Cards to Telegram...</b>\nPlease wait a moment.",
+                    "⏳ <b>Delivering High-DPI Report Cards to Telegram...</b>\nPlease wait a moment.",
                 )
             cards = [
+                ("ADL Broadband — Team Leaders", ADL_REPORT_IMAGE_PATH),
+                ("ADTv Digital TV — Team Leaders", ADTV_REPORT_IMAGE_PATH),
+                ("ADL Broadband — ACSO Centers", ADL_ACSO_REPORT_IMAGE_PATH),
+                ("ADTv Digital TV — ACSO Centers", ADTV_ACSO_REPORT_IMAGE_PATH),
                 ("ADL Broadband — Service Requests (ACSO)", ADL_SR_REPORT_IMAGE_PATH),
                 ("ADTv Digital TV — Service Requests (ACSO)", ADTV_SR_REPORT_IMAGE_PATH),
                 ("Daily Service Request Combined Report", SR_REPORT_IMAGE_PATH),
@@ -1087,17 +1411,40 @@ class TelegramBotRunner:
                     sent_count += 1
                     time.sleep(1)
 
-            kb = get_sr_menu_keyboard()
+            kb = get_render_send_menu_keyboard()
             if sent_count == 0:
                 self.api.send_message(
                     chat_id,
-                    "⚠️ No SR report images found in <code>output/</code> directory. Run SR dispatch or generate reports to create fresh cards.",
+                    "⚠️ No report images found in <code>output/</code> directory. Click 'Send Complaint' or 'Send SR' to generate fresh reports.",
                     reply_markup=kb,
                 )
             else:
-                self.api.send_message(chat_id, "📋 <b>Service Request Menu:</b>", reply_markup=kb)
+                self.api.send_message(
+                    chat_id,
+                    f"✅ Delivered <b>{sent_count}</b> High-DPI report card(s) to Telegram!",
+                    reply_markup=kb,
+                )
 
         threading.Thread(target=worker, daemon=True).start()
+
+    # Legacy method aliases for backwards compatibility
+    def execute_group_dispatch_async(self, chat_id: int, message_id: Optional[int] = None):
+        return self.execute_complaint_group_dispatch_async(chat_id, message_id)
+
+    def execute_test_delivery_async(self, chat_id: int, target_phone: str, message_id: Optional[int] = None):
+        return self.execute_test_complaint_async(chat_id, target_phone, message_id)
+
+    def send_report_photos_async(self, chat_id: int, message_id: Optional[int] = None):
+        return self.execute_send_telegram_reports_async(chat_id, message_id)
+
+    def execute_sr_dispatch_async(self, chat_id: int, message_id: Optional[int] = None):
+        return self.execute_sr_group_dispatch_async(chat_id, message_id)
+
+    def execute_sr_test_delivery_async(self, chat_id: int, target_phone: str, message_id: Optional[int] = None):
+        return self.execute_test_sr_async(chat_id, target_phone, message_id)
+
+    def send_sr_report_photos_async(self, chat_id: int, message_id: Optional[int] = None):
+        return self.execute_send_telegram_reports_async(chat_id, message_id)
 
 
 # --- CLI Entry Point ---
