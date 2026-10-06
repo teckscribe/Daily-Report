@@ -578,13 +578,7 @@ def get_phone_selection_keyboard(default_phone: str = "", prefix: str = "num") -
 # --- Message Formatting Helpers ---
 
 def format_main_menu_message() -> str:
-    return (
-        "🎛 <b>Daily QOS Tracker — Control Center</b>\n\n"
-        "Please select a category from the menu below:\n\n"
-        "• <b>⚙️ Control Buttons:</b> Start, Stop, Restart, or check Service Status\n"
-        "• <b>🚀 Render and Send:</b> Dispatch reports, test delivery, or update test numbers\n"
-        "• <b>❌ Close:</b> Dismiss this menu interface"
-    )
+    return "🎛 <b>Daily QOS Tracker — Control Panel</b>"
 
 
 def format_status_message(status_info: Dict[str, Any]) -> str:
