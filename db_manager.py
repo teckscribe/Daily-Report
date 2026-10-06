@@ -87,6 +87,8 @@ def init_db():
         phone TEXT DEFAULT '',
         email TEXT DEFAULT '',
         sort_order INTEGER DEFAULT 0,
+        crm_name TEXT DEFAULT '',
+        emp_code TEXT DEFAULT '',
         FOREIGN KEY (region_id) REFERENCES regions (id) ON DELETE CASCADE
     )
     """)
@@ -158,6 +160,11 @@ def init_db():
         c.execute("ALTER TABLE acsos ADD COLUMN phone TEXT DEFAULT ''")
     if "email" not in acso_cols:
         c.execute("ALTER TABLE acsos ADD COLUMN email TEXT DEFAULT ''")
+    if "crm_name" not in acso_cols:
+        c.execute("ALTER TABLE acsos ADD COLUMN crm_name TEXT DEFAULT ''")
+        c.execute("UPDATE acsos SET crm_name = acso_name WHERE crm_name IS NULL OR crm_name = ''")
+    if "emp_code" not in acso_cols:
+        c.execute("ALTER TABLE acsos ADD COLUMN emp_code TEXT DEFAULT ''")
 
     c.execute("PRAGMA table_info(employees)")
     emp_cols = [r[1] for r in c.fetchall()]
@@ -370,8 +377,8 @@ def add_acso(region_id: str, data: Dict[str, Any]) -> int:
     c = conn.cursor()
     c.execute("""
     INSERT INTO acsos 
-    (region_id, center_name, acso_name, adtv_acso_name, adl_center_display, adtv_center_display, pd_adl_center_key, pd_adtv_center_key, pp_adl_center_key, pp_adtv_center_key, phone, email, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (region_id, center_name, acso_name, adtv_acso_name, adl_center_display, adtv_center_display, pd_adl_center_key, pd_adtv_center_key, pp_adl_center_key, pp_adtv_center_key, phone, email, sort_order, crm_name, emp_code)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         region_id,
         data.get("center_name", "").strip(),
@@ -385,7 +392,9 @@ def add_acso(region_id: str, data: Dict[str, Any]) -> int:
         data.get("pp_adtv_center_key", data.get("center_name", "")).strip(),
         str(data.get("phone", "")).strip(),
         str(data.get("email", data.get("gmail", ""))).strip(),
-        int(data.get("sort_order", 0))
+        int(data.get("sort_order", 0)),
+        str(data.get("crm_name", data.get("acso_name", ""))).strip(),
+        str(data.get("emp_code", "")).strip()
     ))
     acso_id = c.lastrowid
     conn.commit()
@@ -409,7 +418,9 @@ def update_acso(acso_id: int, data: Dict[str, Any]) -> bool:
         pp_adtv_center_key = ?,
         phone = ?,
         email = ?,
-        sort_order = ?
+        sort_order = ?,
+        crm_name = ?,
+        emp_code = ?
     WHERE id = ?
     """, (
         data.get("center_name", "").strip(),
@@ -424,6 +435,8 @@ def update_acso(acso_id: int, data: Dict[str, Any]) -> bool:
         str(data.get("phone", "")).strip(),
         str(data.get("email", data.get("gmail", ""))).strip(),
         int(data.get("sort_order", 0)),
+        str(data.get("crm_name", data.get("acso_name", ""))).strip(),
+        str(data.get("emp_code", "")).strip(),
         acso_id
     ))
     conn.commit()
@@ -980,10 +993,13 @@ def get_unified_directory(region_id: str = "thrissur", auto_sync: bool = True) -
     # 2. ACSOs
     for a in acsos_list:
         name_key = str(a.get("acso_name", "")).strip().lower()
-        matched_emp = emp_map.get(name_key) or {}
+        code = str(a.get("emp_code") or "").strip()
+        matched_emp = (emp_map.get(code) if code else None) or emp_map.get(name_key) or {}
         phone = str(a.get("phone") or matched_emp.get("phone") or "").strip()
         email = str(a.get("email") or matched_emp.get("email") or "").strip()
-        code = str(a.get("emp_code") or matched_emp.get("emp_code") or "").strip()
+        if not code:
+            code = str(matched_emp.get("emp_code") or "").strip()
+        crm_name = a.get("crm_name") if a.get("crm_name") else a.get("acso_name", "").strip()
 
         result.append({
             "id": a["id"],
@@ -994,7 +1010,7 @@ def get_unified_directory(region_id: str = "thrissur", auto_sync: bool = True) -
             "phone": phone,
             "email": email,
             "center_name": a.get("center_name", "").strip(),
-            "crm_name": a.get("acso_name", "").strip(),
+            "crm_name": crm_name,
             "adl_center": a.get("pd_adl_center_key", a.get("center_name", "")).strip(),
             "adtv_center": a.get("pd_adtv_center_key", a.get("adtv_center_display", a.get("center_name", ""))).strip(),
             "prepaid_center": a.get("pp_adl_center_key", a.get("center_name", "")).strip(),
@@ -1025,18 +1041,29 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
 
     for idx, r in enumerate(rows):
         emp_code = str(r.get("emp_code") or r.get("Emp Code") or "").strip()
+        if emp_code.endswith(".0"):
+            emp_code = emp_code[:-2]
+        if emp_code.lower() in ("nan", "none", "null"):
+            emp_code = ""
+
         emp_name = str(r.get("emp_name") or r.get("Employee Display name") or "").strip()
         position = str(r.get("position") or r.get("Position") or "Team Leader").strip()
         phone = str(r.get("phone") or r.get("Phone Number") or r.get("Phone") or r.get("Mobile") or "").strip()
-        if phone.lower() == "nan":
+        if phone.lower() in ("nan", "none", "null"):
             phone = ""
+        elif phone.endswith(".0"):
+            phone = phone[:-2]
+
         email = str(r.get("email") or r.get("gmail") or r.get("Gmail") or r.get("Email") or r.get("Email / Gmail") or "").strip()
-        if email.lower() == "nan":
+        if email.lower() in ("nan", "none", "null"):
             email = ""
         center_name = str(r.get("center_name") or r.get("Center Display name") or "").strip()
         c_key = center_name.lower().strip()
         crm_name_raw = r.get("crm_name") or r.get("Name in Postpaid CRM")
-        crm_name = str(crm_name_raw) if crm_name_raw is not None else emp_name
+        if crm_name_raw is not None and str(crm_name_raw).strip().lower() not in ("nan", "none", "null", ""):
+            crm_name = str(crm_name_raw)
+        else:
+            crm_name = emp_name
         if region_id == "thrissur":
             if crm_name.strip() == "Muhammed Kabeer":
                 crm_name = "Muhammed Kabeer  "
@@ -1073,7 +1100,9 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
             if c_key not in centers_map:
                 centers_map[c_key] = {
                     "center_name": center_name,
+                    "emp_code": emp_code if is_acso else "",
                     "acso_name": emp_name if is_acso else center_name,
+                    "crm_name": crm_name if is_acso else (center_name if not is_acso else emp_name),
                     "adtv_acso_name": emp_name if is_acso else center_name,
                     "adl_center_display": center_name,
                     "adtv_center_display": adtv_center,
@@ -1087,6 +1116,9 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
                 }
             elif is_acso:
                 centers_map[c_key]["acso_name"] = emp_name
+                centers_map[c_key]["crm_name"] = crm_name
+                if emp_code:
+                    centers_map[c_key]["emp_code"] = emp_code
                 centers_map[c_key]["adtv_acso_name"] = emp_name
                 if phone:
                     centers_map[c_key]["phone"] = phone
@@ -1174,8 +1206,9 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
         c.execute("""
         INSERT INTO acsos
         (region_id, center_name, acso_name, adtv_acso_name, adl_center_display, adtv_center_display,
-         pd_adl_center_key, pd_adtv_center_key, pp_adl_center_key, pp_adtv_center_key, phone, email, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         pd_adl_center_key, pd_adtv_center_key, pp_adl_center_key, pp_adtv_center_key, phone, email, sort_order,
+         crm_name, emp_code)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             region_id,
             c_info["center_name"],
@@ -1189,7 +1222,9 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
             c_info["pp_adtv_center_key"],
             c_info.get("phone", ""),
             c_info.get("email", ""),
-            c_info["sort_order"]
+            c_info["sort_order"],
+            c_info.get("crm_name") or c_info["acso_name"],
+            c_info.get("emp_code", "")
         ))
 
     conn.commit()
@@ -1236,6 +1271,8 @@ def add_unified_directory_row(region_id: str, data: Dict[str, Any]) -> int:
             "pp_adtv_center_key": prepaid_center,
             "phone": phone,
             "email": email,
+            "crm_name": crm_name,
+            "emp_code": emp_code,
         })
         add_employee(region_id, {
             "emp_code": emp_code,
@@ -1281,6 +1318,8 @@ def add_unified_directory_row(region_id: str, data: Dict[str, Any]) -> int:
                 "pp_adtv_center_key": prepaid_center,
                 "phone": phone,
                 "email": email,
+                "crm_name": crm_name,
+                "emp_code": emp_code,
             })
 
     try:
@@ -1317,7 +1356,19 @@ def update_unified_directory_row(row_id: int, data: Dict[str, Any], region_id: s
             "pp_adtv_center_key": prepaid_center,
             "phone": phone,
             "email": email,
+            "crm_name": crm_name,
+            "emp_code": emp_code,
         })
+        conn = get_connection()
+        c = conn.cursor()
+        if emp_code:
+            c.execute("UPDATE employees SET name = ?, phone = ?, email = ? WHERE region_id = ? AND emp_code = ?",
+                      (emp_name, phone, email, region_id, emp_code))
+        else:
+            c.execute("UPDATE employees SET name = ?, phone = ?, email = ? WHERE region_id = ? AND role = 'ACSO' AND LOWER(TRIM(center_name)) = LOWER(TRIM(?))",
+                      (emp_name, phone, email, region_id, center_name))
+        conn.commit()
+        conn.close()
     else:
         update_team_leader(row_id, {
             "center_name": center_name,
@@ -1342,6 +1393,12 @@ def update_unified_directory_row(row_id: int, data: Dict[str, Any], region_id: s
             pp_adtv_center_key = ?
         WHERE LOWER(TRIM(center_name)) = LOWER(TRIM(?))
         """, (adtv_center, adl_center, adtv_center, prepaid_center, prepaid_center, center_name))
+        if emp_code:
+            c.execute("UPDATE employees SET name = ?, phone = ?, email = ? WHERE region_id = ? AND emp_code = ?",
+                      (emp_name, phone, email, region_id, emp_code))
+        else:
+            c.execute("UPDATE employees SET name = ?, phone = ?, email = ? WHERE region_id = ? AND role = 'Team Leader' AND LOWER(TRIM(center_name)) = LOWER(TRIM(?))",
+                      (emp_name, phone, email, region_id, center_name))
         conn.commit()
         conn.close()
 

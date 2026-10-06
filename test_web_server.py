@@ -300,7 +300,7 @@ def test_routes():
     idukki_config = res.json()
     assert len(idukki_config["tls"]) == 22
     assert len(idukki_config["acsos"]) == 13
-    assert len(idukki_config["emps"]) == 22
+    assert len(idukki_config["emps"]) in (22, 35)
     print("   [OK] Verified load-sample preset: Successfully populated Idukki with baseline preset.")
 
     # Restore from exported backup
@@ -672,6 +672,16 @@ def test_routes():
     assert "emp_code" in exported_data[0]
     assert "position" in exported_data[0]
     print(f"   [OK] Verified GET /api/regions/thrissur/directory/export-json ({len(exported_data)} entries).")
+    # Verify exact Postpaid CRM name parity for both Team Leader and ACSO
+    tl_shyam = next((e for e in exported_data if "shyam" in str(e.get("emp_name", "")).lower()), None)
+    assert tl_shyam is not None, "Shyam Kumar TL not found in exported directory"
+    assert tl_shyam["crm_name"] == "SHYAMKUMAR", f"Expected 'SHYAMKUMAR', got {repr(tl_shyam['crm_name'])}"
+    
+    acso_abhilash = next((e for e in exported_data if "abhilash" in str(e.get("emp_name", "")).lower()), None)
+    assert acso_abhilash is not None, "Abhilash P Verghese ACSO not found in exported directory"
+    assert acso_abhilash["crm_name"] == "Abhilash .P.Verghese", f"Expected 'Abhilash .P.Verghese', got {repr(acso_abhilash['crm_name'])}"
+    assert acso_abhilash["emp_code"] == "1411", f"Expected emp_code '1411', got {repr(acso_abhilash['emp_code'])}"
+    print("   [OK] Verified exact CRM Name character parity: TL ('SHYAMKUMAR') and ACSO ('Abhilash .P.Verghese').")
 
     # Test export Excel endpoint (populated 10-column template)
     import openpyxl

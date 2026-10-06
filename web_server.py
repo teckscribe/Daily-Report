@@ -105,6 +105,10 @@ class AcsoPayload(BaseModel):
     pp_adtv_center_key: Optional[str] = ""
     adl_center_display: Optional[str] = ""
     adtv_center_display: Optional[str] = ""
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    crm_name: Optional[str] = ""
+    emp_code: Optional[str] = ""
     sort_order: Optional[int] = 0
 
 
@@ -723,9 +727,11 @@ async def upload_directory_endpoint(region_id: str, file: UploadFile = File(...)
         if email.lower() in ("nan", "none", "null"):
             email = ""
 
-        crm_name = str(row.get("crm_name", emp_name)).strip()
-        if not crm_name or crm_name.lower() in ("nan", "none", "null"):
+        crm_val = row.get("crm_name")
+        if pd.isna(crm_val) or str(crm_val).strip().lower() in ("nan", "none", "null", ""):
             crm_name = emp_name
+        else:
+            crm_name = str(crm_val)
 
         adl_center = str(row.get("adl_center", center_name)).strip()
         if not adl_center or adl_center.lower() in ("nan", "none", "null"):
@@ -1536,12 +1542,24 @@ def api_cleanup_logs(days: int = 3):
 # --- Background Scheduler Loop ---
 
 async def background_scheduler_loop():
+    last_cleanup_hour = -1
     while True:
         try:
             await asyncio.sleep(25)
+            now = datetime.now()
+
+            # Automatic hourly cleanup of raw CRM downloads and expired logs
+            if now.hour != last_cleanup_hour:
+                last_cleanup_hour = now.hour
+                try:
+                    from crm_downloader import cleanup_old_download_files
+                    cleanup_old_download_files()
+                    logger_setup.cleanup_old_logs()
+                except Exception:
+                    pass
+
             if db_manager.get_setting("scheduler_enabled", "1") != "1":
                 continue
-            now = datetime.now()
             current_hh_mm = now.strftime("%H:%M")
             today_date = now.strftime("%Y-%m-%d")
 

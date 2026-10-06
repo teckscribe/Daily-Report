@@ -19,6 +19,7 @@ BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "3"))
+DATA_RETENTION_HOURS = int(os.getenv("DATA_RETENTION_HOURS", "24"))
 
 # --- Excel Report Paths ---
 def resolve_target_excel_path() -> str:

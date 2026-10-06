@@ -30,7 +30,48 @@ from config import (
     PREPAID_PWD,
     DOWNLOADS_DIR,
     DATA_DIR,
+    DATA_RETENTION_HOURS,
 )
+
+
+def cleanup_old_download_files(hours: int = DATA_RETENTION_HOURS) -> int:
+    """
+    Cleans up raw downloaded Excel / CSV files in DATA_DIR older than `hours` (default 24h).
+    Never touches critical directory configurations, backups, or seeds.
+    Preserves at least the single latest file of each type as a fallback.
+    """
+    if not DATA_DIR.exists():
+        return 0
+
+    from datetime import datetime, timedelta
+    cutoff = datetime.now() - timedelta(hours=hours)
+    patterns = [
+        "Pending Tickets - *.xlsx",
+        "Pending Tickets DTv - *.xlsx",
+        "Pending_tickets_Report - *.csv",
+        "Pending_tickets_Report - *.xlsx",
+        "Pending_SR_*.xlsx",
+        "Daily_Service_Request_*.xlsx",
+    ]
+    deleted_count = 0
+    for pat in patterns:
+        matching = sorted(DATA_DIR.glob(pat), key=lambda f: f.stat().st_mtime)
+        if len(matching) <= 1:
+            # Always keep at least the latest file as a local fallback
+            continue
+        # Check all except the most recent
+        for f in matching[:-1]:
+            try:
+                mtime = datetime.fromtimestamp(f.stat().st_mtime)
+                if mtime < cutoff:
+                    f.unlink(missing_ok=True)
+                    deleted_count += 1
+            except Exception as e:
+                pass
+
+    if deleted_count > 0:
+        print(f"[Data Retention] Automatically purged {deleted_count} CRM export file(s) older than {hours} hours.")
+    return deleted_count
 
 
 def find_latest_file(directory: Path, pattern: str) -> Optional[Path]:
@@ -384,6 +425,11 @@ def download_from_crm(
     print(f"  [+] ADTv:    {adtv_path}")
     print(f"  [+] Prepaid: {prep_path}")
     print("=" * 60)
+
+    try:
+        cleanup_old_download_files()
+    except Exception:
+        pass
 
     return adl_path, adtv_path, prep_path
 
