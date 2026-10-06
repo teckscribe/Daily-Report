@@ -683,6 +683,36 @@ def test_routes():
     assert sync_result in (True, False)
     print("   [OK] Verified auto_sync_directory_from_disk executes flawlessly.")
 
+    # Test Bulk Delete Employee Directory Endpoint
+    test_emp1 = client.post("/api/regions/ernakulam/directory", json={
+        "emp_code": "TEST_BULK_01",
+        "emp_name": "Test Bulk Employee 1",
+        "position": "Team Leader",
+        "phone": "9999111100",
+        "email": "bulk1@test.com",
+        "center_name": "Kochi Center",
+        "entry_type": "tl"
+    }).json()["id"]
+    test_emp2 = client.post("/api/regions/ernakulam/directory", json={
+        "emp_code": "TEST_BULK_02",
+        "emp_name": "Test Bulk Employee 2",
+        "position": "ACSO",
+        "phone": "9999111101",
+        "email": "bulk2@test.com",
+        "center_name": "Kochi Center",
+        "entry_type": "acso"
+    }).json()["id"]
+
+    res_bulk_del = client.post("/api/regions/ernakulam/directory/bulk-delete", json={
+        "items": [
+            {"id": test_emp1, "entry_type": "tl"},
+            {"id": test_emp2, "entry_type": "acso"}
+        ]
+    })
+    assert res_bulk_del.status_code == 200
+    assert res_bulk_del.json()["deleted_count"] == 2
+    print("   [OK] Verified POST /api/regions/{region_id}/directory/bulk-delete endpoint (multiple select & delete).")
+
     # Verify clean sample preset exists and contains no personal contact numbers
     sample_seed = Path(db_manager.DATA_DIR / "seeds" / "sample_preset.json")
     assert sample_seed.exists()

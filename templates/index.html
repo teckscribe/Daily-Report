@@ -655,6 +655,9 @@
 
           <!-- Action Buttons Group -->
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <button class="btn btn-danger" id="btn-bulk-delete-dir" onclick="bulkDeleteDirectoryEntries()" style="display: none; background: #dc2626; border-color: #b91c1c; color: #fff; font-weight: 700;" title="Delete selected employees from directory">
+              <span>🗑️</span> Delete Selected (<span id="selected-dir-count">0</span>)
+            </button>
             <button class="btn btn-secondary" onclick="downloadDirectoryTemplate()" title="Download Excel template (Employee_Directory_Template.xlsx)">
               <span>📥</span> Download Template
             </button>
@@ -687,6 +690,9 @@
           <table class="data-table" id="directory-unified-table">
             <thead>
               <tr>
+                <th style="width: 38px; text-align: center;">
+                  <input type="checkbox" id="select-all-dir-checkbox" onchange="toggleSelectAllDirectory(this.checked)" title="Select / Deselect all visible entries" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;">
+                </th>
                 <th style="width: 40px;">#</th>
                 <th>Emp Code</th>
                 <th>Employee Display Name</th>
@@ -1822,9 +1828,10 @@
       if (badge) badge.innerText = allDirectory.length;
 
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; color: var(--text-muted); padding: 2.5rem;">
+        tbody.innerHTML = `<tr><td colspan="13" style="text-align: center; color: var(--text-muted); padding: 2.5rem;">
           No employee directory entries found matching "${escapeHtml(q)}". Click "+ Add Employee" or "📤 Upload Employee Directory" above to get started.
         </td></tr>`;
+        updateSelectedDirectoryCount();
         return;
       }
 
@@ -1833,9 +1840,13 @@
         const posBadgeBg = isAcso ? '#ede9fe' : '#dbeafe';
         const posBadgeColor = isAcso ? '#6d28d9' : '#1e40af';
         const posIcon = isAcso ? '🏢' : '👔';
+        const rowType = r.entry_type || (isAcso ? 'acso' : 'tl');
 
         return `
-          <tr>
+          <tr id="dir-row-${r.id}-${rowType}">
+            <td style="text-align: center;">
+              <input type="checkbox" class="dir-row-checkbox" data-id="${r.id}" data-type="${rowType}" onchange="updateSelectedDirectoryCount()" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;">
+            </td>
             <td><strong>${idx + 1}</strong></td>
             <td>
               ${r.emp_code ? `<span class="code-pill" style="background: #e0f2fe; color: #0369a1; font-weight: 700;">${escapeHtml(r.emp_code)}</span>` : '<span style="color: #94a3b8;">—</span>'}
@@ -1870,12 +1881,14 @@
               ${r.prepaid_center ? `<span class="code-pill" style="background: #fef3c7; color: #92400e;">${escapeHtml(r.prepaid_center)}</span>` : '<span style="color: #94a3b8;">—</span>'}
             </td>
             <td style="text-align: right; white-space: nowrap;">
-              <button class="btn btn-secondary btn-sm" onclick="editDirectoryRow(${r.id}, '${r.entry_type || (isAcso ? 'acso' : 'tl')}')">Edit</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteDirectoryRow(${r.id}, '${r.entry_type || (isAcso ? 'acso' : 'tl')}')">Delete</button>
+              <button class="btn btn-secondary btn-sm" onclick="editDirectoryRow(${r.id}, '${rowType}')">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteDirectoryRow(${r.id}, '${rowType}')">Delete</button>
             </td>
           </tr>
         `;
       }).join('');
+
+      updateSelectedDirectoryCount();
     }
 
     // --- Directory Template Download & File Upload ---
@@ -2051,6 +2064,89 @@
         }
       } catch (e) {
         showToast("Error deleting entry", "error");
+      }
+    }
+
+    // --- Multi-Select & Bulk Delete Functions ---
+    function updateSelectedDirectoryCount() {
+      const allCheckboxes = document.querySelectorAll('.dir-row-checkbox');
+      const checkedCheckboxes = document.querySelectorAll('.dir-row-checkbox:checked');
+      const count = checkedCheckboxes.length;
+      const total = allCheckboxes.length;
+
+      const btn = document.getElementById('btn-bulk-delete-dir');
+      const countSpan = document.getElementById('selected-dir-count');
+      if (countSpan) countSpan.innerText = count;
+
+      if (btn) {
+        btn.style.display = count > 0 ? 'inline-flex' : 'none';
+      }
+
+      const selectAll = document.getElementById('select-all-dir-checkbox');
+      if (selectAll) {
+        if (total === 0) {
+          selectAll.checked = false;
+          selectAll.indeterminate = false;
+        } else if (count === total) {
+          selectAll.checked = true;
+          selectAll.indeterminate = false;
+        } else if (count > 0) {
+          selectAll.checked = false;
+          selectAll.indeterminate = true;
+        } else {
+          selectAll.checked = false;
+          selectAll.indeterminate = false;
+        }
+      }
+    }
+
+    function toggleSelectAllDirectory(isChecked) {
+      const checkboxes = document.querySelectorAll('.dir-row-checkbox');
+      checkboxes.forEach(cb => {
+        cb.checked = isChecked;
+      });
+      updateSelectedDirectoryCount();
+    }
+
+    async function bulkDeleteDirectoryEntries() {
+      const checkedBoxes = Array.from(document.querySelectorAll('.dir-row-checkbox:checked'));
+      if (checkedBoxes.length === 0) {
+        showToast("Please select at least one employee to delete", "info");
+        return;
+      }
+
+      const count = checkedBoxes.length;
+      const promptText = `Are you sure you want to delete ${count} selected employee(s) from the directory?\n\nThis will remove them from the database and update the local JSON file. This action cannot be undone.`;
+      if (!confirm(promptText)) return;
+
+      const items = checkedBoxes.map(cb => ({
+        id: parseInt(cb.dataset.id),
+        entry_type: cb.dataset.type || 'tl'
+      }));
+
+      try {
+        const res = await fetch(`/api/regions/${currentRegion}/directory/bulk-delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          showToast(data.message || `Deleted ${data.deleted_count} employee(s) successfully!`, "success");
+          const selectAll = document.getElementById('select-all-dir-checkbox');
+          if (selectAll) {
+            selectAll.checked = false;
+            selectAll.indeterminate = false;
+          }
+          await loadRegionConfig(currentRegion);
+        } else {
+          const err = await res.json();
+          showToast(err.detail || "Failed to delete selected employees", "error");
+        }
+      } catch (err) {
+        console.error("Bulk delete error:", err);
+        showToast("Error deleting selected employees", "error");
       }
     }
 

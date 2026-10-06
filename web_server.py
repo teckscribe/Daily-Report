@@ -130,6 +130,10 @@ class DirectoryRowPayload(BaseModel):
     entry_type: Optional[str] = "tl"
 
 
+class BulkDeleteDirectoryPayload(BaseModel):
+    items: List[Dict[str, Any]]
+
+
 class DispatchRulePayload(BaseModel):
     rule_name: str
     report_type: str
@@ -323,6 +327,17 @@ def delete_directory_entry_endpoint(region_id: str, row_id: int, entry_type: Opt
     """Deletes an employee directory entry."""
     db_manager.delete_unified_directory_row(row_id, entry_type=entry_type, region_id=region_id)
     return {"status": "OK"}
+
+
+@app.post("/api/regions/{region_id}/directory/bulk-delete")
+def bulk_delete_directory_endpoint(region_id: str, payload: BulkDeleteDirectoryPayload):
+    """Deletes multiple employee directory entries at once and synchronizes JSON."""
+    count = db_manager.bulk_delete_unified_directory(payload.items, region_id=region_id)
+    return {
+        "status": "OK",
+        "deleted_count": count,
+        "message": f"Successfully deleted {count} employee(s)."
+    }
 
 
 @app.get("/api/regions/{region_id}/directory/export-json")

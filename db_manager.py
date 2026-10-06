@@ -1322,6 +1322,38 @@ def delete_unified_directory_row(row_id: int, entry_type: str = "tl", region_id:
     return success
 
 
+def bulk_delete_unified_directory(items: List[Dict[str, Any]], region_id: str = "thrissur") -> int:
+    """
+    Bulk deletes multiple employee directory rows and keeps JSON synced.
+    items: [{"id": 1, "entry_type": "tl"}, {"id": 2, "entry_type": "acso"}, ...]
+    Returns the number of successfully deleted entries.
+    """
+    if not items:
+        return 0
+    deleted_count = 0
+    for it in items:
+        rid = it.get("id")
+        etype = it.get("entry_type", "tl")
+        if not rid:
+            continue
+        try:
+            if etype == "acso":
+                if delete_acso(int(rid)):
+                    deleted_count += 1
+            else:
+                if delete_team_leader(int(rid)):
+                    deleted_count += 1
+        except Exception as e:
+            print(f"[Bulk Delete Error] ID {rid} ({etype}): {e}")
+
+    try:
+        sync_directory_to_json(region_id)
+    except Exception:
+        pass
+
+    return deleted_count
+
+
 def sync_directory_to_json(region_id: str = "thrissur", file_path: Optional[str | Path] = None) -> str:
     """
     Saves the entire Employee Directory for a region into a standalone, human-readable JSON file.
