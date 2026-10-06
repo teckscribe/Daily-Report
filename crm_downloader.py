@@ -368,7 +368,7 @@ def download_via_playwright(headless: bool = False, region: str = "Thrissur") ->
 def download_from_crm(
     headless: bool = True,
     region: str = "Thrissur",
-    allow_stale: bool = True,
+    allow_stale: bool = False,
 ) -> Tuple[Path, Path, Path]:
     """
     Unified entrypoint:

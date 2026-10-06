@@ -1676,6 +1676,31 @@
   <div id="toast-container"></div>
 
   <script>
+    // Authenticate the dashboard once, then reuse the HttpOnly API cookie.
+    // The token is never persisted in browser storage.
+    const nativeFetch = window.fetch.bind(window);
+    let apiLoginInFlight = null;
+    window.fetch = async function(input, init = {}) {
+      const requestUrl = typeof input === 'string' ? input : input.url;
+      if (!requestUrl.startsWith('/api/') || requestUrl === '/api/auth/login') {
+        return nativeFetch(input, init);
+      }
+      let response = await nativeFetch(input, init);
+      if (response.status !== 401) return response;
+      const token = window.prompt('Enter the WEB_API_TOKEN configured for this server:');
+      if (!token) return response;
+      if (!apiLoginInFlight) {
+        apiLoginInFlight = nativeFetch('/api/auth/login', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({token})
+        }).finally(() => { apiLoginInFlight = null; });
+      }
+      const login = await apiLoginInFlight;
+      if (!login.ok) return response;
+      return nativeFetch(input, init);
+    };
+
     let currentRegion = "thrissur";
     let allData = { tls: [], acsos: [], centers: [], emps: [], regions: [] };
 

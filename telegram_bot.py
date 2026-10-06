@@ -57,12 +57,17 @@ from config import (
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_TEST_PHONE,
     TELEGRAM_WEB_URL,
+    WEB_API_TOKEN,
 )
 
 SERVICE_NAME = os.getenv("SYSTEMD_SERVICE_NAME", "daily-work-report")
 POLL_TIMEOUT = 30
 user_states: Dict[int, str] = {}
 authorized_users_cache: Set[int] = set(TELEGRAM_ALLOWED_USERS)
+
+
+def _web_api_headers() -> Dict[str, str]:
+    return {"Authorization": f"Bearer {WEB_API_TOKEN}"} if WEB_API_TOKEN else {}
 
 
 # --- Lightweight Telegram API Client ---
@@ -233,7 +238,7 @@ def get_service_status() -> Dict[str, Any]:
     else:
         # Windows development check: test if web port 8201 is listening
         try:
-            r = requests.get(f"{TELEGRAM_WEB_URL}/api/system/settings", timeout=2)
+            r = requests.get(f"{TELEGRAM_WEB_URL}/api/system/settings", headers=_web_api_headers(), timeout=2)
             is_active = (r.status_code == 200)
             systemd_state = "active (windows port listening)" if is_active else "inactive"
         except Exception:
@@ -246,7 +251,7 @@ def get_service_status() -> Dict[str, Any]:
     last_cycle = "Not available"
     last_status = "Not available"
     try:
-        r = requests.get(f"{TELEGRAM_WEB_URL}/api/system/settings", timeout=3)
+        r = requests.get(f"{TELEGRAM_WEB_URL}/api/system/settings", headers=_web_api_headers(), timeout=3)
         if r.status_code == 200:
             web_connected = True
             info = r.json()
@@ -306,7 +311,7 @@ def trigger_group_dispatch(region_id: str = "thrissur") -> Tuple[bool, str]:
     """Calls web server endpoint to run automated Complaint cycle and dispatch to groups."""
     try:
         url = f"{TELEGRAM_WEB_URL}/api/system/run-automated-cycle-now?region_id={region_id}"
-        res = requests.post(url, json={"region_id": region_id, "pipeline": "complaint"}, timeout=300)
+        res = requests.post(url, json={"region_id": region_id, "pipeline": "complaint"}, headers=_web_api_headers(), timeout=300)
         data = res.json()
         if res.status_code == 200 and data.get("status") == "OK":
             return True, data.get("message", "All active dispatch rules triggered successfully.")
@@ -324,7 +329,7 @@ def trigger_test_delivery(target_phone: str, region_id: str = "thrissur") -> Tup
     try:
         url = f"{TELEGRAM_WEB_URL}/api/regions/{region_id}/generate-and-send"
         payload = {"target_phone": clean_phone, "report_type": "all"}
-        res = requests.post(url, json=payload, timeout=300)
+        res = requests.post(url, json=payload, headers=_web_api_headers(), timeout=300)
         data = res.json()
         if res.status_code == 200 and data.get("status") == "OK":
             return True, data.get("message", f"Delivered to {clean_phone} successfully.")
@@ -337,7 +342,7 @@ def trigger_sr_dispatch(region_id: str = "thrissur") -> Tuple[bool, str]:
     """Calls web server endpoint to run automated Service Request cycle and dispatch."""
     try:
         url = f"{TELEGRAM_WEB_URL}/api/service-request/run-cycle?region_id={region_id}"
-        res = requests.post(url, json={"region_id": region_id}, timeout=300)
+        res = requests.post(url, json={"region_id": region_id}, headers=_web_api_headers(), timeout=300)
         data = res.json()
         if res.status_code == 200 and data.get("status") == "OK":
             return True, data.get("message", "Service Request reports generated & dispatched successfully.")
@@ -355,7 +360,7 @@ def trigger_sr_test_delivery(target_phone: str, region_id: str = "thrissur") -> 
     try:
         url = f"{TELEGRAM_WEB_URL}/api/service-request/generate-and-send"
         payload = {"target_phone": clean_phone, "report_type": "all"}
-        res = requests.post(url, json=payload, timeout=300)
+        res = requests.post(url, json=payload, headers=_web_api_headers(), timeout=300)
         data = res.json()
         if res.status_code == 200 and data.get("status") == "OK":
             return True, data.get("message", f"SR report delivered to {clean_phone} successfully.")

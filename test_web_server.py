@@ -5,12 +5,15 @@ Automated API test suite verifying all REST endpoints for the
 Asianet Kerala Regional Operations Manager web server.
 """
 
+import os
+os.environ.setdefault("WEB_API_TOKEN", "test-token")
+
 from fastapi.testclient import TestClient
 from web_server import app
 from unittest.mock import patch
 import json
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer test-token"})
 
 def test_routes():
     print("1. Testing GET / (Dashboard UI)...")

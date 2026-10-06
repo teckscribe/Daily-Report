@@ -128,7 +128,11 @@ SOFTCODE_PWD = os.getenv("SOFTCODE_PWD") or os.getenv("SOFTCODE_PASS", "")
 
 PREPAID_USER = os.getenv("PREPAID_USER", "")
 PREPAID_PWD = os.getenv("PREPAID_PWD") or os.getenv("PREPAID_PASS", "")
-CRM_SSL_VERIFY = os.getenv("CRM_SSL_VERIFY", "false").lower() in ("true", "1", "yes")
+CRM_SSL_VERIFY = os.getenv("CRM_SSL_VERIFY", "true").lower() in ("true", "1", "yes")
+
+# Web API protection. Production deployments must set this to a long random value.
+# The API fails closed when it is missing rather than exposing the operations portal.
+WEB_API_TOKEN = os.getenv("WEB_API_TOKEN", "").strip()
 
 # --- Filter Criteria ---
 TARGET_REGION = "Thrissur"

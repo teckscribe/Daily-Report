@@ -46,6 +46,7 @@ An enterprise automation engine that logs into Softcode CRMS and Prepaid SMS por
    PREPAID_USER=your_prepaid_user
    PREPAID_PASS=your_prepaid_pass
    WHATSAPP_GROUPS=NW Team TCR- REGION, +919633889430
+   WEB_API_TOKEN=generate-a-long-random-token
    PORT=8201
    ```
 3. **Start the Web Operations Portal**:

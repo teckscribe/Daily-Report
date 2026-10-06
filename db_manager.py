@@ -335,7 +335,7 @@ def add_team_leader(region_id: str, data: Dict[str, Any]) -> int:
     return tl_id
 
 
-def update_team_leader(tl_id: int, data: Dict[str, Any]) -> bool:
+def update_team_leader(tl_id: int, data: Dict[str, Any], region_id: Optional[str] = None) -> bool:
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
@@ -352,6 +352,7 @@ def update_team_leader(tl_id: int, data: Dict[str, Any]) -> bool:
         email = ?,
         sort_order = ?
     WHERE id = ?
+    """ + (" AND region_id = ?" if region_id else "") + """
     """, (
         data.get("center_name", "").strip(),
         data.get("name", ""),
@@ -364,17 +365,21 @@ def update_team_leader(tl_id: int, data: Dict[str, Any]) -> bool:
         str(data.get("phone", "")).strip(),
         str(data.get("email", data.get("gmail", ""))).strip(),
         int(data.get("sort_order", 0)),
-        tl_id
+        tl_id,
+        *((region_id,) if region_id else ()),
     ))
     conn.commit()
     conn.close()
     return True
 
 
-def delete_team_leader(tl_id: int) -> bool:
+def delete_team_leader(tl_id: int, region_id: Optional[str] = None) -> bool:
     conn = get_connection()
     c = conn.cursor()
-    c.execute("DELETE FROM team_leaders WHERE id = ?", (tl_id,))
+    if region_id:
+        c.execute("DELETE FROM team_leaders WHERE id = ? AND region_id = ?", (tl_id, region_id))
+    else:
+        c.execute("DELETE FROM team_leaders WHERE id = ?", (tl_id,))
     conn.commit()
     conn.close()
     return True
@@ -422,7 +427,7 @@ def add_acso(region_id: str, data: Dict[str, Any]) -> int:
     return acso_id
 
 
-def update_acso(acso_id: int, data: Dict[str, Any]) -> bool:
+def update_acso(acso_id: int, data: Dict[str, Any], region_id: Optional[str] = None) -> bool:
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
@@ -442,6 +447,7 @@ def update_acso(acso_id: int, data: Dict[str, Any]) -> bool:
         crm_name = ?,
         emp_code = ?
     WHERE id = ?
+    """ + (" AND region_id = ?" if region_id else "") + """
     """, (
         data.get("center_name", "").strip(),
         data.get("acso_name", "").strip(),
@@ -457,17 +463,21 @@ def update_acso(acso_id: int, data: Dict[str, Any]) -> bool:
         int(data.get("sort_order", 0)),
         str(data.get("crm_name", data.get("acso_name", ""))).strip(),
         str(data.get("emp_code", "")).strip(),
-        acso_id
+        acso_id,
+        *((region_id,) if region_id else ()),
     ))
     conn.commit()
     conn.close()
     return True
 
 
-def delete_acso(acso_id: int) -> bool:
+def delete_acso(acso_id: int, region_id: Optional[str] = None) -> bool:
     conn = get_connection()
     c = conn.cursor()
-    c.execute("DELETE FROM acsos WHERE id = ?", (acso_id,))
+    if region_id:
+        c.execute("DELETE FROM acsos WHERE id = ? AND region_id = ?", (acso_id, region_id))
+    else:
+        c.execute("DELETE FROM acsos WHERE id = ?", (acso_id,))
     conn.commit()
     conn.close()
     return True
@@ -571,7 +581,7 @@ def add_employee(region_id: str, data: Dict[str, Any]) -> int:
     return eid
 
 
-def update_employee(emp_id: int, data: Dict[str, Any]) -> bool:
+def update_employee(emp_id: int, data: Dict[str, Any], region_id: Optional[str] = None) -> bool:
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
@@ -583,6 +593,7 @@ def update_employee(emp_id: int, data: Dict[str, Any]) -> bool:
         phone = ?,
         email = ?
     WHERE id = ?
+    """ + (" AND region_id = ?" if region_id else "") + """
     """, (
         str(data.get("emp_code", "")).strip(),
         data.get("name", "").strip(),
@@ -590,17 +601,21 @@ def update_employee(emp_id: int, data: Dict[str, Any]) -> bool:
         data.get("center_name", "").strip(),
         data.get("phone", "").strip(),
         str(data.get("email", data.get("gmail", ""))).strip(),
-        emp_id
+        emp_id,
+        *((region_id,) if region_id else ()),
     ))
     conn.commit()
     conn.close()
     return True
 
 
-def delete_employee(emp_id: int) -> bool:
+def delete_employee(emp_id: int, region_id: Optional[str] = None) -> bool:
     conn = get_connection()
     c = conn.cursor()
-    c.execute("DELETE FROM employees WHERE id = ?", (emp_id,))
+    if region_id:
+        c.execute("DELETE FROM employees WHERE id = ? AND region_id = ?", (emp_id, region_id))
+    else:
+        c.execute("DELETE FROM employees WHERE id = ?", (emp_id,))
     conn.commit()
     conn.close()
     return True

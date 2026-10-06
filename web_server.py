@@ -17,6 +17,7 @@ from datetime import datetime
 import asyncio
 import os
 import sys
+import secrets
 
 import json
 from io import BytesIO
@@ -41,6 +42,7 @@ from config import (
     ADTV_SR_REPORT_IMAGE_PATH,
     SR_REPORT_IMAGE_PATH,
     SR_EXCEL_REPORT_PATH,
+    WEB_API_TOKEN,
 )
 import db_manager
 from report_engine import compute_report, load_inputs_from_workbook
@@ -166,14 +168,33 @@ class CycleRunPayload(BaseModel):
     pipeline: Optional[str] = "all"  # 'complaint', 'service_request', or 'all'
 
 
+class ApiLoginPayload(BaseModel):
+    token: str
+
+
 @app.middleware("http")
 async def add_no_cache_api_headers(request: Request, call_next):
+    protected_path = request.url.path.startswith("/api/") or request.url.path.startswith("/output/")
+    if protected_path and request.url.path != "/api/auth/login":
+        supplied = request.headers.get("Authorization", "")
+        bearer = supplied[7:].strip() if supplied.lower().startswith("bearer ") else ""
+        cookie_token = request.cookies.get("dwr_api_token", "")
+        if not WEB_API_TOKEN or not (secrets.compare_digest(bearer, WEB_API_TOKEN) or secrets.compare_digest(cookie_token, WEB_API_TOKEN)):
+            return JSONResponse(status_code=401, content={"detail": "Authentication required."})
     response = await call_next(request)
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
     return response
+
+
+@app.post("/api/auth/login")
+def api_login(payload: ApiLoginPayload, response: Response):
+    if not WEB_API_TOKEN or not secrets.compare_digest(payload.token.strip(), WEB_API_TOKEN):
+        raise HTTPException(status_code=401, detail="Invalid API token.")
+    response.set_cookie("dwr_api_token", WEB_API_TOKEN, httponly=True, samesite="lax", secure=False, max_age=86400)
+    return {"status": "OK"}
 
 
 # --- Frontend View Route ---
@@ -249,14 +270,14 @@ async def create_team_leader(region_id: str, payload: TeamLeaderPayload):
 @app.put("/api/regions/{region_id}/team-leaders/{tl_id}")
 async def modify_team_leader(region_id: str, tl_id: int, payload: TeamLeaderPayload):
     """Updates an existing Team Leader."""
-    db_manager.update_team_leader(tl_id, payload.dict())
+    db_manager.update_team_leader(tl_id, payload.dict(), region_id=region_id)
     return {"status": "OK", "id": tl_id}
 
 
 @app.delete("/api/regions/{region_id}/team-leaders/{tl_id}")
 async def remove_team_leader(region_id: str, tl_id: int):
     """Removes a Team Leader."""
-    db_manager.delete_team_leader(tl_id)
+    db_manager.delete_team_leader(tl_id, region_id=region_id)
     return {"status": "OK"}
 
 
@@ -280,14 +301,14 @@ async def create_acso(region_id: str, payload: AcsoPayload):
 @app.put("/api/regions/{region_id}/acsos/{acso_id}")
 async def modify_acso(region_id: str, acso_id: int, payload: AcsoPayload):
     """Updates an existing ACSO Officer and Center mapping."""
-    db_manager.update_acso(acso_id, payload.dict())
+    db_manager.update_acso(acso_id, payload.dict(), region_id=region_id)
     return {"status": "OK", "id": acso_id}
 
 
 @app.delete("/api/regions/{region_id}/acsos/{acso_id}")
 async def remove_acso(region_id: str, acso_id: int):
     """Removes an ACSO Officer and Center."""
-    db_manager.delete_acso(acso_id)
+    db_manager.delete_acso(acso_id, region_id=region_id)
     return {"status": "OK"}
 
 
@@ -303,14 +324,14 @@ async def create_employee(region_id: str, payload: EmployeePayload):
 @app.put("/api/regions/{region_id}/employees/{emp_id}")
 async def modify_employee(region_id: str, emp_id: int, payload: EmployeePayload):
     """Updates an employee profile."""
-    db_manager.update_employee(emp_id, payload.dict())
+    db_manager.update_employee(emp_id, payload.dict(), region_id=region_id)
     return {"status": "OK", "id": emp_id}
 
 
 @app.delete("/api/regions/{region_id}/employees/{emp_id}")
 async def remove_employee(region_id: str, emp_id: int):
     """Deletes an employee record."""
-    db_manager.delete_employee(emp_id)
+    db_manager.delete_employee(emp_id, region_id=region_id)
     return {"status": "OK"}
 
 
@@ -914,8 +935,8 @@ def dispatch_whatsapp(region_id: str, report_type: Optional[str] = "complaint"):
                     generate_report_images(df_sections)
                     generate_acso_report_images(df_sections)
 
-            flash_report_image(imgs, target_recipients=targets)
-            dispatched_count += 1
+            if flash_report_image(imgs, target_recipients=targets):
+                dispatched_count += 1
 
         return {
             "status": "OK",
@@ -1573,13 +1594,16 @@ async def background_scheduler_loop():
                     last_run = slot.get("last_run") or ""
                     if not last_run.startswith(today_date):
                         slot_type = slot.get("report_type") or "complaint"
-                        db_manager.update_last_run(slot["id"])
                         if slot_type == "service_request":
                             print(f"\n[Scheduler] Auto-triggering SERVICE REQUEST report for region '{slot['region_id']}' at {current_hh_mm}...")
-                            await asyncio.to_thread(execute_automated_sr_cycle, slot["region_id"])
+                            run_result = await asyncio.to_thread(execute_automated_sr_cycle, slot["region_id"])
                         else:
                             print(f"\n[Scheduler] Auto-triggering COMPLAINT report for region '{slot['region_id']}' at {current_hh_mm}...")
-                            await asyncio.to_thread(execute_automated_cycle, slot["region_id"])
+                            run_result = await asyncio.to_thread(execute_automated_cycle, slot["region_id"])
+                        if isinstance(run_result, dict) and run_result.get("status") == "OK":
+                            db_manager.update_last_run(slot["id"])
+                        else:
+                            print(f"[Scheduler] Slot {slot['id']} failed; leaving last_run unchanged for retry.")
         except Exception as e:
             print(f"[Scheduler Loop Error] {e}")
             try:
