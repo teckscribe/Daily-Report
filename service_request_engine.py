@@ -216,6 +216,14 @@ def find_service_request_raw_file() -> Optional[Path]:
     return None
 
 
+def sr_output_path(filename: str, region_id: str = DEFAULT_REGION_ID) -> Path:
+    """Keep output isolated by validated region ID, including for concurrent regions."""
+    import re
+    if not re.fullmatch(r"[a-z0-9_-]+", region_id):
+        raise ValueError("Invalid region ID")
+    return OUTPUT_DIR / "regions" / region_id / filename
+
+
 def compute_service_request_reports(
     raw_path: Optional[Path] = None,
     region_id: str = DEFAULT_REGION_ID,
@@ -230,23 +238,23 @@ def compute_service_request_reports(
             f"Service Request raw data file not found. Please place 'Service Request - Raw Data.xls' in the project directory."
         )
 
-    xl = pd.ExcelFile(file_path)
-    sheet_names = xl.sheet_names
+    with pd.ExcelFile(file_path) as xl:
+        sheet_names = xl.sheet_names
 
-    # 1. ADL Postpaid Tickets
-    adl_sheet = next((s for s in sheet_names if "ADL" in s), sheet_names[0])
-    adl_df = pd.read_excel(xl, sheet_name=adl_sheet)
+        # 1. ADL Postpaid Tickets
+        adl_sheet = next((s for s in sheet_names if "ADL" in s), sheet_names[0])
+        adl_df = pd.read_excel(xl, sheet_name=adl_sheet)
 
-    # 2. ADTv Tickets
-    adtv_sheet = next((s for s in sheet_names if "ADTv" in s or "DTV" in s.upper()), sheet_names[min(1, len(sheet_names)-1)])
-    adtv_df = pd.read_excel(xl, sheet_name=adtv_sheet)
+        # 2. ADTv Tickets
+        adtv_sheet = next((s for s in sheet_names if "ADTv" in s or "DTV" in s.upper()), sheet_names[min(1, len(sheet_names)-1)])
+        adtv_df = pd.read_excel(xl, sheet_name=adtv_sheet)
 
-    # 3. Prepaid Tickets
-    prep_sheet = next((s for s in sheet_names if "Prepaid" in s), None)
-    if prep_sheet:
-        prepaid_df = pd.read_excel(xl, sheet_name=prep_sheet)
-    else:
-        prepaid_df = pd.DataFrame()
+        # 3. Prepaid Tickets
+        prep_sheet = next((s for s in sheet_names if "Prepaid" in s), None)
+        if prep_sheet:
+            prepaid_df = pd.read_excel(xl, sheet_name=prep_sheet)
+        else:
+            prepaid_df = pd.DataFrame()
 
     # CRM exports contain a REGION column for postpaid/TV. Resolve the
     # configured display name from the region record instead of assuming
@@ -261,7 +269,10 @@ def compute_service_request_reports(
             return frame
         region_col = next((c for c in frame.columns if str(c).strip().casefold() == "region"), None)
         if not region_col:
-            return frame
+            raise ValueError(
+                f"Cannot verify source region {region_name!r}: a non-empty Service Request "
+                "sheet has no REGION column. Upload a region-labelled export."
+            )
         return frame[frame[region_col].astype(str).str.strip().str.casefold() == region_name.casefold()].copy()
 
     adl_df = _filter_region(adl_df, softcode_region)
@@ -356,12 +367,13 @@ def _get_excel_column_name(col_num: int) -> str:
 def create_excel_output(
     sections: Dict[str, pd.DataFrame],
     target_path: Optional[Path] = None,
+    region_id: str = DEFAULT_REGION_ID,
 ) -> Path:
     """
     Renders styled Excel workbook matching the exact Streamlit xlsxwriter logic.
     Saves to output/Daily_Service_Request_Pending_Report.xlsx.
     """
-    dest = target_path or SR_EXCEL_REPORT_PATH
+    dest = target_path or sr_output_path(SR_EXCEL_REPORT_PATH.name, region_id)
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     with pd.ExcelWriter(str(dest), engine="xlsxwriter") as writer:
@@ -795,7 +807,10 @@ def render_sr_report_images(
     Renders high-definition Retina report images (1600px+ width) using Playwright.
     Generates ADL_SR_Pending.jpg, ADTv_SR_Pending.jpg, and combined Daily_SR_Report_latest.jpg.
     """
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    ADL_SR_REPORT_IMAGE_PATH = sr_output_path("ADL_SR_Pending.jpg", region_id)
+    ADTV_SR_REPORT_IMAGE_PATH = sr_output_path("ADTv_SR_Pending.jpg", region_id)
+    SR_REPORT_IMAGE_PATH = sr_output_path("Daily_SR_Report_latest.jpg", region_id)
+    ADL_SR_REPORT_IMAGE_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not sections:
         sections = compute_service_request_reports(region_id=region_id)
 
@@ -872,11 +887,12 @@ def execute_automated_sr_cycle(region_id: str = DEFAULT_REGION_ID) -> Dict[str, 
         sections = compute_service_request_reports(region_id=region_id)
 
         # 2. Write Excel output
-        excel_path = create_excel_output(sections)
+        excel_path = create_excel_output(sections, region_id=region_id)
         print(f"[SR_CYCLE] Generated Service Request Excel workbook: {excel_path.name}")
 
         # 3. Render High-DPI images
-        img_paths = render_sr_report_images(sections)
+        img_paths = render_sr_report_images(sections, region_id=region_id)
+        ADL_SR_REPORT_IMAGE_PATH, ADTV_SR_REPORT_IMAGE_PATH, SR_REPORT_IMAGE_PATH = img_paths
         print(f"[SR_CYCLE] Generated {len(img_paths)} Service Request Retina cards")
 
         # 4. WhatsApp Dispatch per configured rules

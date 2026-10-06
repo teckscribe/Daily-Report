@@ -57,6 +57,7 @@ from service_request_engine import (
     compute_service_request_reports,
     create_excel_output as create_sr_excel_output,
     render_sr_report_images,
+    sr_output_path,
     execute_automated_sr_cycle,
     is_sr_report_type,
 )
@@ -888,11 +889,11 @@ def generate_reports(region_id: str, report_type: Optional[str] = "complaint"):
         # 2. Render Service Requests if requested
         if r_type in ("all", "suite_all", "sr", "service_request", "sr_all"):
             sr_sec = compute_service_request_reports(region_id=region_id)
-            render_sr_report_images(sr_sec)
+            render_sr_report_images(sr_sec, region_id=region_id)
             rendered_images.extend([
-                "/output/ADL_SR_Pending.jpg",
-                "/output/ADTv_SR_Pending.jpg",
-                "/output/Daily_SR_Report_latest.jpg",
+                f"/output/regions/{region_id}/ADL_SR_Pending.jpg",
+                f"/output/regions/{region_id}/ADTv_SR_Pending.jpg",
+                f"/output/regions/{region_id}/Daily_SR_Report_latest.jpg",
             ])
 
         return {
@@ -938,12 +939,12 @@ def dispatch_whatsapp(region_id: str, report_type: Optional[str] = "complaint"):
             if not targets:
                 continue
 
-            imgs = get_images_for_report_type(rule_type)
+            imgs = get_images_for_report_type(rule_type, region_id)
             missing = [img for img in imgs if not img.exists()]
             if missing:
                 if is_sr_type(rule_type):
                     sr_sec = compute_service_request_reports(region_id=region_id)
-                    render_sr_report_images(sr_sec)
+                    render_sr_report_images(sr_sec, region_id=region_id)
                 else:
                     df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(resolve_target_excel_path())
                     res = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
@@ -983,8 +984,8 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
         # 1. Service Request only dispatch
         if is_sr_report_type(r_type):
             sr_sec = compute_service_request_reports(region_id=region_id)
-            render_sr_report_images(sr_sec)
-            imgs = get_images_for_report_type(r_type)
+            render_sr_report_images(sr_sec, region_id=region_id)
+            imgs = get_images_for_report_type(r_type, region_id)
             success = flash_report_image(imgs, target_recipients=[target])
             if success:
                 return {"status": "OK", "message": f"Service Request reports sent to {target} successfully!"}
@@ -1026,12 +1027,12 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
         if r_type in ("suite_all", "everything"):
             try:
                 sr_sec = compute_service_request_reports(region_id=region_id)
-                render_sr_report_images(sr_sec)
+                render_sr_report_images(sr_sec, region_id=region_id)
             except Exception as e_sr:
-                print(f"[Generate & Send] SR generation notice: {e_sr}")
+                raise RuntimeError(f"Service Request generation failed: {e_sr}") from e_sr
 
         # 7. Dispatch to the specified number
-        imgs = get_images_for_report_type(r_type)
+        imgs = get_images_for_report_type(r_type, region_id)
         success = flash_report_image(imgs, target_recipients=[target])
         if success:
             return {"status": "OK", "message": f"Reports generated & sent to {target} successfully!"}
@@ -1043,7 +1044,10 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
 
 # --- Report Type Image Helper ---
 
-def get_images_for_report_type(report_type: str) -> List[Path]:
+def get_images_for_report_type(report_type: str, region_id: str = DEFAULT_REGION_ID) -> List[Path]:
+    ADL_SR_REPORT_IMAGE_PATH = sr_output_path("ADL_SR_Pending.jpg", region_id)
+    ADTV_SR_REPORT_IMAGE_PATH = sr_output_path("ADTv_SR_Pending.jpg", region_id)
+    SR_REPORT_IMAGE_PATH = sr_output_path("Daily_SR_Report_latest.jpg", region_id)
     r = (report_type or "all").lower().strip()
     if r in ("adl_tl", "adl_team"):
         return [ADL_REPORT_IMAGE_PATH]
@@ -1120,7 +1124,7 @@ def execute_automated_cycle(region_id: str = DEFAULT_REGION_ID) -> Dict[str, Any
             # Skip SR rules in complaint cycle (handled by execute_automated_sr_cycle)
             if is_sr_report_type(report_type):
                 continue
-            imgs = get_images_for_report_type(report_type)
+            imgs = get_images_for_report_type(report_type, region_id)
             ok = flash_report_image(imgs, target_recipients=targets)
             if ok:
                 dispatched_count += 1
@@ -1199,12 +1203,12 @@ def trigger_dispatch_rule_endpoint(rule_id: int):
             detail=f"No target recipients defined for rule '{rule.get('rule_name', 'Rule')}'. Please click 'Edit' to configure WhatsApp groups or phone numbers."
         )
     r_type = rule.get("report_type", "all").lower().strip()
-    imgs = get_images_for_report_type(r_type)
+    imgs = get_images_for_report_type(r_type, rule["region_id"])
     missing = [i for i in imgs if not i.exists()]
     if missing:
         if is_sr_report_type(r_type):
             sr_sec = compute_service_request_reports(region_id=rule["region_id"])
-            render_sr_report_images(sr_sec)
+            render_sr_report_images(sr_sec, region_id=rule["region_id"])
         else:
             df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
             df_adl = filter_adl(df_adl, region=rule["region_id"])
@@ -1222,9 +1226,9 @@ def trigger_dispatch_rule_endpoint(rule_id: int):
             if r_type in ("suite_all", "everything"):
                 try:
                     sr_sec = compute_service_request_reports(region_id=rule["region_id"])
-                    render_sr_report_images(sr_sec)
-                except Exception:
-                    pass
+                    render_sr_report_images(sr_sec, region_id=rule["region_id"])
+                except Exception as e_sr:
+                    raise HTTPException(status_code=400, detail=f"Service Request generation failed: {e_sr}")
 
     success = flash_report_image(imgs, target_recipients=targets)
     if success:
@@ -1369,15 +1373,16 @@ def run_service_request_cycle_endpoint(payload: Optional[CycleRunPayload] = None
 @app.get("/api/service-request/download-excel")
 def download_service_request_excel_endpoint(region_id: Optional[str] = None):
     """Downloads the generated Daily Service Request Pending Excel report."""
-    if not SR_EXCEL_REPORT_PATH.exists():
-        try:
-            sections = compute_service_request_reports(region_id=region_id or DEFAULT_REGION_ID)
-            create_sr_excel_output(sections)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Cannot generate Excel: {e}")
+    target_region = region_id or DEFAULT_REGION_ID
+    report_path = sr_output_path(SR_EXCEL_REPORT_PATH.name, target_region)
+    try:
+        sections = compute_service_request_reports(region_id=target_region)
+        create_sr_excel_output(sections, region_id=target_region)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot generate Excel: {e}")
 
     return FileResponse(
-        path=str(SR_EXCEL_REPORT_PATH),
+        path=str(report_path),
         filename="Daily_Service_Request_Pending_Report.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
@@ -1436,8 +1441,8 @@ async def upload_service_request_raw_endpoint(file: UploadFile = File(...), regi
         target_file.write_bytes(content)
 
         sections = compute_service_request_reports(target_file, region_id=region_id or DEFAULT_REGION_ID)
-        create_sr_excel_output(sections)
-        render_sr_report_images(sections)
+        create_sr_excel_output(sections, region_id=region_id or DEFAULT_REGION_ID)
+        render_sr_report_images(sections, region_id=region_id or DEFAULT_REGION_ID)
 
         return {
             "status": "OK",
@@ -1458,18 +1463,18 @@ def send_service_request_to_phone_endpoint(payload: GenerateAndSendPayload, regi
 
     try:
         sections = compute_service_request_reports(region_id=region_id or DEFAULT_REGION_ID)
-        create_sr_excel_output(sections)
-        render_sr_report_images(sections)
+        create_sr_excel_output(sections, region_id=region_id or DEFAULT_REGION_ID)
+        render_sr_report_images(sections, region_id=region_id or DEFAULT_REGION_ID)
 
         r_type = (payload.report_type or "all").lower().strip()
         if r_type in ("adl_sr", "adl"):
-            to_send = [ADL_SR_REPORT_IMAGE_PATH]
+            to_send = [sr_output_path(ADL_SR_REPORT_IMAGE_PATH.name, region_id or DEFAULT_REGION_ID)]
         elif r_type in ("adtv_sr", "adtv"):
-            to_send = [ADTV_SR_REPORT_IMAGE_PATH]
+            to_send = [sr_output_path(ADTV_SR_REPORT_IMAGE_PATH.name, region_id or DEFAULT_REGION_ID)]
         elif r_type in ("sr_combined", "sr_side_by_side", "combined_sr"):
-            to_send = [SR_REPORT_IMAGE_PATH]
+            to_send = [sr_output_path(SR_REPORT_IMAGE_PATH.name, region_id or DEFAULT_REGION_ID)]
         else:
-            to_send = [ADL_SR_REPORT_IMAGE_PATH, ADTV_SR_REPORT_IMAGE_PATH]
+            to_send = [sr_output_path(p.name, region_id or DEFAULT_REGION_ID) for p in (ADL_SR_REPORT_IMAGE_PATH, ADTV_SR_REPORT_IMAGE_PATH)]
 
         success = flash_report_image(to_send, target_recipients=[target])
         if success:

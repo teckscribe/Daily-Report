@@ -838,22 +838,22 @@
             <h4>
               <span>Daily Service Request Pending Reports (ACSO-wise)</span>
               <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-                <a href="/output/Daily_SR_Report_latest.jpg" target="_blank" class="btn btn-secondary btn-sm">Combined Full Image</a>
-                <a href="/output/ADL_SR_Pending.jpg" target="_blank" class="btn btn-secondary btn-sm">ADL SR</a>
-                <a href="/output/ADTv_SR_Pending.jpg" target="_blank" class="btn btn-secondary btn-sm">ADTv SR</a>
+                <a href="/output/regions/__DEFAULT_REGION_ID__/Daily_SR_Report_latest.jpg" target="_blank" class="btn btn-secondary btn-sm">Combined Full Image</a>
+                <a href="/output/regions/__DEFAULT_REGION_ID__/ADL_SR_Pending.jpg" target="_blank" class="btn btn-secondary btn-sm">ADL SR</a>
+                <a href="/output/regions/__DEFAULT_REGION_ID__/ADTv_SR_Pending.jpg" target="_blank" class="btn btn-secondary btn-sm">ADTv SR</a>
               </div>
             </h4>
             <div style="padding: 1rem; text-align: center; background: #fafafa; border-radius: var(--radius); margin-bottom: 1rem;">
-              <img id="img-sr-combined" src="/output/Daily_SR_Report_latest.jpg" alt="Combined SR Report" style="max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm);" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'800\' height=\'250\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render SR to Generate High-DPI Cards</text></svg>'">
+              <img id="img-sr-combined" src="/output/regions/__DEFAULT_REGION_ID__/Daily_SR_Report_latest.jpg" alt="Combined SR Report" style="max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm);" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'800\' height=\'250\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render SR to Generate High-DPI Cards</text></svg>'">
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
               <div>
                 <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">ADL Broadband Service Requests</div>
-                <img id="img-adl-sr" src="/output/ADL_SR_Pending.jpg" alt="ADL SR Pending" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'600\' height=\'300\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render SR to Generate</text></svg>'">
+                <img id="img-adl-sr" src="/output/regions/__DEFAULT_REGION_ID__/ADL_SR_Pending.jpg" alt="ADL SR Pending" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'600\' height=\'300\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render SR to Generate</text></svg>'">
               </div>
               <div>
                 <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">ADTv Digital TV Service Requests</div>
-                <img id="img-adtv-sr" src="/output/ADTv_SR_Pending.jpg" alt="ADTv SR Pending" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'600\' height=\'300\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render SR to Generate</text></svg>'">
+                <img id="img-adtv-sr" src="/output/regions/__DEFAULT_REGION_ID__/ADTv_SR_Pending.jpg" alt="ADTv SR Pending" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'600\' height=\'300\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render SR to Generate</text></svg>'">
               </div>
             </div>
           </div>
@@ -1830,6 +1830,10 @@
 
     async function loadRegionConfig(regionId) {
       currentRegion = regionId;
+      const regionSelect = document.getElementById('regionSelect');
+      if (regionSelect) regionSelect.value = regionId;
+      refreshSRImages();
+      loadServiceRequestData();
       const regSelect = document.getElementById('regionSelect');
       const optText = regSelect?.options[regSelect.selectedIndex]?.text;
       document.getElementById('active-reg-label').innerText = optText ? optText.split('(')[0].trim() : (regionId.charAt(0).toUpperCase() + regionId.slice(1));
@@ -2674,9 +2678,9 @@
             const adlSr = document.getElementById('img-adl-sr');
             const adtvSr = document.getElementById('img-adtv-sr');
             const imgComb = document.getElementById('img-sr-combined');
-            if (adlSr) adlSr.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
-            if (adtvSr) adtvSr.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
-            if (imgComb) imgComb.src = `/output/Daily_SR_Report_latest.jpg?t=${ts}`;
+            if (adlSr) adlSr.src = `/output/regions/${encodeURIComponent(currentRegion)}/ADL_SR_Pending.jpg?t=${ts}`;
+            if (adtvSr) adtvSr.src = `/output/regions/${encodeURIComponent(currentRegion)}/ADTv_SR_Pending.jpg?t=${ts}`;
+            if (imgComb) imgComb.src = `/output/regions/${encodeURIComponent(currentRegion)}/Daily_SR_Report_latest.jpg?t=${ts}`;
           }
         } else {
           showToast(data.detail || data.message || "Error rendering reports", "error");
@@ -2745,9 +2749,9 @@
           if (adlAcso) adlAcso.src = `/output/ADL_ACSO_Complaint_Pending.jpg?t=${ts}`;
           if (adtvTl) adtvTl.src = `/output/ADTv_Complaint_Pending.jpg?t=${ts}`;
           if (adtvAcso) adtvAcso.src = `/output/ADTv_ACSO_Complaint_Pending.jpg?t=${ts}`;
-          if (adlSr) adlSr.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
-          if (adtvSr) adtvSr.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
-          if (imgComb) imgComb.src = `/output/Daily_SR_Report_latest.jpg?t=${ts}`;
+          if (adlSr) adlSr.src = `/output/regions/${encodeURIComponent(currentRegion)}/ADL_SR_Pending.jpg?t=${ts}`;
+          if (adtvSr) adtvSr.src = `/output/regions/${encodeURIComponent(currentRegion)}/ADTv_SR_Pending.jpg?t=${ts}`;
+          if (imgComb) imgComb.src = `/output/regions/${encodeURIComponent(currentRegion)}/Daily_SR_Report_latest.jpg?t=${ts}`;
         } else {
           showToast(data.detail || data.message || "Failed to generate & send report", "error");
         }
@@ -3186,8 +3190,8 @@
           if (adlAcso) adlAcso.src = `/output/ADL_ACSO_Complaint_Pending.jpg?t=${ts}`;
           if (adtvTl) adtvTl.src = `/output/ADTv_Complaint_Pending.jpg?t=${ts}`;
           if (adtvAcso) adtvAcso.src = `/output/ADTv_ACSO_Complaint_Pending.jpg?t=${ts}`;
-          if (adlSr) adlSr.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
-          if (adtvSr) adtvSr.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
+          if (adlSr) adlSr.src = `/output/regions/${encodeURIComponent(currentRegion)}/ADL_SR_Pending.jpg?t=${ts}`;
+          if (adtvSr) adtvSr.src = `/output/regions/${encodeURIComponent(currentRegion)}/ADTv_SR_Pending.jpg?t=${ts}`;
         } else {
           showToast(data.message || "Cycle encountered an issue", "error");
         }
@@ -3644,6 +3648,24 @@
     // --- Service Request Report Engine ---
     let srReportData = { adl: [], adtv: [] };
 
+    function refreshSRImages() {
+      const prefix = '/output/regions/' + encodeURIComponent(currentRegion) + '/';
+      for (const [id, name] of [
+        ['img-sr-combined', 'Daily_SR_Report_latest.jpg'],
+        ['img-adl-sr', 'ADL_SR_Pending.jpg'],
+        ['img-adtv-sr', 'ADTv_SR_Pending.jpg']
+      ]) {
+        const img = document.getElementById(id);
+        if (img) img.src = prefix + name + '?t=' + Date.now();
+      }
+      document.querySelectorAll('a[href*="/output/regions/"]').forEach(link => {
+        const name = link.getAttribute('href').split('/').pop().split('?')[0];
+        link.href = prefix + name;
+      });
+      const excel = document.querySelector('a[href*="/api/service-request/download-excel"]');
+      if (excel) excel.href = '/api/service-request/download-excel?region_id=' + encodeURIComponent(currentRegion);
+    }
+
     async function loadServiceRequestData() {
       const badge = document.getElementById('sr-status-badge');
       if (badge) {
@@ -3719,9 +3741,9 @@
           const imgComb = document.getElementById('img-sr-combined');
           const imgAdl = document.getElementById('img-adl-sr');
           const imgAdtv = document.getElementById('img-adtv-sr');
-          if (imgComb) imgComb.src = `/output/Daily_SR_Report_latest.jpg?t=${ts}`;
-          if (imgAdl) imgAdl.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
-          if (imgAdtv) imgAdtv.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
+          if (imgComb) imgComb.src = `/output/regions/${encodeURIComponent(currentRegion)}/Daily_SR_Report_latest.jpg?t=${ts}`;
+          if (imgAdl) imgAdl.src = `/output/regions/${encodeURIComponent(currentRegion)}/ADL_SR_Pending.jpg?t=${ts}`;
+          if (imgAdtv) imgAdtv.src = `/output/regions/${encodeURIComponent(currentRegion)}/ADTv_SR_Pending.jpg?t=${ts}`;
           await loadServiceRequestData();
         } else {
           showToast(data.detail || data.message || "Failed to run SR cycle", "error");
@@ -3783,7 +3805,7 @@
 
       showToast(`Uploading '${file.name}' & computing Service Request report...`, "info");
       try {
-        const res = await fetch('/api/service-request/upload-raw', {
+        const res = await fetch(`/api/service-request/upload-raw?region_id=${encodeURIComponent(currentRegion)}`, {
           method: 'POST',
           body: formData
         });
@@ -3794,9 +3816,9 @@
           const imgComb = document.getElementById('img-sr-combined');
           const imgAdl = document.getElementById('img-adl-sr');
           const imgAdtv = document.getElementById('img-adtv-sr');
-          if (imgComb) imgComb.src = `/output/Daily_SR_Report_latest.jpg?t=${ts}`;
-          if (imgAdl) imgAdl.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
-          if (imgAdtv) imgAdtv.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
+          if (imgComb) imgComb.src = `/output/regions/${encodeURIComponent(currentRegion)}/Daily_SR_Report_latest.jpg?t=${ts}`;
+          if (imgAdl) imgAdl.src = `/output/regions/${encodeURIComponent(currentRegion)}/ADL_SR_Pending.jpg?t=${ts}`;
+          if (imgAdtv) imgAdtv.src = `/output/regions/${encodeURIComponent(currentRegion)}/ADTv_SR_Pending.jpg?t=${ts}`;
           await loadServiceRequestData();
         } else {
           showToast(data.detail || data.message || "Upload failed", "error");
@@ -3831,7 +3853,7 @@
       showToast(`Delivering SR report to ${phone}...`, "info");
 
       try {
-        const res = await fetch('/api/service-request/generate-and-send', {
+        const res = await fetch(`/api/service-request/generate-and-send?region_id=${encodeURIComponent(currentRegion)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ target_phone: phone, report_type: reportType })
@@ -3843,9 +3865,9 @@
           const imgComb = document.getElementById('img-sr-combined');
           const imgAdl = document.getElementById('img-adl-sr');
           const imgAdtv = document.getElementById('img-adtv-sr');
-          if (imgComb) imgComb.src = `/output/Daily_SR_Report_latest.jpg?t=${ts}`;
-          if (imgAdl) imgAdl.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
-          if (imgAdtv) imgAdtv.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
+          if (imgComb) imgComb.src = `/output/regions/${encodeURIComponent(currentRegion)}/Daily_SR_Report_latest.jpg?t=${ts}`;
+          if (imgAdl) imgAdl.src = `/output/regions/${encodeURIComponent(currentRegion)}/ADL_SR_Pending.jpg?t=${ts}`;
+          if (imgAdtv) imgAdtv.src = `/output/regions/${encodeURIComponent(currentRegion)}/ADTv_SR_Pending.jpg?t=${ts}`;
         } else {
           showToast(data.detail || data.message || "SR test delivery failed", "error");
         }
