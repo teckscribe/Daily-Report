@@ -763,6 +763,39 @@ def set_setting(key: str, value: str) -> bool:
     return True
 
 
+def get_telegram_alert_recipients() -> List[str]:
+    """Returns all configured or recorded Telegram chat IDs for alert broadcasts."""
+    recipients = set()
+    try:
+        from config import TELEGRAM_ALLOWED_USERS, TELEGRAM_DEFAULT_CHAT_ID
+        if TELEGRAM_DEFAULT_CHAT_ID:
+            recipients.add(str(TELEGRAM_DEFAULT_CHAT_ID).strip())
+        for uid in TELEGRAM_ALLOWED_USERS:
+            recipients.add(str(uid).strip())
+    except Exception:
+        pass
+
+    raw_stored = get_setting("telegram_alert_chat_ids", "")
+    if raw_stored:
+        for cid in raw_stored.split(","):
+            if cid.strip():
+                recipients.add(cid.strip())
+    return sorted(list(recipients))
+
+
+def register_telegram_alert_recipient(chat_id: Any) -> bool:
+    """Registers a chat ID as an authorized alert recipient."""
+    cid_str = str(chat_id).strip()
+    if not cid_str:
+        return False
+    current = set(get_setting("telegram_alert_chat_ids", "").split(","))
+    current.discard("")
+    if cid_str not in current:
+        current.add(cid_str)
+        set_setting("telegram_alert_chat_ids", ",".join(sorted(current)))
+    return True
+
+
 # Auto-initialize on first import
 init_db()
 

@@ -894,6 +894,10 @@ def execute_automated_sr_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
                     "recipients": recipients,
                     "success": sent_ok,
                 })
+
+            if sr_rules and not any(d.get("success") for d in dispatch_results):
+                failed_names = [d.get("rule_name") for d in dispatch_results if not d.get("success")]
+                raise RuntimeError(f"WhatsApp dispatch failed for SR rule(s): {', '.join(failed_names)}. Check WhatsApp Web session.")
         else:
             print(f"[SR_CYCLE] No specific SR dispatch rules configured for region '{region_id}'. Reports saved locally.")
 
@@ -913,6 +917,18 @@ def execute_automated_sr_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
         err_msg = f"Service Request cycle failed: {e}"
         print(f"[SR_CYCLE ERROR] {err_msg}", file=sys.stderr)
         db_manager.set_setting(f"last_sr_cycle_status_{region_id}", f"Error: {e}")
+        try:
+            from telegram_bot import format_automated_error_alert, get_alert_retry_keyboard, broadcast_telegram_alert
+            alert_text = format_automated_error_alert(
+                pipeline="Service Request Pending",
+                region_id=region_id,
+                error_message=str(e),
+                timestamp=ts_now,
+            )
+            kb = get_alert_retry_keyboard("sr")
+            broadcast_telegram_alert(alert_text, reply_markup=kb)
+        except Exception as alert_ex:
+            print(f"[Telegram Alert Error] Failed to broadcast SR alert: {alert_ex}")
         return {
             "status": "ERROR",
             "message": str(e),

@@ -932,7 +932,7 @@ def execute_automated_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
     """Pulls fresh tickets from CRM, computes report, renders images, and dispatches per rules."""
     ts_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
-        adl_path, adtv_path, prep_path = download_from_crm(region=region_id, headless=True)
+        adl_path, adtv_path, prep_path = download_from_crm(region=region_id, headless=True, allow_stale=False)
         raw_adl = pd.read_excel(adl_path)
         raw_adtv = pd.read_excel(adtv_path)
         raw_prep = pd.read_csv(prep_path) if str(prep_path).endswith(".csv") else pd.read_excel(prep_path)
@@ -957,6 +957,7 @@ def execute_automated_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
         # Dispatch according to active rules
         rules = db_manager.get_dispatch_rules(region_id)
         dispatched_count = 0
+        dispatch_failures = []
         for r in rules:
             if not r.get("is_enabled", 1):
                 continue
@@ -968,8 +969,14 @@ def execute_automated_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
             if is_sr_report_type(report_type):
                 continue
             imgs = get_images_for_report_type(report_type)
-            flash_report_image(imgs, target_recipients=targets)
-            dispatched_count += 1
+            ok = flash_report_image(imgs, target_recipients=targets)
+            if ok:
+                dispatched_count += 1
+            else:
+                dispatch_failures.append(r.get("rule_name") or f"Rule #{r.get('id')}")
+
+        if rules and not dispatched_count and dispatch_failures:
+            raise RuntimeError(f"WhatsApp dispatch failed for active rule(s): {', '.join(dispatch_failures)}. Check WhatsApp Web session.")
 
         status_msg = f"Completed at {ts_now}. Dispatched {dispatched_count} active rule(s)."
         db_manager.set_setting("last_cycle_timestamp", ts_now)
@@ -979,6 +986,18 @@ def execute_automated_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
         err_msg = f"Failed at {ts_now}: {e}"
         db_manager.set_setting("last_cycle_timestamp", ts_now)
         db_manager.set_setting("last_cycle_status", err_msg)
+        try:
+            from telegram_bot import format_automated_error_alert, get_alert_retry_keyboard, broadcast_telegram_alert
+            alert_text = format_automated_error_alert(
+                pipeline="Complaint Tracker",
+                region_id=region_id,
+                error_message=str(e),
+                timestamp=ts_now,
+            )
+            kb = get_alert_retry_keyboard("complaint")
+            broadcast_telegram_alert(alert_text, reply_markup=kb)
+        except Exception as alert_ex:
+            print(f"[Telegram Alert Error] Failed to broadcast complaint alert: {alert_ex}")
         return {"status": "ERROR", "message": err_msg}
 
 
@@ -1435,6 +1454,16 @@ async def background_scheduler_loop():
                             await asyncio.to_thread(execute_automated_cycle, slot["region_id"])
         except Exception as e:
             print(f"[Scheduler Loop Error] {e}")
+            try:
+                from telegram_bot import format_automated_error_alert, broadcast_telegram_alert
+                alert_text = format_automated_error_alert(
+                    pipeline="Background Scheduler Loop",
+                    region_id="system",
+                    error_message=f"Critical scheduler loop error: {e}",
+                )
+                broadcast_telegram_alert(alert_text)
+            except Exception:
+                pass
 
 
 @app.on_event("startup")

@@ -794,6 +794,74 @@ def test_routes():
     # Restore Thrissur baseline preset to ensure test isolation
     db_manager.load_sample_preset("thrissur")
 
+    print("\n22. Testing Telegram Failure Alert Dispatcher on CRM & Automated Run Errors...")
+    from telegram_bot import (
+        format_automated_error_alert,
+        get_alert_retry_keyboard,
+        broadcast_telegram_alert,
+    )
+
+    # 1. Verify alert message formatting with CRM down diagnostics
+    alert_text = format_automated_error_alert(
+        pipeline="Complaint Tracker",
+        region_id="thrissur",
+        error_message="Softcode CRM Portal error: HTTPSConnectionPool(host='portal.asianet.co.in', port=443): Max retries exceeded",
+        timestamp="2026-10-06 08:00:00",
+    )
+    assert "Daily QOS Tracker — Automated Run Failed" in alert_text
+    assert "Complaint Tracker" in alert_text
+    assert "Thrissur" in alert_text
+    assert "Asianet CRM portal is down, unreachable, or timed out." in alert_text
+    assert "/menu" in alert_text
+    print("   [OK] Verified automated failure alert formatting with CRM diagnostics.")
+
+    # 2. Verify retry keyboard generation
+    kb_comp = get_alert_retry_keyboard("complaint")
+    assert any("Retry Send Complaint" in btn["text"] for row in kb_comp["inline_keyboard"] for btn in row)
+    assert any("menu:main" in btn["callback_data"] for row in kb_comp["inline_keyboard"] for btn in row)
+
+    kb_sr = get_alert_retry_keyboard("sr")
+    assert any("Retry Send SR" in btn["text"] for row in kb_sr["inline_keyboard"] for btn in row)
+
+    # 3. Verify recipient registry in db_manager
+    test_tg_id = "987654321"
+    db_manager.register_telegram_alert_recipient(test_tg_id)
+    recipients = db_manager.get_telegram_alert_recipients()
+    assert test_tg_id in recipients
+    print("   [OK] Verified persistent Telegram alert recipients registry in SQLite.")
+
+    # 4. Verify broadcast_telegram_alert with mocked Telegram API
+    with patch("telegram_bot.TelegramAPI.send_message", return_value={"ok": True}) as mock_send:
+        with patch("telegram_bot.TELEGRAM_BOT_TOKEN", "123456789:ABCDEF_TEST_TOKEN"):
+            sent_count = broadcast_telegram_alert("🚨 Test Alert Message", reply_markup=kb_comp)
+            assert sent_count > 0
+            assert mock_send.called
+    print("   [OK] Verified broadcast_telegram_alert successfully dispatches to registered recipients.")
+
+    # 5. Verify execute_automated_cycle broadcasts alert when CRM download fails
+    from web_server import execute_automated_cycle
+    with patch("web_server.download_from_crm", side_effect=RuntimeError("Asianet CRM Portal is down or unreachable")):
+        with patch("telegram_bot.broadcast_telegram_alert") as mock_alert_broadcast:
+            cycle_result = execute_automated_cycle("thrissur")
+            assert cycle_result["status"] == "ERROR"
+            assert "Asianet CRM Portal is down or unreachable" in cycle_result["message"]
+            assert mock_alert_broadcast.called
+            called_text = mock_alert_broadcast.call_args[0][0]
+            assert "Daily QOS Tracker — Automated Run Failed" in called_text
+            assert "Complaint Tracker" in called_text
+    print("   [OK] Verified execute_automated_cycle sends Telegram alert when CRM portal is down.")
+
+    # 6. Verify execute_automated_sr_cycle broadcasts alert when SR failure occurs
+    with patch("service_request_engine.compute_service_request_reports", side_effect=Exception("Corrupted SR Workbook")):
+        with patch("telegram_bot.broadcast_telegram_alert") as mock_sr_broadcast:
+            sr_result = execute_automated_sr_cycle("thrissur")
+            assert sr_result["status"] == "ERROR"
+            assert "Corrupted SR Workbook" in sr_result["message"]
+            assert mock_sr_broadcast.called
+            sr_called_text = mock_sr_broadcast.call_args[0][0]
+            assert "Service Request Pending" in sr_called_text
+    print("   [OK] Verified execute_automated_sr_cycle sends Telegram alert when SR processing fails.")
+
     print("\nALL TEST SUITE CHECKS PASSED PERFECTLY!")
 
 

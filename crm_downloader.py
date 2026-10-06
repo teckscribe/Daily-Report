@@ -58,11 +58,16 @@ def get_latest_local_downloads() -> Tuple[Optional[Path], Optional[Path], Option
     return None, None, None
 
 
+last_crm_error: Optional[str] = None
+
+
 def download_via_http_session(region: str = "Thrissur") -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
     """
     Direct, ultra-fast headless HTTP session downloader for Softcode and Prepaid portals.
     Executes in 2-3 seconds without browser overhead or profile lock issues.
     """
+    global last_crm_error
+    last_crm_error = None
     print(f"[CRM Downloader] Trying direct HTTP Session download for region: '{region}'...")
     adl_path = None
     adtv_path = None
@@ -98,6 +103,7 @@ def download_via_http_session(region: str = "Thrissur") -> Tuple[Optional[Path],
             login_resp_text = res_login.text.strip()
 
             if "Invalid Credientials" in login_resp_text:
+                last_crm_error = f"Softcode authentication failed: Invalid Credentials for '{SOFTCODE_USER}'."
                 print(f"[CRM Downloader] Softcode authentication failed: Invalid Credentials for user '{SOFTCODE_USER}'.")
             else:
                 print("[CRM Downloader] Softcode authenticated successfully! Entering CRMS module...")
@@ -119,6 +125,7 @@ def download_via_http_session(region: str = "Thrissur") -> Tuple[Optional[Path],
                     adl_path.write_bytes(res_adl.content)
                     print(f"  [+] Saved ADL to: {adl_path.name} ({len(res_adl.content):,} bytes)")
                 else:
+                    last_crm_error = f"ADL download failed: HTTP {res_adl.status_code} ({len(res_adl.content)} bytes)"
                     print(f"  [!] ADL download received HTTP {res_adl.status_code}, size: {len(res_adl.content)} bytes")
 
                 # Fetch ADTv Digital TV report
@@ -133,9 +140,11 @@ def download_via_http_session(region: str = "Thrissur") -> Tuple[Optional[Path],
                     adtv_path.write_bytes(res_adtv.content)
                     print(f"  [+] Saved ADTv to: {adtv_path.name} ({len(res_adtv.content):,} bytes)")
                 else:
+                    last_crm_error = f"ADTv download failed: HTTP {res_adtv.status_code} ({len(res_adtv.content)} bytes)"
                     print(f"  [!] ADTv download received HTTP {res_adtv.status_code}, size: {len(res_adtv.content)} bytes")
 
         except Exception as e_softcode:
+            last_crm_error = f"Softcode CRM Portal error: {e_softcode}"
             print(f"[CRM Downloader] Softcode HTTP session notice: {e_softcode}")
     else:
         print("[CRM Downloader] Softcode credentials not fully set in .env (SOFTCODE_USER / SOFTCODE_PWD).")
@@ -171,6 +180,7 @@ def download_via_http_session(region: str = "Thrissur") -> Tuple[Optional[Path],
             }
             res_auth = s_prep.post(PREPAID_PORTAL_URL, data=payload, headers=headers_post, timeout=15)
             if "invalid" in res_auth.text.lower() or "incorrect" in res_auth.text.lower():
+                last_crm_error = f"Prepaid portal authentication failed: Invalid Credentials for '{PREPAID_USER}'."
                 print(f"[CRM Downloader] Prepaid portal authentication failed: Invalid Credentials for user '{PREPAID_USER}'.")
             else:
                 print("[CRM Downloader] Prepaid portal authenticated successfully! Downloading pending tickets...")
@@ -180,9 +190,11 @@ def download_via_http_session(region: str = "Thrissur") -> Tuple[Optional[Path],
                     prep_path.write_bytes(res_export.content)
                     print(f"  [+] Saved Prepaid to: {prep_path.name} ({len(res_export.content):,} bytes)")
                 else:
+                    last_crm_error = f"Prepaid export failed: HTTP {res_export.status_code} ({len(res_export.content)} bytes)"
                     print(f"  [!] Prepaid export received HTTP {res_export.status_code}, size: {len(res_export.content)} bytes")
 
         except Exception as e_prep:
+            last_crm_error = f"Prepaid SMS Portal error: {e_prep}"
             print(f"[CRM Downloader] Prepaid HTTP session notice: {e_prep}")
     else:
         print("[CRM Downloader] Prepaid credentials not fully set in .env (PREPAID_USER / PREPAID_PWD).")
@@ -306,18 +318,24 @@ def download_via_playwright(headless: bool = False, region: str = "Thrissur") ->
             context.close()
 
     except Exception as e_playwright:
+        last_crm_error = f"Playwright browser automation error: {e_playwright}"
         print(f"[CRM Downloader] Playwright automation error: {e_playwright}")
 
     return adl_path, adtv_path, prep_path
 
 
-def download_from_crm(headless: bool = True, region: str = "Thrissur") -> Tuple[Path, Path, Path]:
+def download_from_crm(
+    headless: bool = True,
+    region: str = "Thrissur",
+    allow_stale: bool = True,
+) -> Tuple[Path, Path, Path]:
     """
     Unified entrypoint:
     1. Attempts direct ultra-fast HTTP Session download.
     2. If missing files, falls back to Playwright browser automation.
-    3. If still missing files, falls back to latest local downloads from Downloads/ or data/.
+    3. If still missing files, falls back to latest local downloads from Downloads/ or data/ (if allow_stale=True).
     """
+    global last_crm_error
     print("=" * 60)
     print(f"[CRM Downloader] Starting Automated Portal Download Pipeline for Region: {region}")
     print("=" * 60)
@@ -327,17 +345,25 @@ def download_from_crm(headless: bool = True, region: str = "Thrissur") -> Tuple[
     prep_path = None
 
     # Step 1: Fast HTTP session
-    if (SOFTCODE_USER and SOFTCODE_PWD) or (PREPAID_USER and PREPAID_PWD):
+    credentials_configured = bool((SOFTCODE_USER and SOFTCODE_PWD) or (PREPAID_USER and PREPAID_PWD))
+    if credentials_configured:
         adl_path, adtv_path, prep_path = download_via_http_session(region=region)
 
     # Step 2: Browser automation fallback if any file missing
     if not (adl_path and adtv_path and prep_path):
-        if (SOFTCODE_USER and SOFTCODE_PWD) or (PREPAID_USER and PREPAID_PWD):
+        if credentials_configured:
             print("\n[CRM Downloader] Some files not retrieved via HTTP. Attempting Playwright browser fallback...")
             b_adl, b_adtv, b_prep = download_via_playwright(headless=headless, region=region)
             adl_path = adl_path or b_adl
             adtv_path = adtv_path or b_adtv
             prep_path = prep_path or b_prep
+
+    # If credentials were configured and online download failed, enforce allow_stale policy
+    if credentials_configured and not (adl_path and adtv_path and prep_path) and not allow_stale:
+        raise RuntimeError(
+            f"Asianet CRM Portal is down or unreachable: {last_crm_error or 'Failed to download fresh tickets'}. "
+            f"Automated run aborted to prevent stale dispatch. Please retry once CRM portal is restored."
+        )
 
     # Step 3: Local downloads fallback
     if not (adl_path and adtv_path and prep_path):

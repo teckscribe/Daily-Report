@@ -36,6 +36,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -636,8 +637,126 @@ def is_user_authorized(user_id: int, chat_id: int) -> bool:
         # Auto-authorize first caller if no admin IDs are configured in .env
         authorized_users_cache.add(user_id)
         print(f"[Telegram Bot] [!] No TELEGRAM_ALLOWED_USERS in .env. Auto-authorized user: {user_id}")
+        db_manager.register_telegram_alert_recipient(chat_id)
         return True
-    return user_id in authorized_users_cache or chat_id in authorized_users_cache
+    authorized = (user_id in authorized_users_cache or chat_id in authorized_users_cache)
+    if authorized:
+        db_manager.register_telegram_alert_recipient(chat_id)
+    return authorized
+
+
+# --- Automated Failure Alert Dispatcher ---
+
+def format_automated_error_alert(
+    pipeline: str,
+    region_id: str,
+    error_message: str,
+    timestamp: Optional[str] = None,
+    is_crm_issue: bool = False,
+) -> str:
+    """Formats an urgent Telegram error notification with diagnostics and actionable recovery steps."""
+    ts = timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    reg_label = region_id.capitalize()
+
+    clean_err = str(error_message).strip()
+    escaped_err = (
+        clean_err.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+    if len(escaped_err) > 1200:
+        escaped_err = escaped_err[:1200] + "... (truncated)"
+
+    pipeline_icon = "📊" if "complaint" in pipeline.lower() else "📋"
+
+    crm_warning = ""
+    err_lower = clean_err.lower()
+    if is_crm_issue or any(
+        k in err_lower
+        for k in [
+            "crm",
+            "softcode",
+            "portal.asianet",
+            "sms.ali.asianet",
+            "connection",
+            "timeout",
+            "timed out",
+            "unreachable",
+            "refused",
+            "name_not_resolved",
+            "502",
+            "503",
+            "504",
+        ]
+    ):
+        crm_warning = (
+            "⚠️ <b>Likely Cause:</b> Asianet CRM portal is down, unreachable, or timed out.\n\n"
+        )
+
+    msg = (
+        "🚨 <b>Daily QOS Tracker — Automated Run Failed</b>\n\n"
+        f"<b>{pipeline_icon} Pipeline:</b> {pipeline}\n"
+        f"<b>📍 Region:</b> {reg_label}\n"
+        f"<b>⏰ Time:</b> <code>{ts}</code>\n"
+        f"<b>❌ Error:</b> <code>{escaped_err}</code>\n\n"
+        f"{crm_warning}"
+        "👉 <b>Action Needed:</b>\n"
+        "• Check if the CRM portal is back online, then tap <b>Retry</b> below or run <code>/menu</code>.\n"
+        "• Or upload the raw Excel file directly at the web dashboard to process immediately."
+    )
+    return msg
+
+
+def get_alert_retry_keyboard(pipeline: str = "complaint") -> Dict[str, Any]:
+    """Generates quick retry buttons for automated error alerts."""
+    buttons = []
+    p = pipeline.lower()
+    if "complaint" in p:
+        buttons.append([{"text": "🔄 Retry Send Complaint", "callback_data": "action:send_complaint"}])
+    elif "sr" in p or "service" in p:
+        buttons.append([{"text": "🔄 Retry Send SR", "callback_data": "action:send_sr"}])
+    else:
+        buttons.append([{"text": "🔄 Retry Send Complaint", "callback_data": "action:send_complaint"}])
+        buttons.append([{"text": "🔄 Retry Send SR", "callback_data": "action:send_sr"}])
+    buttons.append([{"text": "🎛 Open Control Panel", "callback_data": "menu:main"}])
+    return {"inline_keyboard": buttons}
+
+
+def broadcast_telegram_alert(
+    text: str,
+    reply_markup: Optional[Dict[str, Any]] = None,
+    parse_mode: str = "HTML",
+) -> int:
+    """
+    Broadcasts a high-priority system alert to all authorized Telegram chat IDs.
+    Returns the count of successfully delivered messages.
+    """
+    if not TELEGRAM_BOT_TOKEN:
+        print("[Telegram Alert] TELEGRAM_BOT_TOKEN is not configured in .env. Alert skipped.")
+        return 0
+
+    api = TelegramAPI(TELEGRAM_BOT_TOKEN)
+    recipients = db_manager.get_telegram_alert_recipients()
+    if not recipients:
+        print("[Telegram Alert] No recipients registered to receive Telegram alerts.")
+        return 0
+
+    success_count = 0
+    for chat_id in recipients:
+        try:
+            res = api.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode,
+            )
+            if res.get("ok"):
+                success_count += 1
+            else:
+                print(f"[Telegram Alert] Failed to send alert to {chat_id}: {res.get('description')}")
+        except Exception as e:
+            print(f"[Telegram Alert] Error sending alert to {chat_id}: {e}")
+    return success_count
 
 
 # --- Telegram Bot Engine ---
