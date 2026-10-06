@@ -732,6 +732,10 @@
             <a href="/api/service-request/download-excel" class="btn btn-secondary" download title="Download calculated Service Request Excel workbook">
               <span>📥</span> SR Excel
             </a>
+            <label class="btn btn-secondary" style="margin-bottom: 0; cursor: pointer;" title="Upload raw Complaints Excel workbook (Daily Complint pending Report.xls)">
+              <span>📤</span> Upload Complaints Excel
+              <input type="file" id="complaints-file-upload" accept=".xls,.xlsx" style="display: none;" onchange="uploadRawComplaintsExcel(event)">
+            </label>
             <label class="btn btn-secondary" style="margin-bottom: 0; cursor: pointer;" title="Upload raw Service Request Excel workbook to recompute aging buckets">
               <span>📤</span> Upload Raw SR
               <input type="file" id="sr-file-upload" accept=".xls,.xlsx" style="display: none;" onchange="uploadRawSRExcel(event)">
@@ -1199,30 +1203,38 @@
         Upload an Excel (<code>.xlsx</code>, <code>.xls</code>), CSV (<code>.csv</code>), or JSON (<code>.json</code>) file to update the personnel roster, positions, and center mapping keys for the active region.
       </p>
 
-      <div style="background: #f8fafc; border: 1px dashed var(--border); border-radius: 8px; padding: 1.25rem; text-align: center; margin-bottom: 1.25rem;">
+      <div id="directory-drop-zone"
+           style="background: #f8fafc; border: 2px dashed var(--border); border-radius: 8px; padding: 1.5rem; text-align: center; margin-bottom: 1.25rem; cursor: pointer; transition: all 0.2s ease;"
+           onclick="document.getElementById('directory-file-input').click()"
+           ondragover="handleDirectoryDragOver(event)"
+           ondragleave="handleDirectoryDragLeave(event)"
+           ondrop="handleDirectoryDrop(event)">
         <input type="file" id="directory-file-input" accept=".xlsx,.xls,.csv,.json" style="display: none;" onchange="handleDirectoryFileSelect(this)">
-        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📄</div>
-        <p style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem;" id="directory-file-name">Click or drag file here to upload</p>
-        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Supports .xlsx, .xls, .csv, and .json files</p>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('directory-file-input').click()">Browse File</button>
+        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📄</div>
+        <p style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.25rem; color: var(--text-main);" id="directory-file-name">Click or drag &amp; drop Excel / CSV file here</p>
+        <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.85rem;" id="directory-file-subtext">Supports .xlsx, .xls, .csv, and .json files</p>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); document.getElementById('directory-file-input').click()">Browse File</button>
       </div>
 
       <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 0.85rem; font-size: 0.82rem; color: #1e40af;">
         <div style="font-weight: 600; margin-bottom: 0.25rem;">ℹ️ Official Column Format:</div>
         <div><code>Emp Code</code>, <code>Employee Display name</code>, <code>Position</code> (Team Leader / ACSO), <code>Phone Number</code>, <code>Gmail</code>, <code>Center Display name</code>, <code>Name in Postpaid CRM</code>, <code>Center Name in Postpaid ADL</code>, <code>Center Name in Postpaid ADTv</code>, <code>Center name in Prepaid</code></div>
-        <div style="margin-top: 0.5rem;">
+        <div style="margin-top: 0.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          <a href="#" onclick="exportDirectoryExcel(); return false;" style="color: #2563eb; font-weight: 600; text-decoration: underline;">
+            📊 Export Current Directory (.xlsx)
+          </a>
           <a href="/api/employee-directory/download-template" style="color: #2563eb; font-weight: 600; text-decoration: underline;" download>
-            📥 Download Official Template (.xlsx)
+            📥 Download Blank Template (.xlsx)
           </a>
         </div>
       </div>
 
-      <div id="upload-directory-status" style="margin-top: 0.75rem; font-size: 0.85rem; display: none;"></div>
+      <div id="upload-directory-status" style="margin-top: 0.75rem; font-size: 0.88rem; font-weight: 600; display: none; padding: 0.75rem; border-radius: 6px;"></div>
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-secondary" onclick="closeModal('modal-upload-directory')">Cancel</button>
       <button type="button" class="btn btn-primary" id="btn-submit-upload-directory" onclick="submitDirectoryUpload()">
-        <span>🚀</span> Import Directory
+        <span>🚀</span> Import Directory Now
       </button>
     </div>
   </dialog>
@@ -1749,6 +1761,7 @@
         if (res.ok) {
           allDirectory = await res.json();
           renderDirectory();
+          updateStats();
         }
       } catch (err) {
         console.error("Failed to load unified directory:", err);
@@ -1828,9 +1841,29 @@
       if (badge) badge.innerText = allDirectory.length;
 
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="13" style="text-align: center; color: var(--text-muted); padding: 2.5rem;">
-          No employee directory entries found matching "${escapeHtml(q)}". Click "+ Add Employee" or "📤 Upload Employee Directory" above to get started.
-        </td></tr>`;
+        if (q) {
+          tbody.innerHTML = `<tr><td colspan="13" style="text-align: center; color: var(--text-muted); padding: 2.5rem;">
+            No employee directory entries found matching "${escapeHtml(q)}".
+          </td></tr>`;
+        } else {
+          tbody.innerHTML = `<tr><td colspan="13" style="text-align: center; color: var(--text-muted); padding: 3rem 1.5rem;">
+            <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">👥</div>
+            <div style="font-size: 1.1rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.35rem;">
+              No employee records found for ${escapeHtml(currentRegion.toUpperCase())}
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-muted); max-width: 520px; margin: 0 auto 1.25rem auto;">
+              Upload your Excel roster (.xlsx) to populate the directory, or restore the baseline preset below.
+            </p>
+            <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
+              <button class="btn btn-primary" onclick="openUploadDirectoryModal()">
+                <span>📤</span> Upload Employee Directory (.xlsx)
+              </button>
+              <button class="btn btn-secondary" onclick="loadThrissurPreset()" style="background: #16a34a; color: white; border-color: #15803d;">
+                <span>⚡</span> Load Baseline Preset (35 Employees)
+              </button>
+            </div>
+          </td></tr>`;
+        }
         updateSelectedDirectoryCount();
         return;
       }
@@ -1909,37 +1942,99 @@
       if (input) input.value = '';
       selectedDirectoryFile = null;
       const nameEl = document.getElementById('directory-file-name');
-      if (nameEl) nameEl.innerText = 'Click or drag file here to upload';
+      if (nameEl) nameEl.innerText = 'Click or drag & drop Excel / CSV file here';
+      const subEl = document.getElementById('directory-file-subtext');
+      if (subEl) subEl.innerText = 'Supports .xlsx, .xls, .csv, and .json files';
+      const dropZone = document.getElementById('directory-drop-zone');
+      if (dropZone) {
+        dropZone.style.borderColor = 'var(--border)';
+        dropZone.style.background = '#f8fafc';
+      }
       const statusEl = document.getElementById('upload-directory-status');
       if (statusEl) {
         statusEl.style.display = 'none';
         statusEl.innerText = '';
       }
+      const btn = document.getElementById('btn-submit-upload-directory');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<span>🚀</span> Import Directory Now`;
+      }
       openModal('modal-upload-directory');
+    }
+
+    function handleDirectoryDragOver(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const dropZone = document.getElementById('directory-drop-zone');
+      if (dropZone) {
+        dropZone.style.borderColor = '#2563eb';
+        dropZone.style.background = '#eff6ff';
+      }
+    }
+
+    function handleDirectoryDragLeave(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const dropZone = document.getElementById('directory-drop-zone');
+      if (dropZone) {
+        dropZone.style.borderColor = 'var(--border)';
+        dropZone.style.background = '#f8fafc';
+      }
+    }
+
+    function handleDirectoryDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleDirectoryDragLeave(e);
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        setDirectorySelectedFile(file);
+      }
     }
 
     function handleDirectoryFileSelect(input) {
       if (input.files && input.files[0]) {
-        selectedDirectoryFile = input.files[0];
-        document.getElementById('directory-file-name').innerText = `Selected: ${selectedDirectoryFile.name} (${(selectedDirectoryFile.size / 1024).toFixed(1)} KB)`;
+        setDirectorySelectedFile(input.files[0]);
+      }
+    }
+
+    function setDirectorySelectedFile(file) {
+      selectedDirectoryFile = file;
+      const nameEl = document.getElementById('directory-file-name');
+      const subEl = document.getElementById('directory-file-subtext');
+      const dropZone = document.getElementById('directory-drop-zone');
+      if (nameEl) nameEl.innerHTML = `<span style="color: #16a34a;">✓ Selected: ${escapeHtml(file.name)}</span>`;
+      if (subEl) subEl.innerText = `Size: ${(file.size / 1024).toFixed(1)} KB — Ready to import into ${currentRegion.toUpperCase()}`;
+      if (dropZone) {
+        dropZone.style.borderColor = '#16a34a';
+        dropZone.style.background = '#f0fdf4';
+      }
+      const statusEl = document.getElementById('upload-directory-status');
+      if (statusEl) {
+        statusEl.style.display = 'none';
       }
     }
 
     async function submitDirectoryUpload() {
       const fileInput = document.getElementById('directory-file-input');
-      const file = fileInput?.files?.[0] || selectedDirectoryFile;
+      const file = selectedDirectoryFile || fileInput?.files?.[0];
       if (!file) {
-        showToast("Please choose an Excel or CSV file first", "error");
+        showToast("Please choose or drop an Excel or CSV file first", "error");
         return;
       }
 
       const btn = document.getElementById('btn-submit-upload-directory');
       const statusEl = document.getElementById('upload-directory-status');
-      if (btn) btn.disabled = true;
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳</span> Importing Directory...`;
+      }
       if (statusEl) {
         statusEl.style.display = 'block';
-        statusEl.style.color = '#2563eb';
-        statusEl.innerText = 'Uploading and importing employee roster...';
+        statusEl.style.background = '#eff6ff';
+        statusEl.style.color = '#1d4ed8';
+        statusEl.innerText = `Uploading and parsing '${file.name}' into ${currentRegion.toUpperCase()}...`;
       }
 
       const formData = new FormData();
@@ -1955,17 +2050,28 @@
           showToast(result.message || "Employee directory imported successfully", "success");
           closeModal('modal-upload-directory');
           await loadRegionConfig(currentRegion);
+          await loadDirectoryData(currentRegion);
+          updateStats();
         } else {
-          statusEl.style.color = '#dc2626';
-          statusEl.innerText = result.detail || 'Upload failed';
+          if (statusEl) {
+            statusEl.style.background = '#fef2f2';
+            statusEl.style.color = '#b91c1c';
+            statusEl.innerText = result.detail || 'Upload failed. Please check file format.';
+          }
           showToast(result.detail || 'Upload failed', 'error');
         }
       } catch (err) {
-        statusEl.style.color = '#dc2626';
-        statusEl.innerText = 'Network error during upload';
+        if (statusEl) {
+          statusEl.style.background = '#fef2f2';
+          statusEl.style.color = '#b91c1c';
+          statusEl.innerText = 'Network error during upload.';
+        }
         showToast("Upload failed due to network error", "error");
       } finally {
-        if (btn) btn.disabled = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<span>🚀</span> Import Directory Now`;
+        }
       }
     }
 
@@ -3508,6 +3614,43 @@
           btn.disabled = false;
           btn.innerHTML = `<span>🚀</span> Run SR Cycle & Dispatch`;
         }
+      }
+    }
+
+    async function uploadRawComplaintsExcel(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      showToast(`Uploading '${file.name}' & recomputing Complaint reports...`, "info");
+      try {
+        const res = await fetch('/api/complaints/upload-raw', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok && data.status === "OK") {
+          showToast(data.message || "Complaints workbook updated & reports recomputed!", "success");
+          const ts = new Date().getTime();
+          const adlTl = document.getElementById('img-adl-tl');
+          const adlAcso = document.getElementById('img-adl-acso');
+          const adtvTl = document.getElementById('img-adtv-tl');
+          const adtvAcso = document.getElementById('img-adtv-acso');
+          if (adlTl) adlTl.src = `/output/ADL_Complaint_Pending.jpg?t=${ts}`;
+          if (adlAcso) adlAcso.src = `/output/ADL_ACSO_Complaint_Pending.jpg?t=${ts}`;
+          if (adtvTl) adtvTl.src = `/output/ADTv_Complaint_Pending.jpg?t=${ts}`;
+          if (adtvAcso) adtvAcso.src = `/output/ADTv_ACSO_Complaint_Pending.jpg?t=${ts}`;
+          runCalculationTest();
+        } else {
+          showToast(data.detail || data.message || "Upload failed", "error");
+        }
+      } catch (err) {
+        console.error("Complaints upload error:", err);
+        showToast("Error uploading complaints file", "error");
+      } finally {
+        e.target.value = '';
       }
     }
 

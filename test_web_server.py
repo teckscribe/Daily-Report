@@ -765,6 +765,35 @@ def test_routes():
         else:
             os.environ.pop("TARGET_EXCEL_PATH", None)
 
+    # Test Flexible Header Mapping for Directory Upload
+    import pandas as pd
+    df_custom = pd.DataFrame([
+        {"Emp Code": "9991", "Employee Name": "Upload Test Emp", "Position": "Team Leader", "Center Name": "Chalakudy", "Phone": "9846001122"}
+    ])
+    custom_buf = BytesIO()
+    df_custom.to_excel(custom_buf, index=False)
+    custom_buf.seek(0)
+    res_cust_up = client.post(
+        "/api/regions/ernakulam/upload-directory",
+        files={"file": ("custom_upload.xlsx", custom_buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    )
+    assert res_cust_up.status_code == 200
+    assert res_cust_up.json()["status"] == "OK"
+    print("   [OK] Verified POST /api/regions/{region_id}/upload-directory with flexible informal column headers.")
+
+    # Test Raw Complaints Workbook Upload Endpoint
+    with open("Daily Complint Tracker.xls", "rb") as f_c:
+        res_comp_up = client.post(
+            "/api/complaints/upload-raw",
+            files={"file": ("Daily Complint Tracker.xls", f_c, "application/vnd.ms-excel")}
+        )
+    assert res_comp_up.status_code == 200
+    assert res_comp_up.json()["status"] == "OK"
+    print("   [OK] Verified POST /api/complaints/upload-raw (recomputed and generated Retina reports).")
+
+    # Restore Thrissur baseline preset to ensure test isolation
+    db_manager.load_sample_preset("thrissur")
+
     print("\nALL TEST SUITE CHECKS PASSED PERFECTLY!")
 
 
