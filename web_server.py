@@ -236,9 +236,22 @@ async def create_region(payload: RegionCreate):
 
 @app.delete("/api/regions/{region_id}")
 async def remove_region(region_id: str):
-    """Deletes a region (except Thrissur master baseline)."""
-    if region_id.lower() == "thrissur":
-        raise HTTPException(status_code=400, detail="Cannot delete baseline Thrissur region.")
+    """Deletes an unused region, but never the configured default region."""
+    region_id = region_id.lower().strip()
+    if region_id == DEFAULT_REGION_ID:
+        raise HTTPException(status_code=400, detail="Cannot delete the configured default region.")
+    region = next((r for r in db_manager.get_all_regions() if r["id"] == region_id), None)
+    if not region:
+        raise HTTPException(status_code=404, detail="Region not found.")
+    config_counts = (
+        "center_count", "tl_count", "acso_count", "emp_count",
+        "schedule_count", "dispatch_rule_count",
+    )
+    if any(int(region.get(key) or 0) > 0 for key in config_counts):
+        raise HTTPException(
+            status_code=409,
+            detail="This region still has configuration or scheduled rules. Clear/export it first before deleting.",
+        )
     success = db_manager.delete_region(region_id)
     if not success:
         raise HTTPException(status_code=404, detail="Region not found.")

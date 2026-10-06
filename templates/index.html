@@ -568,6 +568,9 @@
         <button class="btn btn-secondary btn-sm" onclick="openAddRegionModal()">
           <span>&#43;</span> Add Region
         </button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCurrentRegion()" title="Remove the selected empty region">
+          <span>&#128465;</span> Remove Region
+        </button>
         <button class="btn btn-secondary btn-sm" onclick="openBackupModal()" title="Export/Import configuration or load Thrissur preset">
           <span>💾</span> Backup & Preset
         </button>
@@ -1778,6 +1781,34 @@
         `).join('');
       } catch (err) {
         showToast("Error loading regions", "error");
+      }
+    }
+
+    async function deleteCurrentRegion() {
+      const regionId = currentRegion;
+      const region = (allData.regions || []).find(r => r.id === regionId);
+      if (!region) {
+        showToast("Select a region first", "error");
+        return;
+      }
+      const counts = ["center_count", "tl_count", "acso_count", "emp_count", "schedule_count", "dispatch_rule_count"];
+      if (counts.some(key => Number(region[key] || 0) > 0)) {
+        showToast("This region has data or scheduled rules. Export/clear it before removing.", "error");
+        return;
+      }
+      if (!confirm(`Remove the empty region '${region.name}'? This cannot be undone.`)) return;
+      try {
+        const res = await fetch(`/api/regions/${encodeURIComponent(regionId)}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || data.message || "Region could not be removed");
+        await loadRegions();
+        const fallback = (allData.regions || []).some(r => r.id === "__DEFAULT_REGION_ID__")
+          ? "__DEFAULT_REGION_ID__"
+          : (allData.regions || [])[0]?.id;
+        if (fallback) await loadRegionConfig(fallback);
+        showToast(`Region '${region.name}' removed`, "success");
+      } catch (err) {
+        showToast(err.message, "error");
       }
     }
 

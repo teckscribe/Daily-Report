@@ -252,7 +252,9 @@ def get_all_regions() -> List[Dict[str, Any]]:
            (SELECT COUNT(*) FROM centers WHERE region_id = r.id) as center_count,
            (SELECT COUNT(*) FROM team_leaders WHERE region_id = r.id) as tl_count,
            (SELECT COUNT(*) FROM acsos WHERE region_id = r.id) as acso_count,
-           (SELECT COUNT(*) FROM employees WHERE region_id = r.id) as emp_count
+           (SELECT COUNT(*) FROM employees WHERE region_id = r.id) as emp_count,
+           (SELECT COUNT(*) FROM schedule_times WHERE region_id = r.id) as schedule_count,
+           (SELECT COUNT(*) FROM dispatch_rules WHERE region_id = r.id) as dispatch_rule_count
     FROM regions r
     ORDER BY CASE WHEN r.id = 'thrissur' THEN 0 ELSE 1 END, r.name ASC
     """)
@@ -288,8 +290,6 @@ def add_region(region_id: str, name: str, softcode_region: str, prepaid_region: 
 
 
 def delete_region(region_id: str) -> bool:
-    if region_id == "thrissur":
-        return False  # Protect master baseline region
     conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM regions WHERE id = ?", (region_id,))
