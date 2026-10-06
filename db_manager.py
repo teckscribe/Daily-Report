@@ -16,10 +16,8 @@ from config import DATA_DIR, DEFAULT_REGION_ID, DEFAULT_REGION_NAME
 DB_PATH = DATA_DIR / "region_config.db"
 
 DEFAULT_REGIONS = [
-    ("thrissur", "Thrissur", "Thrissur", "Thrissur"),
+    (DEFAULT_REGION_ID, DEFAULT_REGION_NAME, DEFAULT_REGION_NAME, DEFAULT_REGION_NAME),
 ]
-if DEFAULT_REGION_ID != "thrissur":
-    DEFAULT_REGIONS.append((DEFAULT_REGION_ID, DEFAULT_REGION_NAME, DEFAULT_REGION_NAME, DEFAULT_REGION_NAME))
 KERALA_DISTRICTS = DEFAULT_REGIONS
 
 
@@ -32,7 +30,7 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db():
-    """Initializes schema and seeds default Kerala regions & Thrissur baseline data."""
+    """Initializes schema and ensures the configured default region exists."""
     conn = get_connection()
     c = conn.cursor()
 
@@ -197,7 +195,7 @@ def init_db():
 
     conn.commit()
 
-    # Seed Regions (Thrissur default)
+    # Only the configured default is mandatory; deleted optional regions stay deleted.
     now_str = datetime.now().isoformat()
     for r_id, r_name, sc_reg, pp_reg in DEFAULT_REGIONS:
         c.execute("""
@@ -1597,6 +1595,9 @@ def auto_sync_directory_from_disk(region_id: str = DEFAULT_REGION_ID) -> bool:
     """
     try:
         candidates = [DATA_DIR / f"employee_directory_{region_id}.json"]
+        # An old browser tab or leftover JSON must not recreate a deleted region.
+        if get_region_by_id(region_id) is None:
+            return False
         # The historical generic filename belongs to the Thrissur baseline.
         # Never copy it into another region during first-start auto-sync.
         if region_id == "thrissur":
