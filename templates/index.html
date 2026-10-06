@@ -658,11 +658,11 @@
             <button class="btn btn-danger" id="btn-bulk-delete-dir" onclick="bulkDeleteDirectoryEntries()" style="display: none; background: #dc2626; border-color: #b91c1c; color: #fff; font-weight: 700;" title="Delete selected employees from directory">
               <span>🗑️</span> Delete Selected (<span id="selected-dir-count">0</span>)
             </button>
-            <button class="btn btn-secondary" onclick="downloadDirectoryTemplate()" title="Download Excel template (Employee_Directory_Template.xlsx)">
-              <span>📥</span> Download Template
+            <button class="btn btn-secondary" onclick="exportDirectoryExcel()" title="Export Employee Directory in the Excel template format (.xlsx)">
+              <span>📊</span> Export Excel
             </button>
-            <button class="btn btn-secondary" onclick="exportDirectoryJSON()" title="Export Employee Directory as a standalone JSON file">
-              <span>📄</span> Export JSON
+            <button class="btn btn-secondary" onclick="downloadDirectoryTemplate()" title="Download blank Excel template (Employee_Directory_Template.xlsx)">
+              <span>📥</span> Blank Template
             </button>
             <button class="btn btn-secondary" onclick="openUploadDirectoryModal()" title="Upload Excel/CSV/JSON file to update the Employee Directory">
               <span>📤</span> Upload Employee Directory
@@ -1892,6 +1892,10 @@
     }
 
     // --- Directory Template Download & File Upload ---
+    function exportDirectoryExcel() {
+      window.location.href = `/api/regions/${currentRegion}/directory/export-excel`;
+    }
+
     function downloadDirectoryTemplate() {
       window.location.href = `/api/employee-directory/download-template?region_id=${currentRegion}`;
     }

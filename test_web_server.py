@@ -673,6 +673,34 @@ def test_routes():
     assert "position" in exported_data[0]
     print(f"   [OK] Verified GET /api/regions/thrissur/directory/export-json ({len(exported_data)} entries).")
 
+    # Test export Excel endpoint (populated 10-column template)
+    import openpyxl
+    from io import BytesIO
+
+    res_excel = client.get("/api/regions/thrissur/directory/export-excel")
+    assert res_excel.status_code == 200
+    assert "spreadsheetml" in res_excel.headers.get("content-type", "")
+    assert "Employee_Directory_Thrissur.xlsx" in res_excel.headers.get("content-disposition", "")
+    wb_test = openpyxl.load_workbook(BytesIO(res_excel.content))
+    ws_test = wb_test["Employee Directory"]
+    assert ws_test.max_column == 10
+    assert ws_test.max_row >= 2
+    expected_headers = [
+        "Emp Code",
+        "Employee Display name",
+        "Position",
+        "Phone Number",
+        "Gmail",
+        "Center Display name",
+        "Name in Postpaid CRM",
+        "Center Name in Postpaid ADL",
+        "Center Name in Postpaid ADTv",
+        "Center name in Prepaid",
+    ]
+    actual_headers = [ws_test.cell(row=1, column=col).value for col in range(1, 11)]
+    assert actual_headers == expected_headers
+    print(f"   [OK] Verified GET /api/regions/thrissur/directory/export-excel (10 cols, {ws_test.max_row - 1} populated rows).")
+
     # Test JSON file on disk
     json_disk = Path(db_manager.DATA_DIR / "employee_directory.json")
     assert json_disk.exists()

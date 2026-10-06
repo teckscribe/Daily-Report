@@ -22,7 +22,7 @@ import json
 from io import BytesIO
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse, Response, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -348,6 +348,118 @@ def export_directory_json_endpoint(region_id: str):
         path=path_str,
         filename=f"Employee_Directory_{region_id}.json",
         media_type="application/json"
+    )
+
+
+@app.get("/api/regions/{region_id}/directory/export-excel")
+def export_directory_excel_endpoint(region_id: str):
+    """
+    Exports the complete populated Employee Directory for a region in the exact
+    10-column Excel template format.
+    """
+    records = db_manager.get_unified_directory(region_id)
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Employee Directory"
+
+    headers = [
+        "Emp Code",
+        "Employee Display name",
+        "Position",
+        "Phone Number",
+        "Gmail",
+        "Center Display name",
+        "Name in Postpaid CRM",
+        "Center Name in Postpaid ADL",
+        "Center Name in Postpaid ADTv",
+        "Center name in Prepaid",
+    ]
+    ws.append(headers)
+
+    # Professional header styling
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin', color='CBD5E1'),
+        right=Side(style='thin', color='CBD5E1'),
+        top=Side(style='thin', color='CBD5E1'),
+        bottom=Side(style='thin', color='CBD5E1'),
+    )
+
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+        cell.border = thin_border
+
+    # Populate rows
+    for r in records:
+        emp_code = r.get("emp_code") or ""
+        emp_name = r.get("emp_name") or ""
+        position = r.get("position") or ("ACSO" if "acso" in str(r.get("entry_type", "")).lower() else "Team Leader")
+        phone = r.get("phone") or ""
+        email = r.get("email") or ""
+        center_name = r.get("center_name") or ""
+        crm_name = r.get("crm_name") or emp_name
+        adl_center = r.get("adl_center") or center_name
+        adtv_center = r.get("adtv_center") or center_name
+        prepaid_center = r.get("prepaid_center") or center_name
+
+        ws.append([
+            emp_code,
+            emp_name,
+            position,
+            phone,
+            email,
+            center_name,
+            crm_name,
+            adl_center,
+            adtv_center,
+            prepaid_center,
+        ])
+
+    # Style data rows
+    regular_font = Font(name="Calibri", size=10)
+    for row in ws.iter_rows(min_row=2, max_row=max(ws.max_row, 2), min_col=1, max_col=len(headers)):
+        for cell in row:
+            cell.font = regular_font
+            cell.border = thin_border
+            if cell.column in (1, 3, 4):  # Emp Code, Position, Phone
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            else:
+                cell.alignment = Alignment(vertical="center")
+
+    # Set row height
+    ws.row_dimensions[1].height = 28
+    for row_idx in range(2, max(ws.max_row + 1, 3)):
+        ws.row_dimensions[row_idx].height = 20
+
+    # Auto-adjust column widths
+    for col in ws.columns:
+        max_len = 0
+        col_letter = col[0].column_letter
+        for cell in col:
+            val_str = str(cell.value or "")
+            if len(val_str) > max_len:
+                max_len = len(val_str)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 15)
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    clean_reg = region_id.capitalize()
+    filename = f"Employee_Directory_{clean_reg}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
 
