@@ -32,6 +32,7 @@ from config import (
     BASE_DIR,
     OUTPUT_DIR,
     TARGET_EXCEL_PATH,
+    resolve_target_excel_path,
     ADL_REPORT_IMAGE_PATH,
     ADTV_REPORT_IMAGE_PATH,
     ADL_ACSO_REPORT_IMAGE_PATH,
@@ -313,15 +314,37 @@ def add_directory_entry_endpoint(region_id: str, payload: DirectoryRowPayload):
 @app.put("/api/regions/{region_id}/directory/{row_id}")
 def update_directory_entry_endpoint(region_id: str, row_id: int, payload: DirectoryRowPayload):
     """Updates a single employee directory entry."""
-    db_manager.update_unified_directory_row(row_id, payload.dict())
+    db_manager.update_unified_directory_row(row_id, payload.dict(), region_id=region_id)
     return {"status": "OK", "id": row_id}
 
 
 @app.delete("/api/regions/{region_id}/directory/{row_id}")
 def delete_directory_entry_endpoint(region_id: str, row_id: int, entry_type: Optional[str] = "tl"):
     """Deletes an employee directory entry."""
-    db_manager.delete_unified_directory_row(row_id, entry_type=entry_type)
+    db_manager.delete_unified_directory_row(row_id, entry_type=entry_type, region_id=region_id)
     return {"status": "OK"}
+
+
+@app.get("/api/regions/{region_id}/directory/export-json")
+def export_directory_json_endpoint(region_id: str):
+    """Exports and downloads the complete Employee Directory as a standalone JSON file."""
+    path_str = db_manager.sync_directory_to_json(region_id)
+    return FileResponse(
+        path=path_str,
+        filename=f"Employee_Directory_{region_id}.json",
+        media_type="application/json"
+    )
+
+
+@app.post("/api/regions/{region_id}/directory/import-json")
+def import_directory_json_endpoint(region_id: str, payload: List[Dict[str, Any]]):
+    """Directly updates the Employee Directory from a JSON array payload."""
+    result = db_manager.import_unified_directory(region_id, payload)
+    return {
+        "status": "OK",
+        "message": f"Successfully imported {result.get('total_employees_imported', 0)} employees from JSON payload.",
+        "details": result
+    }
 
 
 @app.get("/api/employee-directory/download-template")
@@ -349,20 +372,30 @@ def download_directory_template_endpoint(region_id: Optional[str] = "thrissur"):
 
 @app.post("/api/regions/{region_id}/upload-directory")
 async def upload_directory_endpoint(region_id: str, file: UploadFile = File(...)):
-    """Uploads and imports Excel or CSV file into the Employee Directory database."""
-    if not file.filename.lower().endswith((".xlsx", ".xls", ".csv")):
-        raise HTTPException(status_code=400, detail="Only Excel (.xlsx, .xls) and CSV (.csv) files are supported.")
+    """Uploads and imports Excel, CSV, or JSON file into the Employee Directory database."""
+    if not file.filename.lower().endswith((".xlsx", ".xls", ".csv", ".json")):
+        raise HTTPException(status_code=400, detail="Only Excel (.xlsx, .xls), CSV (.csv), and JSON (.json) files are supported.")
 
     content = await file.read()
     try:
-        if file.filename.lower().endswith(".csv"):
+        if file.filename.lower().endswith(".json"):
+            records = json.loads(content.decode("utf-8"))
+            if not isinstance(records, list):
+                raise ValueError("JSON file must contain an array of employee directory objects.")
+            result = db_manager.import_unified_directory(region_id, records)
+            return {
+                "status": "OK",
+                "message": f"Successfully imported {result.get('total_employees_imported', 0)} personnel from JSON.",
+                "details": result
+            }
+        elif file.filename.lower().endswith(".csv"):
             df = pd.read_csv(BytesIO(content))
         else:
             excel_file = pd.ExcelFile(BytesIO(content))
             sheet = "Employee Directory" if "Employee Directory" in excel_file.sheet_names else 0
             df = pd.read_excel(excel_file, sheet_name=sheet)
     except Exception as e_parse:
-        raise HTTPException(status_code=400, detail=f"Failed to parse uploaded spreadsheet: {e_parse}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse uploaded file: {e_parse}")
 
     col_map = {}
     for c in df.columns:
@@ -473,7 +506,7 @@ def test_calculation_engine(region_id: str):
     against loaded CRM sheets.
     """
     try:
-        df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
+        df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(resolve_target_excel_path())
         result = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
 
         adl_postpaid = result.pending_days["adl_acso"].total.grand_total if result.pending_days["adl_acso"].total else sum(r.grand_total for r in result.pending_days["adl_acso"].rows)
@@ -513,7 +546,7 @@ def generate_reports(region_id: str, report_type: Optional[str] = "complaint"):
 
         # 1. Render Complaints if requested
         if r_type in ("all", "suite_all", "complaint", "complaints"):
-            df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
+            df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(resolve_target_excel_path())
             result = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
 
             df_sections = {
@@ -592,7 +625,7 @@ def dispatch_whatsapp(region_id: str, report_type: Optional[str] = "complaint"):
                     sr_sec = compute_service_request_reports()
                     render_sr_report_images(sr_sec)
                 else:
-                    df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
+                    df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(resolve_target_excel_path())
                     res = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
                     df_sections = {
                         "adl_team": res.final["adl_team"].to_frame(),
@@ -648,7 +681,7 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
             df_prepaid = filter_prepaid(raw_prep, region=region_id)
         except Exception as e_dl:
             print(f"[Generate & Send] Online download fallback: {e_dl}")
-            df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(TARGET_EXCEL_PATH)
+            df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(resolve_target_excel_path())
 
         # 3. Compute report
         result = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
@@ -665,7 +698,7 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
 
         # 5. Save working copy
         try:
-            write_working_copy(df_adl, df_adtv, df_prepaid, template_path=TARGET_EXCEL_PATH)
+            write_working_copy(df_adl, df_adtv, df_prepaid, template_path=resolve_target_excel_path())
         except Exception:
             pass
 
@@ -751,7 +784,7 @@ def execute_automated_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
         generate_report_images(df_sections)
         generate_acso_report_images(df_sections)
 
-        write_working_copy(df_adl, df_adtv, df_prepaid, template_path=TARGET_EXCEL_PATH)
+        write_working_copy(df_adl, df_adtv, df_prepaid, template_path=resolve_target_excel_path())
 
         # Dispatch according to active rules
         rules = db_manager.get_dispatch_rules(region_id)

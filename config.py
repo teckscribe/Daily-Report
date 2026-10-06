@@ -21,16 +21,50 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "3"))
 
 # --- Excel Report Paths ---
-TARGET_EXCEL_PATH = os.getenv(
-    "TARGET_EXCEL_PATH",
-    str(BASE_DIR / "Daily Complint Tracker.xls")
-    if (BASE_DIR / "Daily Complint Tracker.xls").exists()
-    else (
-        r"C:\Users\Anoop P\Desktop\Daily Tracker\Daily Complint pending Report..xls"
-        if sys.platform == "win32"
-        else str(BASE_DIR / "output" / "Daily_Complaint_Pending_Report.xlsx")
-    ),
-)
+def resolve_target_excel_path() -> str:
+    """
+    Robustly resolves a valid, existing Excel master workbook path.
+    1. Checks TARGET_EXCEL_PATH in .env (if it exists on current filesystem).
+    2. Checks repo root 'Daily Complint Tracker.xls' (the primary master source tracked in git).
+    3. Checks output and fallback locations.
+    Prevents [Errno 2] No such file or directory when running across Windows and Linux.
+    """
+    env_val = os.getenv("TARGET_EXCEL_PATH", "").strip()
+    if env_val:
+        # On Linux/macOS, ignore Windows paths (e.g. C:\...) configured from development .env
+        if sys.platform != "win32" and ((":" in env_val and len(env_val) >= 2 and env_val[1] == ":") or "\\" in env_val):
+            pass
+        else:
+            p = Path(env_val)
+            if p.exists():
+                return str(p.resolve())
+            rel_p = (BASE_DIR / env_val).resolve()
+            if rel_p.exists():
+                return str(rel_p)
+
+    candidates = [
+        BASE_DIR / "Daily Complint Tracker.xls",
+        OUTPUT_DIR / "Daily_Complaint_Pending_Report.xlsx",
+        OUTPUT_DIR / "Daily_Complaint_Pending_Report.xls",
+        BASE_DIR / "output" / "Daily_Complaint_Pending_Report.xlsx",
+        DATA_DIR / "Daily Complint Tracker.xls",
+        BASE_DIR / "Daily Complint pending Report.xls",
+    ]
+    if sys.platform == "win32":
+        candidates.extend([
+            Path(r"C:\Users\Anoop P\Desktop\Daily Tracker\Daily Complint pending Report.xls"),
+            Path(r"C:\Users\Anoop P\Desktop\Daily Tracker\Daily Complint pending Report..xls"),
+            Path.home() / "Desktop" / "Daily Tracker" / "Daily Complint pending Report.xls",
+            Path.home() / "Desktop" / "Daily Tracker" / "Daily Complint pending Report..xls",
+        ])
+
+    for c in candidates:
+        if c.exists():
+            return str(c.resolve())
+
+    return str((BASE_DIR / "Daily Complint Tracker.xls").resolve())
+
+TARGET_EXCEL_PATH = resolve_target_excel_path()
 
 # Output image paths
 REPORT_IMAGE_PATH = OUTPUT_DIR / "Daily_Complaint_Report_latest.jpg"

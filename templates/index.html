@@ -658,7 +658,10 @@
             <button class="btn btn-secondary" onclick="downloadDirectoryTemplate()" title="Download Excel template (Employee_Directory_Template.xlsx)">
               <span>📥</span> Download Template
             </button>
-            <button class="btn btn-secondary" onclick="openUploadDirectoryModal()" title="Upload Excel/CSV file to update the Employee Directory">
+            <button class="btn btn-secondary" onclick="exportDirectoryJSON()" title="Export Employee Directory as a standalone JSON file">
+              <span>📄</span> Export JSON
+            </button>
+            <button class="btn btn-secondary" onclick="openUploadDirectoryModal()" title="Upload Excel/CSV/JSON file to update the Employee Directory">
               <span>📤</span> Upload Employee Directory
             </button>
             <button class="btn btn-primary" onclick="openAddDirectoryModal()" title="Add an employee or officer">
@@ -1187,14 +1190,14 @@
     </div>
     <div class="modal-body">
       <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 1rem;">
-        Upload an Excel (<code>.xlsx</code>, <code>.xls</code>) or CSV (<code>.csv</code>) file to update the personnel roster, positions, and center mapping keys for the active region.
+        Upload an Excel (<code>.xlsx</code>, <code>.xls</code>), CSV (<code>.csv</code>), or JSON (<code>.json</code>) file to update the personnel roster, positions, and center mapping keys for the active region.
       </p>
 
       <div style="background: #f8fafc; border: 1px dashed var(--border); border-radius: 8px; padding: 1.25rem; text-align: center; margin-bottom: 1.25rem;">
-        <input type="file" id="directory-file-input" accept=".xlsx,.xls,.csv" style="display: none;" onchange="handleDirectoryFileSelect(this)">
+        <input type="file" id="directory-file-input" accept=".xlsx,.xls,.csv,.json" style="display: none;" onchange="handleDirectoryFileSelect(this)">
         <div style="font-size: 2rem; margin-bottom: 0.5rem;">📄</div>
         <p style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem;" id="directory-file-name">Click or drag file here to upload</p>
-        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Supports .xlsx, .xls, and .csv files</p>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Supports .xlsx, .xls, .csv, and .json files</p>
         <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('directory-file-input').click()">Browse File</button>
       </div>
 
@@ -1878,6 +1881,10 @@
     // --- Directory Template Download & File Upload ---
     function downloadDirectoryTemplate() {
       window.location.href = `/api/employee-directory/download-template?region_id=${currentRegion}`;
+    }
+
+    function exportDirectoryJSON() {
+      window.location.href = `/api/regions/${currentRegion}/directory/export-json`;
     }
 
     function openUploadDirectoryModal() {

@@ -299,7 +299,14 @@ def compute_report(
 # ---------------------------------------------------------------------------
 def load_inputs_from_workbook(path: str | Path):
     """Read 'ADL P', 'ADTv P', 'Prepaid' exactly as stored (no stripping, no type coercion)."""
-    path = str(path)
+    p = Path(path)
+    if not p.exists():
+        from config import resolve_target_excel_path
+        resolved_str = resolve_target_excel_path()
+        resolved_p = Path(resolved_str)
+        if resolved_p.exists():
+            p = resolved_p
+    path = str(p)
     kw = dict(dtype=object, keep_default_na=False, na_values=[])
     df_adl = pd.read_excel(path, sheet_name="ADL P", **kw)
     df_adtv = pd.read_excel(path, sheet_name="ADTv P", **kw)

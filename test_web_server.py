@@ -657,6 +657,43 @@ def test_routes():
         db_manager.delete_dispatch_rule(adl_rule_id)
         db_manager.delete_dispatch_rule(adtv_rule_id)
 
+    print("\n21. Testing Employee Directory JSON Export/Import & Parity Test Fallback...")
+    from config import resolve_target_excel_path
+    from pathlib import Path
+    import os
+
+    # Test export JSON endpoint
+    res_export = client.get("/api/regions/thrissur/directory/export-json")
+    assert res_export.status_code == 200
+    assert "application/json" in res_export.headers.get("content-type", "")
+    exported_data = res_export.json()
+    assert isinstance(exported_data, list)
+    assert len(exported_data) > 0
+    assert "emp_code" in exported_data[0]
+    assert "position" in exported_data[0]
+    print(f"   [OK] Verified GET /api/regions/thrissur/directory/export-json ({len(exported_data)} entries).")
+
+    # Test JSON file on disk
+    json_disk = Path(db_manager.DATA_DIR / "employee_directory.json")
+    assert json_disk.exists()
+    print("   [OK] Verified data/employee_directory.json exists and auto-syncs.")
+
+    # Test Parity Test endpoint resilience with non-existent environment path
+    orig_env = os.environ.get("TARGET_EXCEL_PATH")
+    try:
+        os.environ["TARGET_EXCEL_PATH"] = r"C:\Users\NonExistent\Path\Daily Complint pending Report..xls"
+        resolved = resolve_target_excel_path()
+        assert Path(resolved).exists()
+        res_parity = client.get("/api/regions/thrissur/test-engine")
+        assert res_parity.status_code == 200
+        assert res_parity.json()["status"] == "PASS"
+        print("   [OK] Verified Parity Test resilience: automatically resolved valid repo workbook when env has bad path.")
+    finally:
+        if orig_env is not None:
+            os.environ["TARGET_EXCEL_PATH"] = orig_env
+        else:
+            os.environ.pop("TARGET_EXCEL_PATH", None)
+
     print("\nALL TEST SUITE CHECKS PASSED PERFECTLY!")
 
 

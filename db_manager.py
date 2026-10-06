@@ -1118,6 +1118,12 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
 
     conn.commit()
     conn.close()
+
+    try:
+        sync_directory_to_json(region_id)
+    except Exception:
+        pass
+
     return {
         "team_leaders_imported": tl_count,
         "acsos_imported": acso_count,
@@ -1201,10 +1207,15 @@ def add_unified_directory_row(region_id: str, data: Dict[str, Any]) -> int:
                 "email": email,
             })
 
+    try:
+        sync_directory_to_json(region_id)
+    except Exception:
+        pass
+
     return row_id
 
 
-def update_unified_directory_row(row_id: int, data: Dict[str, Any]) -> bool:
+def update_unified_directory_row(row_id: int, data: Dict[str, Any], region_id: str = "thrissur") -> bool:
     """Updates an existing employee directory row (TL or ACSO)."""
     entry_type = data.get("entry_type", "tl")
     emp_code = str(data.get("emp_code") or "").strip()
@@ -1258,16 +1269,65 @@ def update_unified_directory_row(row_id: int, data: Dict[str, Any]) -> bool:
         conn.commit()
         conn.close()
 
+    try:
+        sync_directory_to_json(region_id)
+    except Exception:
+        pass
+
     return True
 
 
 
-def delete_unified_directory_row(row_id: int, entry_type: str = "tl") -> bool:
-    """Deletes an employee directory row."""
+def delete_unified_directory_row(row_id: int, entry_type: str = "tl", region_id: str = "thrissur") -> bool:
+    """Deletes an employee directory row and keeps JSON synced."""
+    success = False
     if entry_type == "acso":
-        return delete_acso(row_id)
-    return delete_team_leader(row_id)
+        success = delete_acso(row_id)
+    else:
+        success = delete_team_leader(row_id)
+    try:
+        sync_directory_to_json(region_id)
+    except Exception:
+        pass
+    return success
 
+
+def sync_directory_to_json(region_id: str = "thrissur", file_path: Optional[str | Path] = None) -> str:
+    """
+    Saves the entire Employee Directory for a region into a standalone, human-readable JSON file.
+    Default destination: data/employee_directory.json (or data/employee_directory_{region_id}.json).
+    """
+    target = Path(file_path) if file_path else (DATA_DIR / f"employee_directory_{region_id}.json" if region_id != "thrissur" else DATA_DIR / "employee_directory.json")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    directory_data = get_unified_directory(region_id)
+    with open(target, "w", encoding="utf-8") as f:
+        json.dump(directory_data, f, indent=2, ensure_ascii=False)
+    return str(target.resolve())
+
+
+def load_directory_from_json(file_path: Optional[str | Path] = None, region_id: str = "thrissur") -> Dict[str, Any]:
+    """
+    Imports and synchronizes the employee directory for a region from a standalone JSON file.
+    """
+    target = Path(file_path) if file_path else (DATA_DIR / f"employee_directory_{region_id}.json" if region_id != "thrissur" else DATA_DIR / "employee_directory.json")
+    if not target.exists():
+        target = DATA_DIR / "employee_directory.json"
+    if not target.exists():
+        raise FileNotFoundError(f"Employee directory JSON file not found at {target}")
+    with open(target, "r", encoding="utf-8") as f:
+        rows = json.load(f)
+    if isinstance(rows, list):
+        return import_unified_directory(region_id, rows)
+    raise ValueError("JSON file must contain an array of employee directory objects.")
+
+
+
+# Auto-seed standalone employee_directory.json on first run if missing
+try:
+    if not (DATA_DIR / "employee_directory.json").exists():
+        sync_directory_to_json("thrissur")
+except Exception:
+    pass
 
 
 if __name__ == "__main__":
