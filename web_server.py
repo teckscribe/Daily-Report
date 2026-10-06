@@ -486,24 +486,71 @@ def import_directory_json_endpoint(region_id: str, payload: List[Dict[str, Any]]
 
 @app.get("/api/employee-directory/download-template")
 def download_directory_template_endpoint(region_id: Optional[str] = "thrissur"):
-    """Downloads formatted Excel template for uploading the Employee Directory."""
-    template_path = BASE_DIR / "Employee_Directory_Template.xlsx"
-    if not template_path.exists():
-        import openpyxl
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Employee Directory"
-        ws.append([
-            "Emp Code", "Employee Display name", "Position", "Phone Number", "Gmail",
-            "Center Display name", "Name in Postpaid CRM", "Center Name in Postpaid ADL",
-            "Center Name in Postpaid ADTv", "Center name in Prepaid"
-        ])
-        wb.save(template_path)
+    """Downloads a clean, blank formatted Excel template for uploading the Employee Directory."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-    return FileResponse(
-        path=str(template_path),
-        filename="Employee_Directory_Template.xlsx",
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Employee Directory"
+
+    headers = [
+        "Emp Code",
+        "Employee Display name",
+        "Position",
+        "Phone Number",
+        "Gmail",
+        "Center Display name",
+        "Name in Postpaid CRM",
+        "Center Name in Postpaid ADL",
+        "Center Name in Postpaid ADTv",
+        "Center name in Prepaid",
+    ]
+    ws.append(headers)
+
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin', color='CBD5E1'),
+        right=Side(style='thin', color='CBD5E1'),
+        top=Side(style='thin', color='CBD5E1'),
+        bottom=Side(style='thin', color='CBD5E1'),
+    )
+
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+        cell.border = thin_border
+
+    ws.row_dimensions[1].height = 28
+
+    column_widths = {
+        'A': 14,  # Emp Code
+        'B': 26,  # Employee Display name
+        'C': 16,  # Position
+        'D': 18,  # Phone Number
+        'E': 26,  # Gmail
+        'F': 22,  # Center Display name
+        'G': 26,  # Name in Postpaid CRM
+        'H': 26,  # Center Name in Postpaid ADL
+        'I': 26,  # Center Name in Postpaid ADTv
+        'J': 24,  # Center name in Prepaid
+    }
+    for col_letter, width in column_widths.items():
+        ws.column_dimensions[col_letter].width = width
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = "Employee_Directory_Blank_Template.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
 
