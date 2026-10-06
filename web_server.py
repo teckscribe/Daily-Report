@@ -162,6 +162,16 @@ class CycleRunPayload(BaseModel):
     pipeline: Optional[str] = "all"  # 'complaint', 'service_request', or 'all'
 
 
+@app.middleware("http")
+async def add_no_cache_api_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 # --- Frontend View Route ---
 
 @app.get("/", response_class=HTMLResponse)
@@ -538,46 +548,77 @@ async def upload_directory_endpoint(region_id: str, file: UploadFile = File(...)
                     "details": {"type": "complaints_tracker"}
                 }
 
-            sheet = "Employee Directory" if "Employee Directory" in excel_file.sheet_names else (0 if len(excel_file.sheet_names) > 0 else 0)
-            df = pd.read_excel(excel_file, sheet_name=sheet)
+            # Smart sheet detection: find Employee Directory sheet or search sheets for roster columns
+            chosen_sheet = None
+            for s in excel_file.sheet_names:
+                s_low = str(s).lower()
+                if any(w in s_low for w in ["employee", "directory", "staff", "roster", "personnel"]):
+                    chosen_sheet = s
+                    break
+
+            if chosen_sheet is None:
+                for s in excel_file.sheet_names:
+                    try:
+                        df_peek = pd.read_excel(excel_file, sheet_name=s, nrows=5)
+                        cols_peek = " ".join(str(c).lower() for c in df_peek.columns)
+                        if any(k in cols_peek for k in ["name", "code", "center", "position", "emp", "role", "tl"]):
+                            chosen_sheet = s
+                            break
+                    except Exception:
+                        continue
+
+            if chosen_sheet is None:
+                chosen_sheet = excel_file.sheet_names[0] if len(excel_file.sheet_names) > 0 else 0
+
+            df = pd.read_excel(excel_file, sheet_name=chosen_sheet)
     except Exception as e_parse:
         raise HTTPException(status_code=400, detail=f"Failed to parse uploaded file: {e_parse}")
 
     # Header Row Auto-Detection (if title banners or empty rows exist above headers)
-    recognized_keywords = ['code', 'name', 'center', 'position', 'role', 'phone', 'mail', 'crm', 'adl', 'adtv', 'prepaid', 'designation', 'tl', 'acso']
+    recognized_keywords = ['code', 'name', 'center', 'position', 'role', 'phone', 'mail', 'crm', 'adl', 'adtv', 'prepaid', 'designation', 'tl', 'acso', 'staff', 'employee', 'full name']
     cols_str = ' '.join(str(c).lower() for c in df.columns)
     matches = sum(1 for kw in recognized_keywords if kw in cols_str)
     if matches < 2 and len(df) > 0:
-        for idx in range(min(5, len(df))):
+        for idx in range(min(10, len(df))):
             row_vals = ' '.join(str(v).lower() for v in df.iloc[idx].values)
             if sum(1 for kw in recognized_keywords if kw in row_vals) >= 2:
-                df.columns = df.iloc[idx].values
+                df.columns = [str(v).strip() if pd.notna(v) else f"col_{c_idx}" for c_idx, v in enumerate(df.iloc[idx].values)]
                 df = df.iloc[idx + 1:].reset_index(drop=True)
                 break
 
     col_map = {}
     for c in df.columns:
-        clean = str(c).lower().strip()
-        if "emp code" in clean or clean == "code" or "emp_code" in clean or "emp id" in clean or clean == "id" or "employee code" in clean or "alloted" in clean:
-            col_map[c] = "emp_code"
-        elif "position" in clean or "role" in clean or "designation" in clean:
-            col_map[c] = "position"
-        elif "phone" in clean or "mobile" in clean or "contact" in clean or "cell" in clean:
-            col_map[c] = "phone"
-        elif "gmail" in clean or "email" in clean or "mail" in clean:
-            col_map[c] = "email"
-        elif "adl center" in clean or "postpaid adl" in clean or ("adl" in clean and "center" in clean):
-            col_map[c] = "adl_center"
-        elif "adtv center" in clean or "postpaid adtv" in clean or ("adtv" in clean and "center" in clean):
-            col_map[c] = "adtv_center"
-        elif "prepaid" in clean or "sms" in clean:
-            col_map[c] = "prepaid_center"
-        elif "postpaid crm" in clean or "crm name" in clean or clean == "crm":
-            col_map[c] = "crm_name"
-        elif "employee" in clean or ("display" in clean and "center" not in clean) or clean == "name" or "emp name" in clean or "staff" in clean or "officer" in clean or "tl name" in clean or "acso name" in clean:
-            col_map[c] = "emp_name"
-        elif "center" in clean or "hub" in clean or "branch" in clean or "location" in clean:
-            col_map[c] = "center_name"
+        clean = str(c).lower().strip().replace('_', ' ').replace('-', ' ')
+        if any(k in clean for k in ['emp code', 'code', 'emp_code', 'emp id', 'employee code', 'alloted', 'emp no', 'staff id', 'employee id']):
+            if "emp_code" not in col_map.values():
+                col_map[c] = "emp_code"
+        elif any(k in clean for k in ['position', 'role', 'designation', 'job title', 'post']):
+            if "position" not in col_map.values():
+                col_map[c] = "position"
+        elif any(k in clean for k in ['phone', 'mobile', 'contact', 'cell', 'tel']):
+            if "phone" not in col_map.values():
+                col_map[c] = "phone"
+        elif any(k in clean for k in ['gmail', 'email', 'mail']):
+            if "email" not in col_map.values():
+                col_map[c] = "email"
+        elif any(k in clean for k in ['adl center', 'postpaid adl', 'adl']) and ("center" in clean or "adl center" in clean or "postpaid adl" in clean):
+            if "adl_center" not in col_map.values():
+                col_map[c] = "adl_center"
+        elif any(k in clean for k in ['adtv center', 'postpaid adtv', 'adtv']) and ("center" in clean or "adtv center" in clean or "postpaid adtv" in clean):
+            if "adtv_center" not in col_map.values():
+                col_map[c] = "adtv_center"
+        elif any(k in clean for k in ['prepaid center', 'prepaid', 'sms']):
+            if "prepaid_center" not in col_map.values():
+                col_map[c] = "prepaid_center"
+        elif any(k in clean for k in ['postpaid crm', 'crm name']) or clean == 'crm' or 'name in postpaid crm' in clean:
+            if "crm_name" not in col_map.values():
+                col_map[c] = "crm_name"
+        elif any(k in clean for k in ['employee', 'emp name', 'staff', 'officer', 'tl name', 'acso name', 'full name', 'team leader', 'personnel']) or clean in ('name', 'tl', 'acso') or ('display' in clean and 'center' not in clean):
+            if "emp_name" not in col_map.values():
+                col_map[c] = "emp_name"
+        elif any(k in clean for k in ['center', 'hub', 'branch', 'location', 'area', 'station']):
+            if "center_name" not in col_map.values():
+                col_map[c] = "center_name"
 
     df_renamed = df.rename(columns=col_map)
     if "emp_name" not in df_renamed.columns:
@@ -604,6 +645,8 @@ async def upload_directory_endpoint(region_id: str, file: UploadFile = File(...)
         emp_code = str(row.get("emp_code", "")).strip()
         if emp_code.lower() in ("nan", "none", "null"):
             emp_code = ""
+        elif emp_code.endswith(".0"):
+            emp_code = emp_code[:-2]
 
         pos_raw = str(row.get("position", "")).strip()
         if not pos_raw or pos_raw.lower() in ("nan", "none", "null"):
@@ -614,6 +657,8 @@ async def upload_directory_endpoint(region_id: str, file: UploadFile = File(...)
         phone = str(row.get("phone", "")).strip()
         if phone.lower() in ("nan", "none", "null"):
             phone = ""
+        elif phone.endswith(".0"):
+            phone = phone[:-2]
 
         email = str(row.get("email", "")).strip()
         if email.lower() in ("nan", "none", "null"):
@@ -1366,6 +1411,10 @@ def clear_region_configuration_endpoint(region_id: str):
         c.execute(f'DELETE FROM "{t}" WHERE region_id = ?', (region_id,))
     conn.commit()
     conn.close()
+    try:
+        db_manager.sync_directory_to_json(region_id)
+    except Exception:
+        pass
     return {"status": "OK", "message": f"All roster data cleared for region '{region_id}'"}
 
 

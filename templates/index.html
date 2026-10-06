@@ -664,9 +664,10 @@
             <button class="btn btn-secondary" onclick="downloadDirectoryTemplate()" title="Download blank Excel template (Employee_Directory_Template.xlsx)">
               <span>📥</span> Blank Template
             </button>
-            <button class="btn btn-secondary" onclick="openUploadDirectoryModal()" title="Upload Excel/CSV/JSON file to update the Employee Directory">
+            <label class="btn btn-secondary" style="margin-bottom: 0; cursor: pointer;" title="Upload Excel/CSV/JSON file to update the Employee Directory">
               <span>📤</span> Upload Employee Directory
-            </button>
+              <input type="file" id="directory-file-upload-direct" accept=".xlsx,.xls,.csv,.json" style="display: none;" onchange="uploadDirectoryDirect(event)">
+            </label>
             <button class="btn btn-primary" onclick="openAddDirectoryModal()" title="Add an employee or officer">
               <span>&#43;</span> Add Employee
             </button>
@@ -686,7 +687,10 @@
         <span id="badge-dir-emps" style="display: none;">0</span>
 
         <!-- UNIFIED EMPLOYEE DIRECTORY TABLE -->
-        <div class="table-responsive">
+        <div class="table-responsive" id="directory-table-container"
+             ondragover="handleTableDragOver(event)"
+             ondragleave="handleTableDragLeave(event)"
+             ondrop="handleTableDrop(event)">
           <table class="data-table" id="directory-unified-table">
             <thead>
               <tr>
@@ -1738,7 +1742,7 @@
     // --- Load Data ---
     async function loadRegions() {
       try {
-        const res = await fetch('/api/regions');
+        const res = await fetch(`/api/regions?t=${Date.now()}`, { cache: 'no-store' });
         const regions = await res.json();
         allData.regions = regions;
         const select = document.getElementById('regionSelect');
@@ -1757,7 +1761,7 @@
 
     async function loadDirectoryData(regionId) {
       try {
-        const res = await fetch(`/api/regions/${regionId}/directory`);
+        const res = await fetch(`/api/regions/${regionId}/directory?t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
           allDirectory = await res.json();
           renderDirectory();
@@ -1770,9 +1774,11 @@
 
     async function loadRegionConfig(regionId) {
       currentRegion = regionId;
-      document.getElementById('active-reg-label').innerText = document.getElementById('regionSelect').options[document.getElementById('regionSelect').selectedIndex]?.text.split('(')[0].trim() || regionId;
+      const regSelect = document.getElementById('regionSelect');
+      const optText = regSelect?.options[regSelect.selectedIndex]?.text;
+      document.getElementById('active-reg-label').innerText = optText ? optText.split('(')[0].trim() : (regionId.charAt(0).toUpperCase() + regionId.slice(1));
       try {
-        const res = await fetch(`/api/regions/${regionId}/config`);
+        const res = await fetch(`/api/regions/${regionId}/config?t=${Date.now()}`, { cache: 'no-store' });
         const data = await res.json();
         allData = { ...allData, ...data };
         updateStats();
@@ -1855,7 +1861,7 @@
               Upload your Excel roster (.xlsx) to populate the directory, or restore the baseline preset below.
             </p>
             <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
-              <button class="btn btn-primary" onclick="openUploadDirectoryModal()">
+              <button class="btn btn-primary" onclick="document.getElementById('directory-file-upload-direct').click()" title="Choose an Excel (.xlsx, .xls) or CSV file to import">
                 <span>📤</span> Upload Employee Directory (.xlsx)
               </button>
               <button class="btn btn-secondary" onclick="loadThrissurPreset()" style="background: #16a34a; color: white; border-color: #15803d;">
@@ -1990,12 +1996,14 @@
       if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         const file = e.dataTransfer.files[0];
         setDirectorySelectedFile(file);
+        submitDirectoryUpload();
       }
     }
 
     function handleDirectoryFileSelect(input) {
       if (input.files && input.files[0]) {
         setDirectorySelectedFile(input.files[0]);
+        submitDirectoryUpload();
       }
     }
 
@@ -2005,7 +2013,7 @@
       const subEl = document.getElementById('directory-file-subtext');
       const dropZone = document.getElementById('directory-drop-zone');
       if (nameEl) nameEl.innerHTML = `<span style="color: #16a34a;">✓ Selected: ${escapeHtml(file.name)}</span>`;
-      if (subEl) subEl.innerText = `Size: ${(file.size / 1024).toFixed(1)} KB — Ready to import into ${currentRegion.toUpperCase()}`;
+      if (subEl) subEl.innerText = `Size: ${(file.size / 1024).toFixed(1)} KB — Importing into ${currentRegion.toUpperCase()}...`;
       if (dropZone) {
         dropZone.style.borderColor = '#16a34a';
         dropZone.style.background = '#f0fdf4';
@@ -2014,6 +2022,64 @@
       if (statusEl) {
         statusEl.style.display = 'none';
       }
+    }
+
+    function handleTableDragOver(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const el = document.getElementById('directory-table-container');
+      if (el) el.style.outline = '2px dashed #2563eb';
+    }
+
+    function handleTableDragLeave(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const el = document.getElementById('directory-table-container');
+      if (el) el.style.outline = 'none';
+    }
+
+    function handleTableDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleTableDragLeave(e);
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        uploadDirectoryFileObject(e.dataTransfer.files[0]);
+      }
+    }
+
+    async function uploadDirectoryFileObject(file) {
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+
+      showToast(`Uploading and parsing '${file.name}' into ${currentRegion.toUpperCase()}...`, "info");
+      try {
+        const res = await fetch(`/api/regions/${currentRegion}/upload-directory`, {
+          method: 'POST',
+          body: formData
+        });
+        const result = await res.json();
+        if (res.ok) {
+          showToast(result.message || "Employee directory imported successfully", "success");
+          closeModal('modal-upload-directory');
+          await loadRegions();
+          await loadRegionConfig(currentRegion);
+          await loadDirectoryData(currentRegion);
+          updateStats();
+        } else {
+          showToast(result.detail || "Upload failed. Please check file format.", "error");
+        }
+      } catch (err) {
+        showToast("Upload failed due to network error", "error");
+      }
+    }
+
+    async function uploadDirectoryDirect(e) {
+      const file = e.target.files && e.target.files[0];
+      if (file) {
+        await uploadDirectoryFileObject(file);
+      }
+      e.target.value = '';
     }
 
     async function submitDirectoryUpload() {
@@ -2049,6 +2115,7 @@
         if (res.ok) {
           showToast(result.message || "Employee directory imported successfully", "success");
           closeModal('modal-upload-directory');
+          await loadRegions();
           await loadRegionConfig(currentRegion);
           await loadDirectoryData(currentRegion);
           updateStats();

@@ -1017,6 +1017,7 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
     c.execute("DELETE FROM team_leaders WHERE region_id = ?", (region_id,))
     c.execute("DELETE FROM employees WHERE region_id = ?", (region_id,))
     c.execute("DELETE FROM acsos WHERE region_id = ?", (region_id,))
+    c.execute("DELETE FROM centers WHERE region_id = ?", (region_id,))
 
     centers_map = {}
     tl_count = 0
@@ -1156,8 +1157,20 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
             if target and target.get("acso_name"):
                 c_info["adtv_acso_name"] = target["acso_name"]
 
-    # Insert ACSOs for all unique centers
+    # Insert Centers and ACSOs for all unique centers
     for c_key, c_info in centers_map.items():
+        c.execute("""
+        INSERT INTO centers (region_id, center_name, adl_area_key, adtv_amo_key, prepaid_area_key, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            region_id,
+            c_info["center_name"],
+            c_info.get("adl_area_key", c_info["center_name"]),
+            c_info.get("adtv_amo_key", c_info["center_name"]),
+            c_info.get("prepaid_area_key", c_info["center_name"]),
+            c_info["sort_order"]
+        ))
+
         c.execute("""
         INSERT INTO acsos
         (region_id, center_name, acso_name, adtv_acso_name, adl_center_display, adtv_center_display,
@@ -1343,11 +1356,30 @@ def update_unified_directory_row(row_id: int, data: Dict[str, Any], region_id: s
 
 def delete_unified_directory_row(row_id: int, entry_type: str = "tl", region_id: str = "thrissur") -> bool:
     """Deletes an employee directory row and keeps JSON synced."""
+    conn = get_connection()
+    c = conn.cursor()
     success = False
-    if entry_type == "acso":
-        success = delete_acso(row_id)
-    else:
-        success = delete_team_leader(row_id)
+    try:
+        if entry_type == "acso":
+            c.execute("SELECT acso_name, center_name FROM acsos WHERE id = ?", (row_id,))
+            row = c.fetchone()
+            if row:
+                c.execute("DELETE FROM employees WHERE region_id = ? AND role = 'ACSO' AND (name = ? OR center_name = ?)", (region_id, row[0], row[1]))
+            c.execute("DELETE FROM acsos WHERE id = ?", (row_id,))
+            success = True
+        else:
+            c.execute("SELECT name, pp_adl_emp_code FROM team_leaders WHERE id = ?", (row_id,))
+            row = c.fetchone()
+            if row:
+                c.execute("DELETE FROM employees WHERE region_id = ? AND (name = ? OR emp_code = ?)", (region_id, row[0], str(row[1])))
+            c.execute("DELETE FROM team_leaders WHERE id = ?", (row_id,))
+            success = True
+        conn.commit()
+    except Exception as e:
+        print(f"[Delete Directory Row Error]: {e}")
+    finally:
+        conn.close()
+
     try:
         sync_directory_to_json(region_id)
     except Exception:
@@ -1363,6 +1395,8 @@ def bulk_delete_unified_directory(items: List[Dict[str, Any]], region_id: str = 
     """
     if not items:
         return 0
+    conn = get_connection()
+    c = conn.cursor()
     deleted_count = 0
     for it in items:
         rid = it.get("id")
@@ -1371,13 +1405,24 @@ def bulk_delete_unified_directory(items: List[Dict[str, Any]], region_id: str = 
             continue
         try:
             if etype == "acso":
-                if delete_acso(int(rid)):
-                    deleted_count += 1
+                c.execute("SELECT acso_name, center_name FROM acsos WHERE id = ?", (int(rid),))
+                row = c.fetchone()
+                if row:
+                    c.execute("DELETE FROM employees WHERE region_id = ? AND role = 'ACSO' AND (name = ? OR center_name = ?)", (region_id, row[0], row[1]))
+                c.execute("DELETE FROM acsos WHERE id = ?", (int(rid),))
+                deleted_count += 1
             else:
-                if delete_team_leader(int(rid)):
-                    deleted_count += 1
+                c.execute("SELECT name, pp_adl_emp_code FROM team_leaders WHERE id = ?", (int(rid),))
+                row = c.fetchone()
+                if row:
+                    c.execute("DELETE FROM employees WHERE region_id = ? AND (name = ? OR emp_code = ?)", (region_id, row[0], str(row[1])))
+                c.execute("DELETE FROM team_leaders WHERE id = ?", (int(rid),))
+                deleted_count += 1
         except Exception as e:
             print(f"[Bulk Delete Error] ID {rid} ({etype}): {e}")
+
+    conn.commit()
+    conn.close()
 
     try:
         sync_directory_to_json(region_id)
@@ -1450,11 +1495,6 @@ def auto_sync_directory_from_disk(region_id: str = "thrissur") -> bool:
             DATA_DIR / f"employee_directory_{region_id}.json",
             DATA_DIR / "employee_directory.json",
         ]
-        if region_id == "thrissur":
-            candidates.extend([
-                DATA_DIR / "thrissur_config_backup.json",
-                DATA_DIR / "seeds" / "thrissur_config_backup.json",
-            ])
 
         target: Optional[Path] = None
         for p in candidates:
