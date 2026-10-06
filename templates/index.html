@@ -620,11 +620,9 @@
         <span class="tab-badge" id="badge-directory">0</span>
       </button>
       <button class="tab-btn" onclick="setTab('reports')">
-        <span>Complaint Reports</span>
-      </button>
-      <button class="tab-btn" onclick="setTab('service-requests')">
-        <span>Service Request Reports</span>
-        <span class="tab-badge" id="badge-sr" style="background: #fed7aa; color: #9a3412;">ACSO</span>
+        <span>Daily Reports</span>
+        <span class="tab-badge" id="badge-reports" style="background: #e0f2fe; color: #0369a1;">Complaints &amp; SR</span>
+        <span id="badge-sr" style="display: none;">ACSO</span>
       </button>
       <button class="tab-btn" onclick="setTab('automation')">
         <span>Auto Schedule & Routing</span>
@@ -713,28 +711,40 @@
       <div class="preview-card">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
           <div>
-            <h2 style="font-size: 1.2rem; font-weight: 700;">Regional Report Pipeline</h2>
-            <p style="font-size: 0.85rem; color: var(--text-muted);">
-              Execute the mathematical parity calculation engine and generate full-resolution Retina reports for <strong id="active-reg-label">Thrissur</strong>.
+            <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--text-main);">📊 Daily Operations &amp; Regional Reports</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">
+              Mathematical calculation engine, high-definition Retina cards, and automated WhatsApp dispatches for <strong id="active-reg-label">Thrissur</strong>.
             </p>
           </div>
-          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <button class="btn btn-secondary" onclick="runCalculationTest()" title="Verify Complaint mathematical parity formulas">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <button class="btn btn-secondary" onclick="runCalculationTest()" title="Verify Complaint mathematical parity formulas against CRM sheets">
               <span>⚙️</span> Parity Test
             </button>
-            <button class="btn btn-primary" onclick="generateAllReports('all')" title="Render both Complaint and Service Request reports">
-              <span>🖼️</span> Render All (Both)
+            <a href="/api/service-request/download-excel" class="btn btn-secondary" download title="Download calculated Service Request Excel workbook">
+              <span>📥</span> SR Excel
+            </a>
+            <label class="btn btn-secondary" style="margin-bottom: 0; cursor: pointer;" title="Upload raw Service Request Excel workbook to recompute aging buckets">
+              <span>📤</span> Upload Raw SR
+              <input type="file" id="sr-file-upload" accept=".xls,.xlsx" style="display: none;" onchange="uploadRawSRExcel(event)">
+            </label>
+            <div style="height: 22px; width: 1px; background: var(--border-dark); margin: 0 0.25rem;"></div>
+            <button class="btn btn-primary" onclick="generateAllReports('all')" title="Render all Complaint and Service Request Retina cards">
+              <span>🖼️</span> Render All
             </button>
-            <button class="btn btn-secondary" onclick="generateAllReports('complaint')" title="Render Complaints reports only">
+            <button class="btn btn-secondary" onclick="generateAllReports('complaint')" title="Render Complaints cards only">
               <span>📊</span> Render Complaints
             </button>
-            <button class="btn btn-secondary" onclick="generateAllReports('sr')" title="Render Service Request reports only">
-              <span>📋</span> Render SR Cards
+            <button class="btn btn-secondary" onclick="generateAllReports('sr')" title="Render Service Request cards only">
+              <span>📋</span> Render SR
             </button>
-            <button class="btn btn-accent" onclick="dispatchToWhatsApp('complaint')" style="background: #2563eb; border-color: #1d4ed8;" title="Send Complaints reports to configured WhatsApp groups">
+            <div style="height: 22px; width: 1px; background: var(--border-dark); margin: 0 0.25rem;"></div>
+            <button class="btn btn-accent" onclick="runAutomatedCycleNow('all')" style="background: #16a34a; border-color: #15803d;" title="Execute complete cycle (Complaints + SR) and dispatch via active WhatsApp rules">
+              <span>🚀</span> Run Full Cycle &amp; Dispatch
+            </button>
+            <button class="btn btn-secondary" onclick="dispatchToWhatsApp('complaint')" title="Send Complaints reports to configured WhatsApp groups">
               <span>📱</span> Send Complaints
             </button>
-            <button class="btn btn-accent" onclick="dispatchToWhatsApp('sr')" style="background: #9333ea; border-color: #7e22ce;" title="Send Service Request reports to configured WhatsApp groups">
+            <button class="btn btn-secondary" onclick="dispatchToWhatsApp('sr')" title="Send Service Request reports to configured WhatsApp groups">
               <span>📨</span> Send SR
             </button>
           </div>
@@ -803,16 +813,20 @@
             </div>
           </div>
 
-          <div class="report-image-box" style="grid-column: 1 / -1; margin-top: 0.5rem;">
+          <!-- Section 2: Daily Service Request Retina Previews -->
+          <div class="report-image-box" style="grid-column: 1 / -1; margin-top: 0.75rem;">
             <h4>
               <span>Daily Service Request Pending Reports (ACSO-wise)</span>
               <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-                <a href="/output/Daily_SR_Report_latest.jpg" target="_blank" class="btn btn-secondary btn-sm">Combined View</a>
+                <a href="/output/Daily_SR_Report_latest.jpg" target="_blank" class="btn btn-secondary btn-sm">Combined Full Image</a>
                 <a href="/output/ADL_SR_Pending.jpg" target="_blank" class="btn btn-secondary btn-sm">ADL SR</a>
                 <a href="/output/ADTv_SR_Pending.jpg" target="_blank" class="btn btn-secondary btn-sm">ADTv SR</a>
               </div>
             </h4>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem;">
+            <div style="padding: 1rem; text-align: center; background: #fafafa; border-radius: var(--radius); margin-bottom: 1rem;">
+              <img id="img-sr-combined" src="/output/Daily_SR_Report_latest.jpg" alt="Combined SR Report" style="max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm);" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'800\' height=\'250\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render SR to Generate High-DPI Cards</text></svg>'">
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
               <div>
                 <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">ADL Broadband Service Requests</div>
                 <img id="img-adl-sr" src="/output/ADL_SR_Pending.jpg" alt="ADL SR Pending" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'600\' height=\'300\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Render SR to Generate</text></svg>'">
@@ -824,98 +838,24 @@
             </div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- TAB 4B: Service Request Pending Report (ACSO-wise) -->
-    <div id="tab-service-requests" class="tab-pane">
-      <div class="section-card" style="margin-bottom: 1.5rem;">
-        <div class="section-toolbar">
-          <div>
-            <h2 style="font-size: 1.2rem; font-weight: 700; color: #993300;">📋 Daily Service Request Pending Report (ACSO-wise)</h2>
-            <p style="font-size: 0.85rem; color: var(--text-muted);">
-              Automated extraction and pending bucket analysis (&lt;1d, 1d, 2d, 3d, &gt;3d, &gt;5d, &gt;10d) for ADL Broadband & ADTv Digital TV.
-            </p>
-          </div>
-          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-            <button class="btn btn-secondary" onclick="loadServiceRequestData()">
-              <span>🔄</span> Refresh Data
-            </button>
-            <a href="/api/service-request/download-excel" class="btn btn-secondary" download>
-              <span>📥</span> Download Excel (.xlsx)
-            </a>
-            <label class="btn btn-secondary" style="margin-bottom: 0; cursor: pointer;">
-              <span>📤</span> Upload Raw Excel
-              <input type="file" id="sr-file-upload" accept=".xls,.xlsx" style="display: none;" onchange="uploadRawSRExcel(event)">
-            </label>
-            <button class="btn btn-primary" onclick="runSRCycleNow(this)" style="background: #993300; border-color: #7f2a00;">
-              <span>🚀</span> Run SR Cycle & Dispatch
-            </button>
-          </div>
-        </div>
-
-        <!-- Service Request Test Delivery Box -->
-        <div style="background: #fff7ed; border: 1.5px solid #fdba74; border-radius: var(--radius); padding: 1.15rem 1.25rem; margin: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
-          <div>
-            <h4 style="font-size: 0.98rem; font-weight: 700; color: #9a3412; display: flex; align-items: center; gap: 0.4rem;">
-              <span>📱</span> Test Delivery: Generate & Send SR Report to Specific Number
-            </h4>
-            <p style="font-size: 0.8rem; color: #c2410c; margin-top: 0.2rem;">
-              Parses latest raw workbook, calculates aging buckets, renders retina images, and delivers directly via WhatsApp Web.
-            </p>
-          </div>
-          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-            <input type="tel" id="sr-test-phone" value="" placeholder="+91XXXXXXXXXX" style="padding: 0.5rem 0.75rem; border: 1.5px solid #fdba74; border-radius: var(--radius); font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 0.92rem; width: 180px; background: white;">
-            <select id="sr-test-type" style="padding: 0.5rem 0.65rem; border: 1.5px solid #fdba74; border-radius: var(--radius); font-size: 0.85rem; font-weight: 600; background: white;">
-              <option value="all">Both ADL & ADTv SR Reports</option>
-              <option value="adl_sr">ADL Broadband SR Only</option>
-              <option value="adtv_sr">ADTv Digital TV SR Only</option>
-            </select>
-            <button id="btn-sr-generate-send" class="btn btn-primary" onclick="generateAndSendSR(this)" style="background: #ea580c; border-color: #c2410c;">
-              <span>🚀</span> Send SR Report Now
-            </button>
-          </div>
-        </div>
-
-        <!-- Image Previews -->
-        <div class="report-image-preview" style="padding: 0 1.25rem 1.25rem 1.25rem;">
-          <div class="report-image-box" style="margin-bottom: 1.25rem;">
-            <h4>
-              <span>Combined Service Request Pending Report (Side-by-Side)</span>
-              <a href="/output/Daily_SR_Report_latest.jpg" target="_blank" class="btn btn-secondary btn-sm">Full Image</a>
-            </h4>
-            <div style="padding: 1rem; text-align: center; background: #fafafa; border-radius: var(--radius);">
-              <img id="img-sr-combined" src="/output/Daily_SR_Report_latest.jpg" alt="Combined SR Report" style="max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm);" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'800\' height=\'250\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Click Run SR Cycle to Generate High-DPI Cards</text></svg>'">
+        <!-- Section 3: Live Interactive Tables Preview -->
+        <div style="padding-top: 1.5rem; margin-top: 1.5rem; border-top: 1px solid var(--border);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h3 style="font-size: 1.05rem; font-weight: 700; color: #993300; display: flex; align-items: center; gap: 0.4rem;">
+                <span>📊</span> Live Interactive Tables Preview (Aging Buckets)
+              </h3>
+              <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
+                Bucket counts (&lt;1d, 1d, 2d, 3d, &gt;3d, &gt;5d, &gt;10d) aggregated by ACSO center.
+              </p>
             </div>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-            <div class="report-image-box">
-              <h4>
-                <span>ADL Broadband Service Requests (ACSO)</span>
-                <a href="/output/ADL_SR_Pending.jpg" target="_blank" class="btn btn-secondary btn-sm">Full Image</a>
-              </h4>
-              <div style="padding: 1rem; text-align: center;">
-                <img id="img-adl-sr" src="/output/ADL_SR_Pending.jpg" alt="ADL SR Card" style="max-width: 100%; height: auto; border: 1px solid var(--border);" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'500\' height=\'250\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Pending Generation</text></svg>'">
-              </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <button class="btn btn-secondary btn-sm" onclick="loadServiceRequestData()" title="Reload Service Request figures from database">
+                <span>🔄</span> Refresh Data
+              </button>
+              <span id="sr-status-badge" class="tab-badge" style="background: #e2e8f0; color: #475569;">Ready</span>
             </div>
-            <div class="report-image-box">
-              <h4>
-                <span>ADTv Digital TV Service Requests (ACSO)</span>
-                <a href="/output/ADTv_SR_Pending.jpg" target="_blank" class="btn btn-secondary btn-sm">Full Image</a>
-              </h4>
-              <div style="padding: 1rem; text-align: center;">
-                <img id="img-adtv-sr" src="/output/ADTv_SR_Pending.jpg" alt="ADTv SR Card" style="max-width: 100%; height: auto; border: 1px solid var(--border);" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'500\' height=\'250\'><text x=\'50%\' y=\'50%\' text-anchor=\'middle\' fill=\'%2394a3b8\'>Pending Generation</text></svg>'">
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Live Tables Preview -->
-        <div style="padding: 1.25rem; border-top: 1px solid var(--border);">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-            <h3 style="font-size: 1.05rem; font-weight: 700; color: #993300;">📊 Live Interactive Tables Preview</h3>
-            <span id="sr-status-badge" class="tab-badge" style="background: #e2e8f0; color: #475569;">Ready</span>
           </div>
 
           <div style="margin-bottom: 2rem;">
@@ -1730,6 +1670,9 @@
         setDirectoryFilter(tabName === 'tls' ? 'tls' : (tabName === 'centers' ? 'centers' : 'emps'));
         tabName = 'directory';
       }
+      if (tabName === 'service-requests') {
+        tabName = 'reports';
+      }
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
       const btn = clickedBtn || (window.event && window.event.currentTarget) || document.querySelector(`[onclick*="setTab('${tabName}')"]`);
@@ -1742,7 +1685,7 @@
         loadLogFilesList();
         fetchActiveLog();
         runLogDiagnostics();
-      } else if (tabName === 'service-requests') {
+      } else if (tabName === 'reports') {
         loadServiceRequestData();
       }
     }
@@ -2397,8 +2340,10 @@
           if (pipeline === 'all' || pipeline === 'sr') {
             const adlSr = document.getElementById('img-adl-sr');
             const adtvSr = document.getElementById('img-adtv-sr');
+            const imgComb = document.getElementById('img-sr-combined');
             if (adlSr) adlSr.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
             if (adtvSr) adtvSr.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
+            if (imgComb) imgComb.src = `/output/Daily_SR_Report_latest.jpg?t=${ts}`;
           }
         } else {
           showToast(data.detail || data.message || "Error rendering reports", "error");
@@ -2462,12 +2407,14 @@
           const adtvAcso = document.getElementById('img-adtv-acso');
           const adlSr = document.getElementById('img-adl-sr');
           const adtvSr = document.getElementById('img-adtv-sr');
+          const imgComb = document.getElementById('img-sr-combined');
           if (adlTl) adlTl.src = `/output/ADL_Complaint_Pending.jpg?t=${ts}`;
           if (adlAcso) adlAcso.src = `/output/ADL_ACSO_Complaint_Pending.jpg?t=${ts}`;
           if (adtvTl) adtvTl.src = `/output/ADTv_Complaint_Pending.jpg?t=${ts}`;
           if (adtvAcso) adtvAcso.src = `/output/ADTv_ACSO_Complaint_Pending.jpg?t=${ts}`;
           if (adlSr) adlSr.src = `/output/ADL_SR_Pending.jpg?t=${ts}`;
           if (adtvSr) adtvSr.src = `/output/ADTv_SR_Pending.jpg?t=${ts}`;
+          if (imgComb) imgComb.src = `/output/Daily_SR_Report_latest.jpg?t=${ts}`;
         } else {
           showToast(data.detail || data.message || "Failed to generate & send report", "error");
         }
@@ -3559,6 +3506,7 @@
       await loadRegionConfig('thrissur');
       checkWhatsAppStatus();
       runLogDiagnostics();
+      loadServiceRequestData();
     });
   </script>
 </body>
