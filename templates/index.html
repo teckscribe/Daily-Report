@@ -2278,7 +2278,7 @@
         }).join('');
 
         const typeLabel = REPORT_TYPE_LABELS[r.report_type] || r.report_type;
-        const isSr = (r.report_type || '').startsWith('sr') || r.report_type === 'service_request';
+        const isSr = (r.report_type || '').startsWith('sr') || r.report_type === 'service_request' || (r.report_type || '').endsWith('_sr') || (r.report_type || '').includes('_sr_');
         const isSuite = r.report_type === 'suite_all';
         const badgeBg = isSuite ? '#fdf4ff' : (isSr ? '#ffedd5' : '#ede9fe');
         const badgeColor = isSuite ? '#7e22ce' : (isSr ? '#9a3412' : '#6d28d9');

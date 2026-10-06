@@ -53,6 +53,7 @@ from service_request_engine import (
     create_excel_output as create_sr_excel_output,
     render_sr_report_images,
     execute_automated_sr_cycle,
+    is_sr_report_type,
 )
 
 # Initialize dual-stream 3-day rotating logging
@@ -378,7 +379,7 @@ def dispatch_whatsapp(region_id: str, report_type: Optional[str] = "complaint"):
         active_rules = [r for r in rules if r.get("is_enabled", 1)]
 
         def is_sr_type(rt: str) -> bool:
-            return str(rt).lower().strip() in ("sr_all", "adl_sr", "adtv_sr", "sr_combined", "service_request", "sr")
+            return is_sr_report_type(rt)
 
         if r_type in ("complaint", "complaints"):
             target_rules = [r for r in active_rules if not is_sr_type(r.get("report_type", ""))]
@@ -443,7 +444,7 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
 
     try:
         # 1. Service Request only dispatch
-        if r_type in ("sr_all", "adl_sr", "adtv_sr", "sr_combined", "service_request"):
+        if is_sr_report_type(r_type):
             sr_sec = compute_service_request_reports()
             render_sr_report_images(sr_sec)
             imgs = get_images_for_report_type(r_type)
@@ -577,9 +578,9 @@ def execute_automated_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
             targets = [t.strip() for t in r.get("target_recipients", "").split(",") if t.strip()]
             if not targets:
                 continue
-            report_type = r.get("report_type", "all").lower()
+            report_type = r.get("report_type", "all").lower().strip()
             # Skip SR rules in complaint cycle (handled by execute_automated_sr_cycle)
-            if report_type in ("sr_all", "adl_sr", "adtv_sr", "sr_combined", "service_request"):
+            if is_sr_report_type(report_type):
                 continue
             imgs = get_images_for_report_type(report_type)
             flash_report_image(imgs, target_recipients=targets)
@@ -645,7 +646,7 @@ def trigger_dispatch_rule_endpoint(rule_id: int):
     imgs = get_images_for_report_type(r_type)
     missing = [i for i in imgs if not i.exists()]
     if missing:
-        if r_type in ("sr_all", "adl_sr", "adtv_sr", "sr_combined", "service_request"):
+        if is_sr_report_type(r_type):
             sr_sec = compute_service_request_reports()
             render_sr_report_images(sr_sec)
         else:
@@ -856,11 +857,13 @@ def send_service_request_to_phone_endpoint(payload: GenerateAndSendPayload):
         create_sr_excel_output(sections)
         render_sr_report_images(sections)
 
-        r_type = (payload.report_type or "all").lower()
+        r_type = (payload.report_type or "all").lower().strip()
         if r_type in ("adl_sr", "adl"):
             to_send = [ADL_SR_REPORT_IMAGE_PATH]
         elif r_type in ("adtv_sr", "adtv"):
             to_send = [ADTV_SR_REPORT_IMAGE_PATH]
+        elif r_type in ("sr_combined", "sr_side_by_side", "combined_sr"):
+            to_send = [SR_REPORT_IMAGE_PATH]
         else:
             to_send = [ADL_SR_REPORT_IMAGE_PATH, ADTV_SR_REPORT_IMAGE_PATH]
 

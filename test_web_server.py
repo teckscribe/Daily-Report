@@ -546,6 +546,69 @@ def test_routes():
         assert res.json()["status"] == "OK"
     print("   [OK] Verified generate-and-send test delivery for Service Requests.")
 
+    print("\n20. Testing Automated Service Request Cycle Rule Matching (ADL_SR & ADTV_SR)...")
+    from service_request_engine import is_sr_report_type, execute_automated_sr_cycle
+    import db_manager
+
+    # 1. Test is_sr_report_type helper
+    assert is_sr_report_type("adl_sr") is True
+    assert is_sr_report_type("adtv_sr") is True
+    assert is_sr_report_type("sr_combined") is True
+    assert is_sr_report_type("sr_all") is True
+    assert is_sr_report_type("service_request") is True
+    assert is_sr_report_type("sr") is True
+    assert is_sr_report_type("all") is False
+    assert is_sr_report_type("adl_tl") is False
+    assert is_sr_report_type("adtv_acso") is False
+    print("   [OK] Verified is_sr_report_type truth table.")
+
+    # 2. Create adl_sr and adtv_sr rules
+    adl_rule_id = db_manager.add_dispatch_rule({
+        "region_id": "thrissur",
+        "rule_name": "Test ADL SR Auto-Dispatch Rule",
+        "report_type": "adl_sr",
+        "target_recipients": "ACSOs Trichur Region, +919876543210",
+        "description": "Test ADL SR dispatch",
+        "is_enabled": 1
+    })
+    adtv_rule_id = db_manager.add_dispatch_rule({
+        "region_id": "thrissur",
+        "rule_name": "Test ADTv SR Auto-Dispatch Rule",
+        "report_type": "adtv_sr",
+        "target_recipients": "ACSOs Trichur Region",
+        "description": "Test ADTv SR dispatch",
+        "is_enabled": 1
+    })
+
+    try:
+        sent_calls = []
+        def mock_flash(imgs, target_recipients=None):
+            sent_calls.append({"imgs": imgs, "recipients": target_recipients})
+            return True
+
+        with patch("whatsapp_sender.flash_report_image", side_effect=mock_flash):
+            sr_cycle_res = execute_automated_sr_cycle("thrissur")
+            assert sr_cycle_res["status"] == "OK"
+            dispatches = sr_cycle_res.get("dispatches", [])
+            # Must find and execute both rules
+            adl_dispatch = next((d for d in dispatches if d["rule_id"] == adl_rule_id), None)
+            adtv_dispatch = next((d for d in dispatches if d["rule_id"] == adtv_rule_id), None)
+            assert adl_dispatch is not None, "adl_sr rule was not executed in automated SR cycle!"
+            assert adtv_dispatch is not None, "adtv_sr rule was not executed in automated SR cycle!"
+            assert adl_dispatch["success"] is True
+            assert adtv_dispatch["success"] is True
+            print(f"   [OK] Verified automated SR cycle executed {len(dispatches)} rule(s) including adl_sr and adtv_sr.")
+            
+            # Verify images passed to flash_report_image
+            adl_call = next((c for c in sent_calls if c["imgs"] == [ADL_SR_REPORT_IMAGE_PATH]), None)
+            adtv_call = next((c for c in sent_calls if c["imgs"] == [ADTV_SR_REPORT_IMAGE_PATH]), None)
+            assert adl_call is not None, "ADL SR image was not dispatched for adl_sr rule!"
+            assert adtv_call is not None, "ADTv SR image was not dispatched for adtv_sr rule!"
+            print("   [OK] Verified exact Retina cards routed for adl_sr and adtv_sr rules.")
+    finally:
+        db_manager.delete_dispatch_rule(adl_rule_id)
+        db_manager.delete_dispatch_rule(adtv_rule_id)
+
     print("\nALL TEST SUITE CHECKS PASSED PERFECTLY!")
 
 

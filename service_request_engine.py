@@ -50,6 +50,33 @@ BUCKET_COLUMNS = [
     "<1 day", "1 day", "2 day", "3 day", ">3 day", ">5 day", "> 10 day"
 ]
 
+SR_REPORT_TYPES = {
+    "sr",
+    "service_request",
+    "sr_all",
+    "adl_sr",
+    "adl_sr_acso",
+    "adtv_sr",
+    "adtv_sr_acso",
+    "sr_combined",
+    "sr_side_by_side",
+    "combined_sr",
+}
+
+
+def is_sr_report_type(report_type: Optional[str]) -> bool:
+    """Returns True if the given report type string is any variant of Service Request reports."""
+    if not report_type:
+        return False
+    clean = str(report_type).lower().strip()
+    return (
+        clean in SR_REPORT_TYPES
+        or clean.startswith("sr")
+        or clean.endswith("_sr")
+        or "_sr_" in clean
+    )
+
+
 
 # --- Normalization & Bucket Logic (Exact User Equations) ---
 
@@ -830,17 +857,20 @@ def execute_automated_sr_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
         # 4. WhatsApp Dispatch per configured rules
         from whatsapp_sender import flash_report_image, normalize_recipient
 
-        # Find rules matching 'sr', 'service_request', or 'all'
+        # Find rules matching any SR report type or entire suite
         all_rules = db_manager.get_dispatch_rules(region_id)
         sr_rules = [
             r for r in all_rules
-            if r.get("is_enabled", 1) and r.get("report_type", "all").lower() in ("sr", "service_request", "sr_all")
+            if r.get("is_enabled", 1) and (
+                is_sr_report_type(r.get("report_type"))
+                or str(r.get("report_type", "")).lower().strip() in ("suite_all", "everything")
+            )
         ]
 
         dispatch_results = []
         if sr_rules:
             for rule in sr_rules:
-                r_type = rule.get("report_type", "all").lower()
+                r_type = str(rule.get("report_type", "all")).lower().strip()
                 recipients = [normalize_recipient(t.strip()) for t in str(rule.get("target_recipients", "")).split(",") if t.strip()]
                 if not recipients:
                     continue
@@ -849,15 +879,18 @@ def execute_automated_sr_cycle(region_id: str = "thrissur") -> Dict[str, Any]:
                     imgs_to_send = [ADL_SR_REPORT_IMAGE_PATH]
                 elif r_type in ("adtv_sr", "adtv_sr_acso"):
                     imgs_to_send = [ADTV_SR_REPORT_IMAGE_PATH]
+                elif r_type in ("sr_combined", "sr_side_by_side", "combined_sr"):
+                    imgs_to_send = [SR_REPORT_IMAGE_PATH]
                 else:
                     imgs_to_send = [ADL_SR_REPORT_IMAGE_PATH, ADTV_SR_REPORT_IMAGE_PATH]
 
                 rule_name = rule.get("rule_name") or f"Rule #{rule['id']}"
-                print(f"[SR_CYCLE] Executing SR Dispatch Rule '{rule_name}' to {len(recipients)} recipient(s)...")
+                print(f"[SR_CYCLE] Executing SR Dispatch Rule '{rule_name}' ({r_type}) to {len(recipients)} recipient(s): {recipients}...")
                 sent_ok = flash_report_image(imgs_to_send, target_recipients=recipients)
                 dispatch_results.append({
                     "rule_id": rule["id"],
                     "rule_name": rule_name,
+                    "report_type": r_type,
                     "recipients": recipients,
                     "success": sent_ok,
                 })
