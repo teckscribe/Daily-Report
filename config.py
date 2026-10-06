@@ -165,7 +165,7 @@ TELEGRAM_ALLOWED_USERS = [
     int(u.strip()) for u in raw_tg_users.split(",") if u.strip().isdigit()
 ]
 TELEGRAM_DEFAULT_CHAT_ID = os.getenv("TELEGRAM_DEFAULT_CHAT_ID", "").strip()
-TELEGRAM_TEST_PHONE = os.getenv("TELEGRAM_TEST_PHONE", "+919633889430").strip()
+TELEGRAM_TEST_PHONE = os.getenv("TELEGRAM_TEST_PHONE", "").strip()
 TELEGRAM_WEB_URL = os.getenv("TELEGRAM_WEB_URL", "http://127.0.0.1:8201").strip()
 
 # --- Service Request (SR) Configuration ---

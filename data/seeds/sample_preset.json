@@ -1,0 +1,88 @@
+{
+  "_meta": {
+    "description": "Clean generic sample template (no personal contact data or employee rosters)",
+    "version": "2.0",
+    "region_id": "thrissur"
+  },
+  "tables": {
+    "regions": [
+      {
+        "id": "thrissur",
+        "name": "Thrissur",
+        "softcode_region": "Thrissur",
+        "prepaid_region": "Thrissur",
+        "is_active": 1
+      }
+    ],
+    "centers": [
+      {
+        "region_id": "thrissur",
+        "center_name": "Center 1",
+        "adl_area_key": "Center 1",
+        "adtv_amo_key": "Center 1",
+        "prepaid_area_key": "Center 1",
+        "sort_order": 1
+      }
+    ],
+    "acsos": [
+      {
+        "region_id": "thrissur",
+        "center_name": "Center 1",
+        "acso_name": "Sample ACSO 1",
+        "adtv_acso_name": "Sample ACSO 1",
+        "adl_center_display": "Center 1",
+        "adtv_center_display": "Center 1",
+        "pd_adl_center_key": "Center 1",
+        "pd_adtv_center_key": "Center 1",
+        "pp_adl_center_key": "Center 1",
+        "pp_adtv_center_key": "Center 1",
+        "phone": "",
+        "email": "",
+        "sort_order": 1
+      }
+    ],
+    "team_leaders": [
+      {
+        "region_id": "thrissur",
+        "center_name": "Center 1",
+        "name": "Sample Team Leader 1",
+        "adtv_center": "Center 1",
+        "adtv_name": "Sample Team Leader 1",
+        "pd_adl_name_key": "Sample Team Leader 1",
+        "pd_adtv_name_key": "Sample Team Leader 1",
+        "pp_adl_emp_code": "TL01",
+        "pp_adtv_emp_code": "TL01",
+        "phone": "",
+        "email": "",
+        "sort_order": 1
+      }
+    ],
+    "employees": [
+      {
+        "region_id": "thrissur",
+        "emp_code": "TL01",
+        "name": "Sample Team Leader 1",
+        "role": "Team Leader",
+        "center_name": "Center 1",
+        "phone": "",
+        "email": ""
+      }
+    ],
+    "schedule_times": [],
+    "dispatch_rules": [
+      {
+        "region_id": "thrissur",
+        "rule_name": "ADL Team Leader Reports",
+        "report_type": "adl_tl",
+        "target_recipients": "",
+        "is_enabled": 1
+      }
+    ],
+    "system_settings": [
+      {
+        "key": "scheduler_enabled",
+        "value": "1"
+      }
+    ]
+  }
+}

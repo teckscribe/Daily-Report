@@ -395,7 +395,7 @@ def test_routes():
 
     # Test Preconfigured Test Numbers SQLite Persistence
     initial_nums = get_preconfigured_test_numbers()
-    assert len(initial_nums) >= 2
+    assert isinstance(initial_nums, list)
     test_mobile = "+919988776655"
     add_preconfigured_test_number(test_mobile)
     updated_nums = get_preconfigured_test_numbers()
@@ -677,6 +677,19 @@ def test_routes():
     json_disk = Path(db_manager.DATA_DIR / "employee_directory.json")
     assert json_disk.exists()
     print("   [OK] Verified data/employee_directory.json exists and auto-syncs.")
+
+    # Test auto_sync_directory_from_disk
+    sync_result = db_manager.auto_sync_directory_from_disk("thrissur")
+    assert sync_result in (True, False)
+    print("   [OK] Verified auto_sync_directory_from_disk executes flawlessly.")
+
+    # Verify clean sample preset exists and contains no personal contact numbers
+    sample_seed = Path(db_manager.DATA_DIR / "seeds" / "sample_preset.json")
+    assert sample_seed.exists()
+    seed_content = sample_seed.read_text(encoding="utf-8")
+    assert "9633889430" not in seed_content
+    assert "7591920200" not in seed_content
+    print("   [OK] Verified data/seeds/sample_preset.json is clean with zero personal phone numbers.")
 
     # Test Parity Test endpoint resilience with non-existent environment path
     orig_env = os.environ.get("TARGET_EXCEL_PATH")

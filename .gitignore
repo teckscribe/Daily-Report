@@ -40,9 +40,19 @@ data/*.db-shm
 *.db-wal
 *.db-shm
 
-# Local user-exported backups (tracked baseline presets are kept in data/seeds/)
+# Employee directory and contact data (prevent syncing personal roster & phone numbers across Git clones)
+data/employee_directory*.json
+data/*_directory*.json
+data/*_directory*.xlsx
+data/*_directory*.xls
+data/*_directory*.csv
+data/test_phone_numbers.json
+
+# Local user-exported backups & seeds with personal data
 data/*.json
-!data/seeds/*.json
+!data/seeds/sample_preset.json
+data/seeds/*_backup.json
+data/seeds/thrissur_config_backup.json
 
 # Logs & Diagnostics
 logs/*.log

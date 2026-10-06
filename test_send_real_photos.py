@@ -3,8 +3,8 @@ import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 from config import DATA_DIR, ADL_REPORT_IMAGE_PATH, ADTV_REPORT_IMAGE_PATH
-
-phone_number = "919633889430"
+import os
+phone_number = os.getenv("TEST_PHONE", "919999999999")
 images = [ADL_REPORT_IMAGE_PATH, ADTV_REPORT_IMAGE_PATH]
 
 print(f"Starting real Photo send test to: +{phone_number}")

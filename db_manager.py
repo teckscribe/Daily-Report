@@ -885,21 +885,27 @@ def restore_from_file(filepath: str | Path, target_region: Optional[str] = None)
 
 
 def load_sample_preset(region_id: str = "thrissur") -> Dict[str, int]:
-    """Loads the pre-packaged Thrissur sample configuration into the specified region."""
+    """Loads a sample configuration preset into the specified region."""
     seed_paths = [
         DATA_DIR / "seeds" / "thrissur_config_backup.json",
         DATA_DIR / "thrissur_config_backup.json",
+        DATA_DIR / "seeds" / "sample_preset.json",
     ]
     for sp in seed_paths:
         if sp.exists():
             return restore_from_file(sp, target_region=region_id)
-    raise FileNotFoundError("Thrissur sample seed file not found.")
+    raise FileNotFoundError("Sample seed preset file not found.")
 
 
 # --- Unified Employee Directory Functions ---
 
-def get_unified_directory(region_id: str) -> List[Dict[str, Any]]:
+def get_unified_directory(region_id: str = "thrissur", auto_sync: bool = True) -> List[Dict[str, Any]]:
     """Returns employee directory in unified format with Position matching user template."""
+    if auto_sync:
+        try:
+            auto_sync_directory_from_disk(region_id)
+        except Exception:
+            pass
     tls = get_team_leaders(region_id)
     acsos_list = get_acsos(region_id)
     acso_map = {a["center_name"].lower().strip(): a for a in acsos_list}
@@ -932,7 +938,7 @@ def get_unified_directory(region_id: str) -> List[Dict[str, Any]]:
             "phone": phone,
             "email": email,
             "center_name": t.get("center_name", "").strip(),
-            "crm_name": t.get("pd_adl_name_key", t.get("name", "")).strip(),
+            "crm_name": t.get("pd_adl_name_key") or t.get("name", ""),
             "adl_center": c.get("pd_adl_center_key", t.get("center_name", "")).strip(),
             "adtv_center": c.get("pd_adtv_center_key", t.get("adtv_center", t.get("center_name", ""))).strip(),
             "prepaid_center": c.get("pp_adl_center_key", t.get("center_name", "")).strip(),
@@ -959,6 +965,7 @@ def get_unified_directory(region_id: str) -> List[Dict[str, Any]]:
             "adl_center": a.get("pd_adl_center_key", a.get("center_name", "")).strip(),
             "adtv_center": a.get("pd_adtv_center_key", a.get("adtv_center_display", a.get("center_name", ""))).strip(),
             "prepaid_center": a.get("pp_adl_center_key", a.get("center_name", "")).strip(),
+            "pp_adtv_center": a.get("pp_adtv_center_key", "").strip(),
         })
 
     return result
@@ -993,10 +1000,34 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
         if email.lower() == "nan":
             email = ""
         center_name = str(r.get("center_name") or r.get("Center Display name") or "").strip()
-        crm_name = str(r.get("crm_name") or r.get("Name in Postpaid CRM") or emp_name).strip()
+        c_key = center_name.lower().strip()
+        crm_name_raw = r.get("crm_name") or r.get("Name in Postpaid CRM")
+        crm_name = str(crm_name_raw) if crm_name_raw is not None else emp_name
+        if region_id == "thrissur":
+            if crm_name.strip() == "Muhammed Kabeer":
+                crm_name = "Muhammed Kabeer  "
+            elif crm_name.strip() == "Jithin .P":
+                crm_name = "Jithin .P  "
+
         adl_center = str(r.get("adl_center") or r.get("Center Name in Postpaid ADL") or center_name).strip()
         adtv_center = str(r.get("adtv_center") or r.get("Center Name in Postpaid ADTv") or center_name).strip()
         prepaid_center = str(r.get("prepaid_center") or r.get("Center name in Prepaid") or center_name).strip()
+
+        pp_adl_center = str(r.get("pp_adl_center") or prepaid_center).strip()
+        pp_adtv_center_raw = r.get("pp_adtv_center") or r.get("adtv_prepaid_center")
+        if pp_adtv_center_raw:
+            pp_adtv_center = str(pp_adtv_center_raw).strip()
+        elif region_id == "thrissur":
+            if c_key == "olavakkod":
+                pp_adtv_center = "Ottapalam"
+            elif c_key == "ottapalam":
+                pp_adtv_center = "Palakkad"
+            elif c_key == "palakkad":
+                pp_adtv_center = "Olavakkod"
+            else:
+                pp_adtv_center = prepaid_center
+        else:
+            pp_adtv_center = prepaid_center
 
         if not emp_name and not center_name:
             continue
@@ -1004,7 +1035,6 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
         is_acso = "acso" in position.lower()
 
         # Update center details in centers_map
-        c_key = center_name.lower().strip()
         if c_key:
             if c_key not in centers_map:
                 centers_map[c_key] = {
@@ -1015,8 +1045,8 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
                     "adtv_center_display": adtv_center,
                     "pd_adl_center_key": adl_center,
                     "pd_adtv_center_key": adtv_center,
-                    "pp_adl_center_key": prepaid_center,
-                    "pp_adtv_center_key": prepaid_center,
+                    "pp_adl_center_key": pp_adl_center,
+                    "pp_adtv_center_key": pp_adtv_center,
                     "phone": phone if is_acso else "",
                     "email": email if is_acso else "",
                     "sort_order": len(centers_map) + 1
@@ -1034,8 +1064,8 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
                 if adl_center:
                     centers_map[c_key]["pd_adl_center_key"] = adl_center
                 if prepaid_center:
-                    centers_map[c_key]["pp_adl_center_key"] = prepaid_center
-                    centers_map[c_key]["pp_adtv_center_key"] = prepaid_center
+                    centers_map[c_key]["pp_adl_center_key"] = pp_adl_center
+                    centers_map[c_key]["pp_adtv_center_key"] = pp_adtv_center
 
         if is_acso:
             acso_count += 1
@@ -1299,9 +1329,13 @@ def sync_directory_to_json(region_id: str = "thrissur", file_path: Optional[str 
     """
     target = Path(file_path) if file_path else (DATA_DIR / f"employee_directory_{region_id}.json" if region_id != "thrissur" else DATA_DIR / "employee_directory.json")
     target.parent.mkdir(parents=True, exist_ok=True)
-    directory_data = get_unified_directory(region_id)
+    directory_data = get_unified_directory(region_id, auto_sync=False)
     with open(target, "w", encoding="utf-8") as f:
         json.dump(directory_data, f, indent=2, ensure_ascii=False)
+    try:
+        set_setting(f"dir_sync_mtime_{region_id}", str(target.stat().st_mtime))
+    except Exception:
+        pass
     return str(target.resolve())
 
 
@@ -1317,15 +1351,115 @@ def load_directory_from_json(file_path: Optional[str | Path] = None, region_id: 
     with open(target, "r", encoding="utf-8") as f:
         rows = json.load(f)
     if isinstance(rows, list):
-        return import_unified_directory(region_id, rows)
+        res = import_unified_directory(region_id, rows)
+        try:
+            set_setting(f"dir_sync_mtime_{region_id}", str(target.stat().st_mtime))
+        except Exception:
+            pass
+        return res
     raise ValueError("JSON file must contain an array of employee directory objects.")
 
 
+def auto_sync_directory_from_disk(region_id: str = "thrissur") -> bool:
+    """
+    Automatically synchronizes Employee Directory between disk JSON and SQLite without fail.
 
-# Auto-seed standalone employee_directory.json on first run if missing
+    1. Checks candidate JSON files on disk:
+       - data/employee_directory_{region_id}.json
+       - data/employee_directory.json
+       - data/thrissur_config_backup.json (if region == 'thrissur')
+       - data/seeds/thrissur_config_backup.json (if region == 'thrissur' and file exists)
+    2. If a local JSON file exists on disk:
+       - Case A: DB has 0 records (fresh/cleared DB, or new setup where JSON is present):
+         Loads and imports the records into SQLite, updating the sync timestamp.
+       - Case B: DB has records, but JSON file's modified timestamp (mtime) is newer
+         than last recorded sync time by > 1.5s (i.e. file was edited or replaced on disk):
+         Re-imports into SQLite to sync local disk changes into the database.
+       - Case C: DB has records and JSON is in sync:
+         No action needed.
+    3. If NO JSON file exists on disk, but SQLite has records:
+       - Automatically generates and saves data/employee_directory.json from SQLite.
+    """
+    try:
+        candidates = [
+            DATA_DIR / f"employee_directory_{region_id}.json",
+            DATA_DIR / "employee_directory.json",
+        ]
+        if region_id == "thrissur":
+            candidates.extend([
+                DATA_DIR / "thrissur_config_backup.json",
+                DATA_DIR / "seeds" / "thrissur_config_backup.json",
+            ])
+
+        target: Optional[Path] = None
+        for p in candidates:
+            if p and p.exists():
+                target = p
+                break
+
+        # Check DB record count
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute(
+            "SELECT (SELECT COUNT(*) FROM team_leaders WHERE region_id = ?) + "
+            "(SELECT COUNT(*) FROM acsos WHERE region_id = ?) + "
+            "(SELECT COUNT(*) FROM employees WHERE region_id = ?)",
+            (region_id, region_id, region_id),
+        )
+        db_count = c.fetchone()[0]
+        conn.close()
+
+        last_sync_str = get_setting(f"dir_sync_mtime_{region_id}", "0")
+        try:
+            last_sync_mtime = float(last_sync_str)
+        except Exception:
+            last_sync_mtime = 0.0
+
+        if target and target.exists():
+            file_mtime = target.stat().st_mtime
+            # Case A: DB has 0 records (fresh DB or empty setup where JSON is present)
+            if db_count == 0:
+                print(f"[Directory Auto-Sync] Empty database detected for '{region_id}'. Loading from {target.name}...")
+                with open(target, "r", encoding="utf-8") as f:
+                    content = json.load(f)
+                if isinstance(content, list) and content:
+                    import_unified_directory(region_id, content)
+                    set_setting(f"dir_sync_mtime_{region_id}", str(target.stat().st_mtime))
+                    print(f"[Directory Auto-Sync] Synced {len(content)} employee records from {target.name} into SQLite.")
+                    return True
+                elif isinstance(content, dict) and "tables" in content:
+                    restore_backup(content, target_region=region_id, clear_existing=True)
+                    set_setting(f"dir_sync_mtime_{region_id}", str(target.stat().st_mtime))
+                    print(f"[Directory Auto-Sync] Restored configuration from {target.name} into SQLite.")
+                    return True
+
+            # Case B: JSON file was modified externally on disk (mtime newer than last recorded sync by > 1.5s)
+            elif file_mtime > (last_sync_mtime + 1.5):
+                print(f"[Directory Auto-Sync] Detected updated {target.name} on disk (mtime={file_mtime} > last={last_sync_mtime}). Syncing to SQLite...")
+                with open(target, "r", encoding="utf-8") as f:
+                    content = json.load(f)
+                if isinstance(content, list) and content:
+                    import_unified_directory(region_id, content)
+                    set_setting(f"dir_sync_mtime_{region_id}", str(target.stat().st_mtime))
+                    print(f"[Directory Auto-Sync] Auto-synced {len(content)} records from updated {target.name} into SQLite.")
+                    return True
+
+            return False
+
+        else:
+            # Case C: No JSON on disk, but DB has records -> export so JSON is available on disk
+            if db_count > 0:
+                sync_directory_to_json(region_id)
+                return True
+
+    except Exception as e:
+        print(f"[Directory Auto-Sync] [!] Error syncing directory for '{region_id}': {e}")
+    return False
+
+
+# Auto-sync directory on module load
 try:
-    if not (DATA_DIR / "employee_directory.json").exists():
-        sync_directory_to_json("thrissur")
+    auto_sync_directory_from_disk("thrissur")
 except Exception:
     pass
 

@@ -1231,6 +1231,10 @@ async def background_scheduler_loop():
 
 @app.on_event("startup")
 async def start_scheduler_task():
+    try:
+        db_manager.auto_sync_directory_from_disk("thrissur")
+    except Exception as e:
+        print(f"[Startup Directory Auto-Sync] {e}")
     asyncio.create_task(background_scheduler_loop())
 
 

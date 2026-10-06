@@ -9,8 +9,9 @@ with sync_playwright() as p:
         headless=False,
         channel="chrome"
     )
-    page = ctx.new_page()
-    page.goto("https://web.whatsapp.com/send?phone=919633889430")
+    import os
+    test_phone = os.getenv("TEST_PHONE", "919999999999")
+    page.goto(f"https://web.whatsapp.com/send?phone={test_phone}")
     page.wait_for_selector("footer", timeout=60000)
     time.sleep(3)
     

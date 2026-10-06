@@ -13,9 +13,9 @@ if hasattr(sys.stdout, "reconfigure"):
 
 def log(msg: str):
     print(msg, flush=True)
-
-OFFICE_PHONE = "7591920200"
-PERSONAL_PHONE = "919633889430"
+import os
+OFFICE_PHONE = os.getenv("OFFICE_PHONE", "919999999998")
+PERSONAL_PHONE = os.getenv("PERSONAL_PHONE", "919999999999")
 session_dir = DATA_DIR / "whatsapp_session"
 session_dir.mkdir(parents=True, exist_ok=True)
 code_screenshot = OUTPUT_DIR / "whatsapp_pairing_code.png"

@@ -363,9 +363,7 @@ def trigger_sr_test_delivery(target_phone: str, region_id: str = "thrissur") -> 
         return False, f"Could not connect to web server: {e}"
 
 
-# --- Preconfigured Test WhatsApp Numbers Management ---
-
-DEFAULT_TEST_NUMBERS = ["+919633889430", "+917591920200"]
+DEFAULT_TEST_NUMBERS: List[str] = []
 
 
 def get_preconfigured_test_numbers() -> List[str]:
