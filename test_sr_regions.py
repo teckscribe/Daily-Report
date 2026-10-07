@@ -18,6 +18,8 @@ class ServiceRequestRegionTests(unittest.TestCase):
         self.sr = importlib.util.module_from_spec(spec)
         db = ModuleType("db_manager")
         db.get_region_by_id = Mock(return_value={"softcode_region": "Kottayam", "prepaid_region": "Kottayam"})
+        db.get_all_regions = Mock(return_value=[{"id": "kottayam"}])
+        self.db = db
         with patch.dict(sys.modules, {"db_manager": db}):
             spec.loader.exec_module(self.sr)
 
@@ -26,7 +28,7 @@ class ServiceRequestRegionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.sr.sr_output_path("a.jpg", "../thrissur")
 
-    def test_mixed_workbook_filters_all_sheets_and_rejects_missing_region(self):
+    def test_mixed_workbook_filters_all_sheets_and_allows_single_region_exports(self):
         adl = pd.DataFrame({"REGION": ["Kottayam", "Thrissur"], "AREA": ["Kottayam", "Chalakudy"], "PROBLEMSUBTYPE": ["Shifting Request"] * 2, "DAYSELAPSED": [2, 2]})
         tv = adl.rename(columns={"AREA": "SERVICEAMO", "PROBLEMSUBTYPE": "PROBLEMTYPE"})
         prepaid = adl.rename(columns={"AREA": "Area", "PROBLEMSUBTYPE": "Complaint", "DAYSELAPSED": "TAT"})
@@ -38,8 +40,8 @@ class ServiceRequestRegionTests(unittest.TestCase):
                     tv.to_excel(writer, sheet_name="ADTv", index=False)
                     (prepaid.drop(columns="REGION") if missing else prepaid).to_excel(writer, sheet_name="Prepaid", index=False)
                 if missing:
-                    with self.assertRaisesRegex(ValueError, "no REGION column"):
-                        self.sr.compute_service_request_reports(source, "kottayam")
+                    sections = self.sr.compute_service_request_reports(source, "kottayam")
+                    self.assertTrue(all(isinstance(frame, pd.DataFrame) for frame in sections.values()))
                 else:
                     sections = self.sr.compute_service_request_reports(source, "kottayam")
                     for frame in sections.values():
@@ -49,6 +51,18 @@ class ServiceRequestRegionTests(unittest.TestCase):
                         excel = self.sr.create_excel_output(sections, region_id="kottayam")
                         self.assertEqual(excel.parent.name, "kottayam")
                         self.assertTrue(excel.exists())
+
+    def test_unlabelled_export_is_rejected_when_multiple_regions_exist(self):
+        self.db.get_all_regions.return_value = [{"id": "kottayam"}, {"id": "another-region"}]
+        adl = pd.DataFrame({"AREA": ["Kottayam"], "PROBLEMSUBTYPE": ["Shifting Request"], "DAYSELAPSED": [2]})
+        tv = adl.rename(columns={"AREA": "SERVICEAMO", "PROBLEMSUBTYPE": "PROBLEMTYPE"})
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.xlsx"
+            with pd.ExcelWriter(source) as writer:
+                adl.to_excel(writer, sheet_name="ADL", index=False)
+                tv.to_excel(writer, sheet_name="ADTv", index=False)
+            with self.assertRaisesRegex(ValueError, "no REGION column"):
+                self.sr.compute_service_request_reports(source, "kottayam")
 
     def test_renderer_writes_only_selected_region(self):
         from PIL import Image

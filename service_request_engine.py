@@ -258,20 +258,31 @@ def compute_service_request_reports(
 
     # CRM exports contain a REGION column for postpaid/TV. Resolve the
     # configured display name from the region record. Prepaid exports may
-    # already be region-scoped; filter them too
-    # when a region column is present.
+    # already be region-scoped; filter them too when a region column is
+    # present. A one-region installation is allowed to use its legacy,
+    # region-scoped export without that optional column. Once more than one
+    # region is configured, the column is mandatory to prevent mixed data.
     region_row = db_manager.get_region_by_id(region_id) or {}
     softcode_region = str(region_row.get("softcode_region") or region_id).strip()
     prepaid_region = str(region_row.get("prepaid_region") or softcode_region).strip()
+    configured_regions = db_manager.get_all_regions()
+    is_single_region_install = (
+        len(configured_regions) == 1
+        and str(configured_regions[0].get("id") or "").strip().casefold()
+        == str(region_id).strip().casefold()
+    )
 
     def _filter_region(frame: pd.DataFrame, region_name: str) -> pd.DataFrame:
         if frame.empty:
             return frame
         region_col = next((c for c in frame.columns if str(c).strip().casefold() == "region"), None)
         if not region_col:
+            if is_single_region_install:
+                return frame.copy()
             raise ValueError(
                 f"Cannot verify source region {region_name!r}: a non-empty Service Request "
-                "sheet has no REGION column. Upload a region-labelled export."
+                "sheet has no REGION column. Upload a region-labelled export or remove "
+                "the extra region from the dashboard."
             )
         return frame[frame[region_col].astype(str).str.strip().str.casefold() == region_name.casefold()].copy()
 
