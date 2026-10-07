@@ -19,6 +19,12 @@ class ServiceRequestRegionTests(unittest.TestCase):
         db = ModuleType("db_manager")
         db.get_region_by_id = Mock(return_value={"softcode_region": "Kottayam", "prepaid_region": "Kottayam"})
         db.get_all_regions = Mock(return_value=[{"id": "kottayam"}])
+        db.get_centers = Mock(return_value=[{
+            "center_name": "Kottayam",
+            "adl_area_key": "Kottayam",
+            "adtv_amo_key": "Kottayam",
+            "prepaid_area_key": "Kottayam",
+        }])
         self.db = db
         with patch.dict(sys.modules, {"db_manager": db}):
             spec.loader.exec_module(self.sr)
@@ -41,7 +47,10 @@ class ServiceRequestRegionTests(unittest.TestCase):
                     (prepaid.drop(columns="REGION") if missing else prepaid).to_excel(writer, sheet_name="Prepaid", index=False)
                 if missing:
                     sections = self.sr.compute_service_request_reports(source, "kottayam")
-                    self.assertTrue(all(isinstance(frame, pd.DataFrame) for frame in sections.values()))
+                    for frame in sections.values():
+                        self.assertIsInstance(frame, pd.DataFrame)
+                        self.assertNotIn("Chalakudy", frame.to_string())
+                        self.assertIn("Kottayam", frame.to_string())
                 else:
                     sections = self.sr.compute_service_request_reports(source, "kottayam")
                     for frame in sections.values():

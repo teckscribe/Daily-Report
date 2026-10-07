@@ -259,9 +259,9 @@ def compute_service_request_reports(
     # CRM exports contain a REGION column for postpaid/TV. Resolve the
     # configured display name from the region record. Prepaid exports may
     # already be region-scoped; filter them too when a region column is
-    # present. A one-region installation is allowed to use its legacy,
-    # region-scoped export without that optional column. Once more than one
-    # region is configured, the column is mandatory to prevent mixed data.
+    # present. Legacy exports without REGION are accepted only in a
+    # one-region installation and are then restricted to that region's
+    # configured center keys.
     region_row = db_manager.get_region_by_id(region_id) or {}
     softcode_region = str(region_row.get("softcode_region") or region_id).strip()
     prepaid_region = str(region_row.get("prepaid_region") or softcode_region).strip()
@@ -271,24 +271,49 @@ def compute_service_request_reports(
         and str(configured_regions[0].get("id") or "").strip().casefold()
         == str(region_id).strip().casefold()
     )
+    center_rows = db_manager.get_centers(region_id)
 
-    def _filter_region(frame: pd.DataFrame, region_name: str) -> pd.DataFrame:
+    def _center_keys(column: str) -> set[str]:
+        return {
+            str(row.get(column) or row.get("center_name") or "").strip().casefold()
+            for row in center_rows
+            if str(row.get(column) or row.get("center_name") or "").strip()
+        }
+
+    def _filter_region(
+        frame: pd.DataFrame,
+        region_name: str,
+        center_columns: Tuple[str, ...],
+        configured_center_column: str,
+    ) -> pd.DataFrame:
         if frame.empty:
             return frame
         region_col = next((c for c in frame.columns if str(c).strip().casefold() == "region"), None)
-        if not region_col:
-            if is_single_region_install:
-                return frame.copy()
-            raise ValueError(
-                f"Cannot verify source region {region_name!r}: a non-empty Service Request "
-                "sheet has no REGION column. Upload a region-labelled export or remove "
-                "the extra region from the dashboard."
+        if region_col:
+            return frame[frame[region_col].astype(str).str.strip().str.casefold() == region_name.casefold()].copy()
+        if is_single_region_install:
+            source_center_col = next(
+                (c for c in frame.columns if str(c).strip().casefold() in center_columns),
+                None,
             )
-        return frame[frame[region_col].astype(str).str.strip().str.casefold() == region_name.casefold()].copy()
+            allowed_centers = _center_keys(configured_center_column)
+            if not source_center_col or not allowed_centers:
+                raise ValueError(
+                    f"Cannot verify source region {region_name!r}: this legacy Service Request "
+                    "sheet needs a REGION column or configured center keys."
+                )
+            return frame[
+                frame[source_center_col].astype(str).str.strip().str.casefold().isin(allowed_centers)
+            ].copy()
+        raise ValueError(
+            f"Cannot verify source region {region_name!r}: a non-empty Service Request "
+            "sheet has no REGION column. Upload a region-labelled export or remove "
+            "the extra region from the dashboard."
+        )
 
-    adl_df = _filter_region(adl_df, softcode_region)
-    adtv_df = _filter_region(adtv_df, softcode_region)
-    prepaid_df = _filter_region(prepaid_df, prepaid_region)
+    adl_df = _filter_region(adl_df, softcode_region, ("area", "center"), "adl_area_key")
+    adtv_df = _filter_region(adtv_df, softcode_region, ("serviceamo", "amo", "area"), "adtv_amo_key")
+    prepaid_df = _filter_region(prepaid_df, prepaid_region, ("area", "center", "serviceamo", "amo"), "prepaid_area_key")
 
     # Process ADL Postpaid
     adl_postpaid = prepare_source(
