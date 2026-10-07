@@ -575,6 +575,10 @@ def validate_region_report_directory(region_id: str) -> List[str]:
     def text(value: Any) -> str:
         return str(value or "").strip().casefold()
 
+    def person_name(value: Any) -> str:
+        """Compare CRM/personnel names despite harmless spacing or punctuation."""
+        return "".join(character for character in text(value) if character.isalnum())
+
     def code(value: Any) -> str:
         value = str(value or "").strip()
         return value[:-2] if value.endswith(".0") and value[:-2].isdigit() else value
@@ -596,7 +600,7 @@ def validate_region_report_directory(region_id: str) -> List[str]:
     def matching_tl_records(name: Any = None, emp_code: Any = None) -> List[Dict[str, Any]]:
         return [
             row for row in team_leaders_in_directory
-            if (name is None or text(row.get("name")) == text(name))
+            if (name is None or person_name(row.get("name")) == person_name(name))
             and (emp_code is None or code(row.get("emp_code")) == code(emp_code))
         ]
 
@@ -633,7 +637,7 @@ def validate_region_report_directory(region_id: str) -> List[str]:
         if postpaid_names and prepaid_codes:
             matches_both = [
                 record for record in team_leaders_in_directory
-                if all(text(record.get("name")) == text(value) for value in postpaid_names)
+                if all(person_name(record.get("name")) == person_name(value) for value in postpaid_names)
                 and all(code(record.get("emp_code")) == code(value) for value in prepaid_codes)
             ]
             if not matches_both:

@@ -106,6 +106,24 @@ class DirectoryPreflightTests(unittest.TestCase):
         issues = db_manager.validate_region_report_directory("kottayam")
         self.assertTrue(any("do not identify the same" in issue for issue in issues))
 
+    @patch.object(db_manager, "get_employees")
+    @patch.object(db_manager, "get_acsos")
+    @patch.object(db_manager, "get_team_leaders")
+    @patch.object(db_manager, "get_centers")
+    def test_crm_name_formatting_does_not_create_false_mismatch(self, get_centers, get_team_leaders, get_acsos, get_employees):
+        get_centers.return_value = [self.center]
+        get_team_leaders.return_value = [{
+            **self.tl,
+            "name": "Shyam Kumar",
+            "pd_adl_name_key": "SHYAMKUMAR",
+            "pd_adtv_name_key": "SHYAM KUMAR",
+        }]
+        get_acsos.return_value = [self.acso]
+        get_employees.return_value = [
+            {"name": "Shyam Kumar", "role": "Team Leader", "center_name": "Kottayam", "emp_code": "1607"},
+        ]
+        self.assertEqual(db_manager.validate_region_report_directory("kottayam"), [])
+
 
 if __name__ == "__main__":
     unittest.main()
