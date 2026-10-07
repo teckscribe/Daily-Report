@@ -129,7 +129,7 @@ PREPAID_INTERNET = "Internet Issue"   # ADL prepaid  = Issue Service Type == "In
 
 
 def get_layout_for_region(region_id: str = DEFAULT_REGION_ID):
-    """Loads declarative row layout for a specific region from SQLite, or falls back to Thrissur defaults."""
+    """Loads the selected region's layout from SQLite without cross-region fallback."""
     try:
         from db_manager import get_team_leaders, get_acsos
         tls_db = get_team_leaders(region_id)
@@ -148,7 +148,7 @@ def get_layout_for_region(region_id: str = DEFAULT_REGION_ID):
                     pp_adtv_emp_code=int(r["pp_adtv_emp_code"]) if str(r["pp_adtv_emp_code"]).isdigit() else r["pp_adtv_emp_code"],
                 )
                 for idx, r in enumerate(tls_db)
-            ] if tls_db else TEAM_LEADER_ROWS
+            ]
             acso_rows = [
                 AcsoRow(
                     pd_row=32 + idx,
@@ -163,9 +163,9 @@ def get_layout_for_region(region_id: str = DEFAULT_REGION_ID):
                     pp_adtv_center_key=r["pp_adtv_center_key"],
                 )
                 for idx, r in enumerate(acsos_db)
-            ] if acsos_db else ACSO_ROWS
+            ]
             return tl_rows, acso_rows
     except Exception:
         pass
-    return TEAM_LEADER_ROWS, ACSO_ROWS
+    return [], []
 

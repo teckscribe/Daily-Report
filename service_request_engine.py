@@ -257,8 +257,8 @@ def compute_service_request_reports(
             prepaid_df = pd.DataFrame()
 
     # CRM exports contain a REGION column for postpaid/TV. Resolve the
-    # configured display name from the region record instead of assuming
-    # Thrissur. Prepaid exports may already be region-scoped; filter them too
+    # configured display name from the region record. Prepaid exports may
+    # already be region-scoped; filter them too
     # when a region column is present.
     region_row = db_manager.get_region_by_id(region_id) or {}
     softcode_region = str(region_row.get("softcode_region") or region_id).strip()
@@ -979,5 +979,5 @@ def execute_automated_sr_cycle(region_id: str = DEFAULT_REGION_ID) -> Dict[str, 
 
 if __name__ == "__main__":
     print("Testing Service Request Engine...")
-    res = execute_automated_sr_cycle("thrissur")
+    res = execute_automated_sr_cycle(DEFAULT_REGION_ID)
     print("Result:", res)

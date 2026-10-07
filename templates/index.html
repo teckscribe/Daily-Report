@@ -571,7 +571,7 @@
         <button class="btn btn-danger btn-sm" onclick="deleteCurrentRegion()" title="Remove the selected empty region">
           <span>&#128465;</span> Remove Region
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="openBackupModal()" title="Export/Import configuration or load Thrissur preset">
+        <button class="btn btn-secondary btn-sm" onclick="openBackupModal()" title="Export or import region configuration">
           <span>💾</span> Backup & Preset
         </button>
       </div>
@@ -729,7 +729,7 @@
           <div>
             <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--text-main);">📊 Daily Operations &amp; Regional Reports</h2>
             <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">
-              Mathematical calculation engine, high-definition Retina cards, and automated WhatsApp dispatches for <strong id="active-reg-label">Thrissur</strong>.
+              Mathematical calculation engine, high-definition Retina cards, and automated WhatsApp dispatches for <strong id="active-reg-label">__DEFAULT_REGION_NAME__</strong>.
             </p>
           </div>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
@@ -1643,20 +1643,7 @@
         </div>
       </div>
 
-      <!-- Section 3: Bundled Presets -->
-      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius); padding: 1rem;">
-        <h4 style="margin: 0 0 0.35rem 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; color: #166534;">
-          <span>⚡</span> Thrissur Baseline Preset
-        </h4>
-        <p style="margin: 0 0 0.85rem 0; font-size: 0.8rem; color: #15803d; line-height: 1.4;">
-          Need the Thrissur roster? One-click restore loads the complete Thrissur baseline (22 Centers, 13 ACSOs, 22 TLs, 22 Employee Codes, 2 Schedule Times, and 4 Dispatch Rules).
-        </p>
-        <button type="button" class="btn btn-sm" style="background: #16a34a; color: white;" onclick="loadThrissurPreset()">
-          <span>✓</span> Load Thrissur Preset Baseline
-        </button>
-      </div>
-
-      <!-- Section 4: Clear Region (Wipe Roster) -->
+      <!-- Section 3: Clear Region (Wipe Roster) -->
       <div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: var(--radius); padding: 1rem;">
         <h4 style="margin: 0 0 0.35rem 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; color: #9f1239;">
           <span>🗑️</span> Fresh Start (Clear Active Region Data)
@@ -1918,13 +1905,8 @@
               No employee records found for ${escapeHtml(currentRegion.toUpperCase())}
             </div>
             <p style="font-size: 0.85rem; color: var(--text-muted); max-width: 520px; margin: 0 auto 1.25rem auto;">
-              Upload your Excel roster (.xlsx) to populate the directory, or restore the baseline preset below.
+              Upload your Excel roster (.xlsx) to populate the directory.
             </p>
-            <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
-              <button class="btn btn-secondary" onclick="loadThrissurPreset()" style="background: #16a34a; color: white; border-color: #15803d;" title="Restore default roster">
-                <span>⚡</span> Load Baseline Preset (35 Employees)
-              </button>
-            </div>
           </td></tr>`;
         }
         updateSelectedDirectoryCount();
@@ -2963,7 +2945,7 @@
         is_enabled: true
       };
 
-      const region = currentRegion || 'thrissur';
+      const region = currentRegion || '__DEFAULT_REGION_ID__';
       const url = id ? `/api/dispatch-rules/${id}` : `/api/regions/${region}/dispatch-rules`;
       const method = id ? 'PUT' : 'POST';
 
@@ -3091,7 +3073,7 @@
         is_enabled: true
       };
 
-      const region = currentRegion || 'thrissur';
+      const region = currentRegion || '__DEFAULT_REGION_ID__';
       const url = id ? `/api/schedule-times/${id}` : `/api/regions/${region}/schedule-times`;
       const method = id ? 'PUT' : 'POST';
 
@@ -3598,28 +3580,6 @@
         }
       } catch (err) {
         showToast("Invalid JSON file: " + err.message, "error");
-      }
-    }
-
-    async function loadThrissurPreset() {
-      if (!confirm(`Apply the bundled Thrissur preset baseline to the active region ("${currentRegion}")? Existing data for this region will be refreshed.`)) {
-        return;
-      }
-      try {
-        const res = await fetch(`/api/backup/load-sample?region_id=${encodeURIComponent(currentRegion)}`, {
-          method: 'POST'
-        });
-        const result = await res.json();
-        if (res.ok) {
-          showToast(`Thrissur preset baseline loaded successfully into '${currentRegion}'!`, "success");
-          closeModal('modal-backup');
-          await loadRegions();
-          await loadRegionConfig(currentRegion);
-        } else {
-          showToast(result.detail || "Failed to load preset", "error");
-        }
-      } catch (err) {
-        showToast("Error loading preset: " + err.message, "error");
       }
     }
 

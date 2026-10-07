@@ -1,10 +1,48 @@
+import json
 import os
+import re
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent.resolve()
 load_dotenv(BASE_DIR / ".env")
+
+
+def _load_region_config() -> dict[str, str]:
+    """Load the installation-specific region configuration from JSON."""
+    configured_path = Path(os.getenv("REGION_CONFIG_PATH", BASE_DIR / "region.json"))
+    if not configured_path.exists():
+        return {}
+    try:
+        payload = json.loads(configured_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Invalid region configuration at {configured_path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Invalid region configuration at {configured_path}: expected a JSON object")
+    required = ("region_id", "region_name", "softcode_region", "prepaid_region")
+    missing = [key for key in required if not str(payload.get(key, "")).strip()]
+    if missing:
+        raise RuntimeError(f"Invalid region configuration at {configured_path}: missing {', '.join(missing)}")
+    region_id = str(payload["region_id"]).strip().lower()
+    if not re.fullmatch(r"[a-z0-9_-]+", region_id):
+        raise RuntimeError("region_id must contain only lowercase letters, numbers, hyphens, or underscores")
+    return {
+        "region_id": region_id,
+        "region_name": str(payload["region_name"]).strip(),
+        "softcode_region": str(payload["softcode_region"]).strip(),
+        "prepaid_region": str(payload["prepaid_region"]).strip(),
+    }
+
+
+REGION_CONFIG = _load_region_config()
+REGION_CONFIG_PATH = Path(os.getenv("REGION_CONFIG_PATH", BASE_DIR / "region.json"))
+DEFAULT_REGION_ID = REGION_CONFIG.get("region_id") or os.getenv("DEFAULT_REGION_ID", "").strip().lower()
+if not DEFAULT_REGION_ID:
+    raise RuntimeError("Configure region.json or DEFAULT_REGION_ID in .env before starting the application")
+DEFAULT_REGION_NAME = REGION_CONFIG.get("region_name") or os.getenv("DEFAULT_REGION_NAME", DEFAULT_REGION_ID.replace("_", " ").title()).strip()
+TARGET_REGION = REGION_CONFIG.get("softcode_region") or os.getenv("TARGET_REGION", DEFAULT_REGION_NAME).strip()
+PREPAID_REGION = REGION_CONFIG.get("prepaid_region") or os.getenv("PREPAID_REGION", DEFAULT_REGION_NAME).strip()
 
 # --- Directories ---
 DATA_DIR = BASE_DIR / "data"
@@ -84,9 +122,9 @@ PREPAID_PORTAL_URL = "https://sms.ali.asianetindia.com/login/"
 PREPAID_REPORT_URL = "https://sms.ali.asianetindia.com/admin/reports/customised/pending-tickets"
 PREPAID_EXPORT_URL = "https://sms.ali.asianetindia.com/api/reports/customised/pending-tickets/export?lco="
 
-def get_adl_export_query(region: str = "Thrissur") -> str:
+def get_adl_export_query(region: str | None = None) -> str:
     """Generates the Softcode CRMS SQL export query for ADL Broadband for a specific region."""
-    clean_region = region.strip().replace("'", "''")
+    clean_region = (region or TARGET_REGION).strip().replace("'", "''")
     return (
         " SELECT SubCode,NAME,'NA' AS Address, 'NA' AS MobileNo, TICKETNO, LOGINTIME,TicketStatus,subStatus, "
         "followUpDate,followUpRemarks,modifiedBy as FollowUpBy,ComplaintType, ProblemType,ProblemSubType, "
@@ -102,9 +140,9 @@ def get_adl_export_query(region: str = "Thrissur") -> str:
         "ORDER BY LOGINTIME DESC"
     )
 
-def get_adtv_export_query(region: str = "Thrissur") -> str:
+def get_adtv_export_query(region: str | None = None) -> str:
     """Generates the Softcode CRMS SQL export query for ADTv Digital TV for a specific region."""
-    clean_region = region.strip().replace("'", "''")
+    clean_region = (region or TARGET_REGION).strip().replace("'", "''")
     return (
         "  SELECT     Subcode,TICKETNO, CustomerNAME,'NA' as Address,SMSNo,TICKETNO,LOGINTIME,Ticketstatus,ComplaintType,  "
         "problemType,problemSubType,ProblemRemarks,ProblemRaisedBy,WhyPendingDescription,descriptionByWhom,   "
@@ -118,9 +156,9 @@ def get_adtv_export_query(region: str = "Thrissur") -> str:
         "ORDER BY LOGINTIME DESC"
     )
 
-# Direct SQL query used by Softcode CRMS export (default to Thrissur baseline)
-ADL_EXPORT_QUERY = get_adl_export_query("Thrissur")
-ADTV_EXPORT_QUERY = get_adtv_export_query("Thrissur")
+# Direct SQL query used by Softcode CRMS export for this installation's region.
+ADL_EXPORT_QUERY = get_adl_export_query()
+ADTV_EXPORT_QUERY = get_adtv_export_query()
 
 # --- Credentials (from .env, supporting both _PWD and _PASS variants) ---
 SOFTCODE_USER = os.getenv("SOFTCODE_USER", "")
@@ -135,18 +173,14 @@ CRM_SSL_VERIFY = os.getenv("CRM_SSL_VERIFY", "true").lower() in ("true", "1", "y
 WEB_API_TOKEN = os.getenv("WEB_API_TOKEN", "").strip()
 
 # --- Filter Criteria ---
-DEFAULT_REGION_ID = os.getenv("DEFAULT_REGION_ID", "thrissur").strip().lower()
-DEFAULT_REGION_NAME = os.getenv("DEFAULT_REGION_NAME", DEFAULT_REGION_ID.replace("_", " ").title()).strip()
-TARGET_REGION = os.getenv("TARGET_REGION", DEFAULT_REGION_NAME).strip()
 ADL_COMPLAINT_TYPE = "Network"
 ADL_PROBLEM_TYPES = ["network complaint", "onsite visit"]
 ADTV_COMPLAINT_TYPE = "Network"
-PREPAID_REGION = os.getenv("PREPAID_REGION", DEFAULT_REGION_NAME).strip()
 PREPAID_COMPLAINT_TYPE = "Network"
 
 # --- WhatsApp Configuration ---
 # Specify your WhatsApp group name(s) here or in .env (comma-separated)
-# e.g. WHATSAPP_GROUPS="Network Team Thrissur,ACSO Management"
+# e.g. WHATSAPP_GROUPS="Network Team Kottayam,ACSO Management"
 raw_groups = os.getenv("WHATSAPP_GROUPS", "NW Team TCR- REGION")
 WHATSAPP_GROUPS = [g.strip() for g in raw_groups.split(",") if g.strip()]
 

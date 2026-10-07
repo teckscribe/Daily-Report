@@ -44,6 +44,7 @@ from config import (
     SR_EXCEL_REPORT_PATH,
     WEB_API_TOKEN,
     DEFAULT_REGION_ID,
+    DEFAULT_REGION_NAME,
 )
 import db_manager
 from report_engine import compute_report, load_inputs_from_workbook
@@ -205,7 +206,11 @@ def api_login(payload: ApiLoginPayload, response: Response):
 async def serve_dashboard():
     """Renders the main operational management interface."""
     html_path = TEMPLATES_DIR / "index.html"
-    html = html_path.read_text(encoding="utf-8").replace("__DEFAULT_REGION_ID__", DEFAULT_REGION_ID)
+    html = (
+        html_path.read_text(encoding="utf-8")
+        .replace("__DEFAULT_REGION_ID__", DEFAULT_REGION_ID)
+        .replace("__DEFAULT_REGION_NAME__", DEFAULT_REGION_NAME)
+    )
     response = HTMLResponse(content=html)
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
@@ -1514,13 +1519,11 @@ async def restore_configuration_endpoint(request: Request, target_region: Option
 
 @app.post("/api/backup/load-sample")
 def load_sample_preset_endpoint(region_id: str = DEFAULT_REGION_ID):
-    """Loads the bundled Thrissur sample roster and configuration."""
-    db_manager.ensure_region_exists(region_id)
-    try:
-        counts = db_manager.load_sample_preset(region_id)
-        return {"status": "OK", "message": f"Thrissur preset loaded into '{region_id}'", "counts": counts}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    """Legacy sample presets are disabled to prevent cross-region data imports."""
+    raise HTTPException(
+        status_code=410,
+        detail="Sample presets are disabled. Import a backup created for this region instead.",
+    )
 
 
 @app.post("/api/backup/clear")

@@ -19,6 +19,7 @@ from config import (
     ADTV_REPORT_IMAGE_PATH,
     ADL_ACSO_REPORT_IMAGE_PATH,
     ADTV_ACSO_REPORT_IMAGE_PATH,
+    DEFAULT_REGION_ID,
 )
 from crm_downloader import download_from_crm
 from data_processor import (
@@ -49,9 +50,9 @@ def run():
     raw_adtv = pd.read_excel(adtv_path)
     raw_prep = pd.read_csv(prep_path) if str(prep_path).endswith(".csv") else pd.read_excel(prep_path)
 
-    df_adl = filter_adl(raw_adl)
-    df_adtv = filter_adtv(raw_adtv)
-    df_prep = filter_prepaid(raw_prep)
+    df_adl = filter_adl(raw_adl, region=DEFAULT_REGION_ID)
+    df_adtv = filter_adtv(raw_adtv, region=DEFAULT_REGION_ID)
+    df_prep = filter_prepaid(raw_prep, region=DEFAULT_REGION_ID)
 
     print(f"  ADL Records:     {len(df_adl)} (from {len(raw_adl)})")
     print(f"  ADTv Records:    {len(df_adtv)} (from {len(raw_adtv)})")
@@ -68,7 +69,7 @@ def run():
 
     # 3. Compute equations
     print("\n[3/5] Computing report tables with pure-Python engine...")
-    result = compute_report(df_adl, df_adtv, df_prep, region_id="thrissur")
+    result = compute_report(df_adl, df_adtv, df_prep, region_id=DEFAULT_REGION_ID)
 
     adl_tot = result.final["adl_acso"].total.grand_total
     adtv_tot = result.final["adtv_acso"].total.grand_total

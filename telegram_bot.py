@@ -53,6 +53,7 @@ from config import (
     SR_REPORT_IMAGE_PATH,
     BASE_DIR,
     DATA_DIR,
+    DEFAULT_REGION_ID,
     TELEGRAM_ALLOWED_USERS,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_TEST_PHONE,
@@ -307,7 +308,7 @@ def restart_system_service() -> Tuple[bool, str]:
 
 # --- Report Dispatches via Web API ---
 
-def trigger_group_dispatch(region_id: str = "thrissur") -> Tuple[bool, str]:
+def trigger_group_dispatch(region_id: str = DEFAULT_REGION_ID) -> Tuple[bool, str]:
     """Calls web server endpoint to run automated Complaint cycle and dispatch to groups."""
     try:
         url = f"{TELEGRAM_WEB_URL}/api/system/run-automated-cycle-now?region_id={region_id}"
@@ -320,7 +321,7 @@ def trigger_group_dispatch(region_id: str = "thrissur") -> Tuple[bool, str]:
         return False, f"Could not connect to web server: {e}"
 
 
-def trigger_test_delivery(target_phone: str, region_id: str = "thrissur") -> Tuple[bool, str]:
+def trigger_test_delivery(target_phone: str, region_id: str = DEFAULT_REGION_ID) -> Tuple[bool, str]:
     """Generates High-DPI reports and delivers them to a specific phone number."""
     clean_phone = target_phone.strip()
     if not clean_phone:
@@ -338,7 +339,7 @@ def trigger_test_delivery(target_phone: str, region_id: str = "thrissur") -> Tup
         return False, f"Could not connect to web server: {e}"
 
 
-def trigger_sr_dispatch(region_id: str = "thrissur") -> Tuple[bool, str]:
+def trigger_sr_dispatch(region_id: str = DEFAULT_REGION_ID) -> Tuple[bool, str]:
     """Calls web server endpoint to run automated Service Request cycle and dispatch."""
     try:
         url = f"{TELEGRAM_WEB_URL}/api/service-request/run-cycle?region_id={region_id}"
@@ -351,14 +352,14 @@ def trigger_sr_dispatch(region_id: str = "thrissur") -> Tuple[bool, str]:
         return False, f"Could not connect to web server: {e}"
 
 
-def trigger_sr_test_delivery(target_phone: str, region_id: str = "thrissur") -> Tuple[bool, str]:
+def trigger_sr_test_delivery(target_phone: str, region_id: str = DEFAULT_REGION_ID) -> Tuple[bool, str]:
     """Generates Service Request reports and delivers them to a specific phone number."""
     clean_phone = target_phone.strip()
     if not clean_phone:
         return False, "Target phone number cannot be empty."
 
     try:
-        url = f"{TELEGRAM_WEB_URL}/api/service-request/generate-and-send"
+        url = f"{TELEGRAM_WEB_URL}/api/service-request/generate-and-send?region_id={region_id}"
         payload = {"target_phone": clean_phone, "report_type": "all"}
         res = requests.post(url, json=payload, headers=_web_api_headers(), timeout=300)
         data = res.json()
@@ -1379,7 +1380,7 @@ class TelegramBotRunner:
             else:
                 self.api.send_message(chat_id, status_text)
 
-            ok, res_msg = trigger_group_dispatch("thrissur")
+            ok, res_msg = trigger_group_dispatch(DEFAULT_REGION_ID)
             kb = get_render_send_menu_keyboard()
 
             if ok:
@@ -1411,7 +1412,7 @@ class TelegramBotRunner:
             else:
                 self.api.send_message(chat_id, status_text)
 
-            ok, res_msg = trigger_sr_dispatch("thrissur")
+            ok, res_msg = trigger_sr_dispatch(DEFAULT_REGION_ID)
             kb = get_render_send_menu_keyboard()
 
             if ok:
@@ -1448,7 +1449,7 @@ class TelegramBotRunner:
 
             results: List[Tuple[str, bool, str]] = []
             for t in targets:
-                ok, res_msg = trigger_test_delivery(t, "thrissur")
+                ok, res_msg = trigger_test_delivery(t, DEFAULT_REGION_ID)
                 results.append((t, ok, res_msg))
 
             kb = get_render_send_menu_keyboard()
@@ -1484,7 +1485,7 @@ class TelegramBotRunner:
 
             results: List[Tuple[str, bool, str]] = []
             for t in targets:
-                ok, res_msg = trigger_sr_test_delivery(t, "thrissur")
+                ok, res_msg = trigger_sr_test_delivery(t, DEFAULT_REGION_ID)
                 results.append((t, ok, res_msg))
 
             kb = get_render_send_menu_keyboard()

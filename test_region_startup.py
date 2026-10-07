@@ -15,6 +15,8 @@ class RegionStartupTests(unittest.TestCase):
             config.DATA_DIR = Path(directory)
             config.DEFAULT_REGION_ID = "kottayam"
             config.DEFAULT_REGION_NAME = "Kottayam"
+            config.TARGET_REGION = "Kottayam CRM"
+            config.PREPAID_REGION = "Kottayam Prepaid"
             spec = importlib.util.spec_from_file_location(
                 "isolated_region_db", Path(__file__).with_name("db_manager.py")
             )
@@ -22,6 +24,9 @@ class RegionStartupTests(unittest.TestCase):
             with patch.dict(sys.modules, {"config": config}):
                 spec.loader.exec_module(db)
             self.assertEqual([r["id"] for r in db.get_all_regions()], ["kottayam"])
+            configured = db.get_region_by_id("kottayam")
+            self.assertEqual(configured["softcode_region"], "Kottayam CRM")
+            self.assertEqual(configured["prepaid_region"], "Kottayam Prepaid")
             db.add_region("thrissur", "Thrissur", "Thrissur", "Thrissur")
             db.delete_region("thrissur")
             # A leftover roster used to bring the deleted region back on access.

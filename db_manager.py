@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
-from config import DATA_DIR, DEFAULT_REGION_ID, DEFAULT_REGION_NAME
+from config import DATA_DIR, DEFAULT_REGION_ID, DEFAULT_REGION_NAME, PREPAID_REGION, TARGET_REGION
 
 DB_PATH = DATA_DIR / "region_config.db"
 
 DEFAULT_REGIONS = [
-    (DEFAULT_REGION_ID, DEFAULT_REGION_NAME, DEFAULT_REGION_NAME, DEFAULT_REGION_NAME),
+    (DEFAULT_REGION_ID, DEFAULT_REGION_NAME, TARGET_REGION, PREPAID_REGION),
 ]
 KERALA_DISTRICTS = DEFAULT_REGIONS
 
@@ -199,14 +199,19 @@ def init_db():
     now_str = datetime.now().isoformat()
     for r_id, r_name, sc_reg, pp_reg in DEFAULT_REGIONS:
         c.execute("""
-        INSERT OR IGNORE INTO regions (id, name, softcode_region, prepaid_region, is_active, created_at, updated_at)
+        INSERT INTO regions (id, name, softcode_region, prepaid_region, is_active, created_at, updated_at)
         VALUES (?, ?, ?, ?, 1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            softcode_region = excluded.softcode_region,
+            prepaid_region = excluded.prepaid_region,
+            updated_at = excluded.updated_at
         """, (r_id, r_name, sc_reg, pp_reg, now_str, now_str))
 
-    # Clean up empty placeholder regions that have 0 employees, 0 TLs, 0 ACSOs, and 0 centers
+    # Keep the configured installation region; remove any other empty placeholder.
     c.execute("""
     DELETE FROM regions 
-    WHERE id != 'thrissur' AND id != ?
+    WHERE id != ?
       AND (SELECT COUNT(*) FROM team_leaders WHERE region_id = regions.id) = 0
       AND (SELECT COUNT(*) FROM acsos WHERE region_id = regions.id) = 0
       AND (SELECT COUNT(*) FROM centers WHERE region_id = regions.id) = 0
@@ -254,7 +259,7 @@ def get_all_regions() -> List[Dict[str, Any]]:
            (SELECT COUNT(*) FROM schedule_times WHERE region_id = r.id) as schedule_count,
            (SELECT COUNT(*) FROM dispatch_rules WHERE region_id = r.id) as dispatch_rule_count
     FROM regions r
-    ORDER BY CASE WHEN r.id = 'thrissur' THEN 0 ELSE 1 END, r.name ASC
+    ORDER BY r.name ASC
     """)
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
@@ -643,7 +648,7 @@ def add_dispatch_rule(data: Dict[str, Any]) -> int:
     INSERT INTO dispatch_rules (region_id, rule_name, report_type, target_recipients, description, is_enabled, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        data.get("region_id", "thrissur").strip(),
+        data.get("region_id", DEFAULT_REGION_ID).strip(),
         data.get("rule_name", "").strip(),
         data.get("report_type", "all").strip(),
         data.get("target_recipients", "").strip(),
@@ -939,7 +944,7 @@ def restore_backup(data: Dict[str, Any], target_region: Optional[str] = None, cl
             if target_region and not is_full_backup:
                 dest_reg = target_region
             else:
-                dest_reg = r.get("region_id", target_region or "thrissur")
+                dest_reg = r.get("region_id", target_region or DEFAULT_REGION_ID)
 
             r_copy = dict(r)
             r_copy["region_id"] = dest_reg
@@ -971,11 +976,7 @@ def restore_from_file(filepath: str | Path, target_region: Optional[str] = None)
 
 def load_sample_preset(region_id: str = DEFAULT_REGION_ID) -> Dict[str, int]:
     """Loads a sample configuration preset into the specified region."""
-    seed_paths = [
-        DATA_DIR / "seeds" / "thrissur_config_backup.json",
-        DATA_DIR / "thrissur_config_backup.json",
-        DATA_DIR / "seeds" / "sample_preset.json",
-    ]
+    seed_paths = [DATA_DIR / "seeds" / "sample_preset.json"]
     for sp in seed_paths:
         if sp.exists():
             return restore_from_file(sp, target_region=region_id)
@@ -1110,12 +1111,6 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
             crm_name = str(crm_name_raw)
         else:
             crm_name = emp_name
-        if region_id == "thrissur":
-            if crm_name.strip() == "Muhammed Kabeer":
-                crm_name = "Muhammed Kabeer  "
-            elif crm_name.strip() == "Jithin .P":
-                crm_name = "Jithin .P  "
-
         adl_center = str(r.get("adl_center") or r.get("Center Name in Postpaid ADL") or center_name).strip()
         adtv_center = str(r.get("adtv_center") or r.get("Center Name in Postpaid ADTv") or center_name).strip()
         prepaid_center = str(r.get("prepaid_center") or r.get("Center name in Prepaid") or center_name).strip()
@@ -1124,15 +1119,6 @@ def import_unified_directory(region_id: str, rows: List[Dict[str, Any]]) -> Dict
         pp_adtv_center_raw = r.get("pp_adtv_center") or r.get("adtv_prepaid_center")
         if pp_adtv_center_raw:
             pp_adtv_center = str(pp_adtv_center_raw).strip()
-        elif region_id == "thrissur":
-            if c_key == "olavakkod":
-                pp_adtv_center = "Ottapalam"
-            elif c_key == "ottapalam":
-                pp_adtv_center = "Palakkad"
-            elif c_key == "palakkad":
-                pp_adtv_center = "Olavakkod"
-            else:
-                pp_adtv_center = prepaid_center
         else:
             pp_adtv_center = prepaid_center
 
@@ -1538,9 +1524,9 @@ def bulk_delete_unified_directory(items: List[Dict[str, Any]], region_id: str = 
 def sync_directory_to_json(region_id: str = DEFAULT_REGION_ID, file_path: Optional[str | Path] = None) -> str:
     """
     Saves the entire Employee Directory for a region into a standalone, human-readable JSON file.
-    Default destination: data/employee_directory.json (or data/employee_directory_{region_id}.json).
+    Default destination: data/employee_directory_{region_id}.json.
     """
-    target = Path(file_path) if file_path else (DATA_DIR / f"employee_directory_{region_id}.json" if region_id != "thrissur" else DATA_DIR / "employee_directory.json")
+    target = Path(file_path) if file_path else DATA_DIR / f"employee_directory_{region_id}.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     directory_data = get_unified_directory(region_id, auto_sync=False)
     with open(target, "w", encoding="utf-8") as f:
@@ -1556,9 +1542,7 @@ def load_directory_from_json(file_path: Optional[str | Path] = None, region_id: 
     """
     Imports and synchronizes the employee directory for a region from a standalone JSON file.
     """
-    target = Path(file_path) if file_path else (DATA_DIR / f"employee_directory_{region_id}.json" if region_id != "thrissur" else DATA_DIR / "employee_directory.json")
-    if not target.exists():
-        target = DATA_DIR / "employee_directory.json"
+    target = Path(file_path) if file_path else DATA_DIR / f"employee_directory_{region_id}.json"
     if not target.exists():
         raise FileNotFoundError(f"Employee directory JSON file not found at {target}")
     with open(target, "r", encoding="utf-8") as f:
@@ -1579,9 +1563,6 @@ def auto_sync_directory_from_disk(region_id: str = DEFAULT_REGION_ID) -> bool:
 
     1. Checks candidate JSON files on disk:
        - data/employee_directory_{region_id}.json
-       - data/employee_directory.json
-       - data/thrissur_config_backup.json (if region == 'thrissur')
-       - data/seeds/thrissur_config_backup.json (if region == 'thrissur' and file exists)
     2. If a local JSON file exists on disk:
        - Case A: DB has 0 records (fresh/cleared DB, or new setup where JSON is present):
          Loads and imports the records into SQLite, updating the sync timestamp.
@@ -1591,17 +1572,13 @@ def auto_sync_directory_from_disk(region_id: str = DEFAULT_REGION_ID) -> bool:
        - Case C: DB has records and JSON is in sync:
          No action needed.
     3. If NO JSON file exists on disk, but SQLite has records:
-       - Automatically generates and saves data/employee_directory.json from SQLite.
+       - Automatically generates and saves data/employee_directory_{region_id}.json from SQLite.
     """
     try:
         candidates = [DATA_DIR / f"employee_directory_{region_id}.json"]
         # An old browser tab or leftover JSON must not recreate a deleted region.
         if get_region_by_id(region_id) is None:
             return False
-        # The historical generic filename belongs to the Thrissur baseline.
-        # Never copy it into another region during first-start auto-sync.
-        if region_id == "thrissur":
-            candidates.append(DATA_DIR / "employee_directory.json")
 
         target: Optional[Path] = None
         for p in candidates:
@@ -1681,8 +1658,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Multi-Region Database & Configuration CLI")
     parser.add_argument("--backup", nargs="?", const="backup.json", help="Export full configuration backup to JSON")
     parser.add_argument("--restore", type=str, help="Import and restore configuration from a JSON backup file")
-    parser.add_argument("--load-sample", action="store_true", help="Restore Thrissur sample roster and configuration")
-    parser.add_argument("--region", type=str, default="thrissur", help="Target region ID (default: thrissur)")
+    parser.add_argument("--load-sample", action="store_true", help="Restore the optional sample roster into the selected region")
+    parser.add_argument("--region", type=str, default=DEFAULT_REGION_ID, help="Target region ID (defaults to region.json)")
     parser.add_argument("--clear", action="store_true", help="Clear all configured roster data for a region")
     args = parser.parse_args()
 
@@ -1697,7 +1674,7 @@ if __name__ == "__main__":
         print(f"[OK] Restored configuration from {args.restore}: {counts}")
     elif args.load_sample:
         counts = load_sample_preset(args.region)
-        print(f"[OK] Loaded Thrissur preset into '{args.region}': {counts}")
+        print(f"[OK] Loaded sample preset into '{args.region}': {counts}")
     elif args.clear:
         conn = get_connection()
         c = conn.cursor()

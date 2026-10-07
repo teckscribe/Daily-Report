@@ -24,14 +24,12 @@ import pandas as pd
 from config import DEFAULT_REGION_ID
 
 from report_layout import (
-    ACSO_ROWS,
     ADL_COLS,
     ADTV_COLS,
     BUCKET_CRITERIA,
     BUCKET_LABELS,
     PREPAID_COLS,
     PREPAID_INTERNET,
-    TEAM_LEADER_ROWS,
     get_layout_for_region,
 )
 
@@ -328,10 +326,12 @@ def validate_inputs(df_adl, df_adtv, df_prepaid, region_id: str = DEFAULT_REGION
     """Return human-readable warnings. Empty list = inputs look correctly aligned."""
     warnings: List[str] = []
     try:
-        tl_db, _ = get_layout_for_region(region_id)
-        tl_source = tl_db if tl_db else TEAM_LEADER_ROWS
+        tl_source, _ = get_layout_for_region(region_id)
     except Exception:
-        tl_source = TEAM_LEADER_ROWS
+        tl_source = []
+
+    if not tl_source:
+        return [f"[{region_id}] No Team Leader layout is configured. Import the region employee directory before generating reports."]
 
     tl_keys = {str(r.pd_adl_name_key).strip().casefold() for r in tl_source} | \
               {str(r.pd_adtv_name_key).strip().casefold() for r in tl_source}
