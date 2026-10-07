@@ -591,25 +591,53 @@ def validate_region_report_directory(region_id: str) -> List[str]:
     if team_leaders and not employees:
         return [f"[{region_id}] Employee Directory is empty. Import the regional directory before generating reports."]
 
-    def team_leader_match(name: Any, codes: tuple[Any, ...]) -> bool:
-        candidates = [
-            row for row in employees
-            if "team" in text(row.get("role"))
-            and text(row.get("name")) == text(name)
+    team_leaders_in_directory = [row for row in employees if "team" in text(row.get("role"))]
+
+    def matching_tl_records(name: Any = None, emp_code: Any = None) -> List[Dict[str, Any]]:
+        return [
+            row for row in team_leaders_in_directory
+            if (name is None or text(row.get("name")) == text(name))
+            and (emp_code is None or code(row.get("emp_code")) == code(emp_code))
         ]
-        wanted_codes = {code(value) for value in codes if code(value)}
-        return bool(candidates) and (
-            not wanted_codes or any(code(row.get("emp_code")) in wanted_codes for row in candidates)
-        )
 
     for row in team_leaders:
         name = row.get("name")
         label = f"Team Leader {name!r}"
-        if not team_leader_match(name, (row.get("pp_adl_emp_code"), row.get("pp_adtv_emp_code"))):
-            issues.append(f"{label} does not match an Employee Directory Team Leader (name or employee code).")
-        for field in ("pd_adl_name_key", "pd_adtv_name_key", "pp_adl_emp_code", "pp_adtv_emp_code"):
-            if not str(row.get(field) or "").strip():
-                issues.append(f"{label} is missing required report key {field}.")
+        if not matching_tl_records(name=name):
+            issues.append(f"{label} does not match an Employee Directory Team Leader name.")
+
+        # Postpaid sources identify the TL by TeamLeaderName.  Prepaid
+        # sources identify the same TL by employee code; validate both against
+        # the Directory and then require one Directory row to satisfy both.
+        postpaid_name_fields = ("pd_adl_name_key", "pd_adtv_name_key")
+        prepaid_code_fields = ("pp_adl_emp_code", "pp_adtv_emp_code")
+        postpaid_names = []
+        prepaid_codes = []
+        for field in postpaid_name_fields:
+            value = row.get(field)
+            if not str(value or "").strip():
+                issues.append(f"{label} is missing required postpaid TL-name key {field}.")
+            elif not matching_tl_records(name=value):
+                issues.append(f"{label} postpaid TL-name key {field}={value!r} is not in the Employee Directory.")
+            else:
+                postpaid_names.append(value)
+        for field in prepaid_code_fields:
+            value = row.get(field)
+            if not str(value or "").strip():
+                issues.append(f"{label} is missing required prepaid employee-code key {field}.")
+            elif not matching_tl_records(emp_code=value):
+                issues.append(f"{label} prepaid employee-code key {field}={value!r} is not in the Employee Directory.")
+            else:
+                prepaid_codes.append(value)
+
+        if postpaid_names and prepaid_codes:
+            matches_both = [
+                record for record in team_leaders_in_directory
+                if all(text(record.get("name")) == text(value) for value in postpaid_names)
+                and all(code(record.get("emp_code")) == code(value) for value in prepaid_codes)
+            ]
+            if not matches_both:
+                issues.append(f"{label} postpaid TL-name and prepaid employee-code keys do not identify the same Directory Team Leader.")
 
     for row in acsos:
         center = row.get("center_name")
