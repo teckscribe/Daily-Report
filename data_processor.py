@@ -42,6 +42,15 @@ def _casefold_eq(series: pd.Series, value: str) -> pd.Series:
     return series.astype(str).str.strip().str.casefold() == value.casefold()
 
 
+def ensure_region_directory_ready(region_id: str) -> None:
+    """Fail before rendering if report layout and Employee Directory disagree."""
+    issues = db_manager.validate_region_report_directory(region_id)
+    if issues:
+        raise ValueError(
+            "Employee Directory / report mapping validation failed:\n- " + "\n- ".join(issues[:20])
+        )
+
+
 def _find_column(df: pd.DataFrame, *names: str) -> Optional[str]:
     """Find a portal column despite harmless header case/space differences."""
     wanted = {name.strip().casefold() for name in names}
@@ -164,6 +173,7 @@ def filter_prepaid(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFra
 def compute_report_result(df_adl: pd.DataFrame, df_adtv: pd.DataFrame, df_prepaid: pd.DataFrame,
                           region_id: str = DEFAULT_REGION_ID, strict: bool = True) -> ReportResult:
     """Validate inputs, then compute all three report sheets exactly like the Excel workbook."""
+    ensure_region_directory_ready(region_id)
     warnings = validate_inputs(df_adl, df_adtv, df_prepaid)
     for w in warnings:
         print(f"  [!] DATA WARNING {w}")

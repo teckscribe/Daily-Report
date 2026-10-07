@@ -944,6 +944,9 @@ def execute_automated_sr_cycle(region_id: str = DEFAULT_REGION_ID) -> Dict[str, 
     print(f"[SR_CYCLE] Starting automated Service Request cycle for region '{region_id}'...")
 
     try:
+        from data_processor import ensure_region_directory_ready
+        ensure_region_directory_ready(region_id)
+
         # 1. Pull exact current SR source data before any automatic dispatch.
         from crm_downloader import download_service_requests_from_crm
         download_service_requests_from_crm(region=region_id, headless=True)

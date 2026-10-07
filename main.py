@@ -32,6 +32,7 @@ from data_processor import (
     filter_adtv,
     filter_prepaid,
     compute_all_sections,
+    ensure_region_directory_ready,
     update_excel_file,
 )
 from report_image_generator import generate_report_images, generate_acso_report_images
@@ -44,6 +45,7 @@ def execute_cycle(download_online: bool = True, send_whatsapp: bool = True, regi
     print("=" * 60)
     print(f"[START] EXECUTING DAILY COMPLAINT REPORT CYCLE: {now.strftime('%d-%b-%Y %I:%M:%S %p')}")
     print("=" * 60)
+    ensure_region_directory_ready(region_id)
 
     # 1. Download or retrieve raw complaint files
     if download_online:

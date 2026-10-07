@@ -26,6 +26,7 @@ from data_processor import (
     filter_adl,
     filter_adtv,
     filter_prepaid,
+    ensure_region_directory_ready,
     write_working_copy,
 )
 from report_engine import compute_report, validate_inputs
@@ -34,6 +35,7 @@ from whatsapp_sender import flash_report_image
 
 def run():
     print("=" * 65)
+    ensure_region_directory_ready(DEFAULT_REGION_ID)
     print(f"[CYCLE START] Running at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 65)
 

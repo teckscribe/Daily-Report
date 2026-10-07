@@ -51,7 +51,13 @@ import db_manager
 from report_engine import compute_report, load_inputs_from_workbook
 from report_image_generator import generate_report_images, generate_acso_report_images
 from whatsapp_sender import flash_report_image
-from data_processor import filter_adl, filter_adtv, filter_prepaid, write_working_copy
+from data_processor import (
+    ensure_region_directory_ready,
+    filter_adl,
+    filter_adtv,
+    filter_prepaid,
+    write_working_copy,
+)
 from crm_downloader import download_from_crm, download_service_requests_from_crm
 import whatsapp_auth_manager
 import logger_setup
@@ -867,6 +873,7 @@ def generate_reports(region_id: str, report_type: Optional[str] = "complaint"):
     try:
         r_type = (report_type or "complaint").lower().strip()
         rendered_images = []
+        ensure_region_directory_ready(region_id)
 
         # 1. Render Complaints if requested
         if r_type in ("all", "suite_all", "complaint", "complaints"):
@@ -973,6 +980,7 @@ def dispatch_whatsapp(region_id: str, report_type: Optional[str] = "complaint"):
             imgs = get_images_for_report_type(rule_type, region_id)
             missing = [img for img in imgs if not img.exists()]
             if missing:
+                ensure_region_directory_ready(region_id)
                 if is_sr_type(rule_type):
                     download_service_requests_from_crm(region=region_id, headless=True)
                     sr_sec = compute_service_request_reports(region_id=region_id)
@@ -1013,6 +1021,7 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
     r_type = (payload.report_type or "all").lower().strip()
 
     try:
+        ensure_region_directory_ready(region_id)
         # 1. Service Request only dispatch
         if is_sr_report_type(r_type):
             download_service_requests_from_crm(region=region_id, headless=True)
@@ -1122,6 +1131,7 @@ def execute_automated_cycle(region_id: str = DEFAULT_REGION_ID) -> Dict[str, Any
     """Pulls fresh tickets from CRM, computes report, renders images, and dispatches per rules."""
     ts_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
+        ensure_region_directory_ready(region_id)
         adl_path, adtv_path, prep_path = download_from_crm(region=region_id, headless=True, allow_stale=False)
         raw_adl = pd.read_excel(adl_path)
         raw_adtv = pd.read_excel(adtv_path)
@@ -1240,6 +1250,7 @@ def trigger_dispatch_rule_endpoint(rule_id: int):
     imgs = get_images_for_report_type(r_type, rule["region_id"])
     missing = [i for i in imgs if not i.exists()]
     if missing:
+        ensure_region_directory_ready(rule["region_id"])
         if is_sr_report_type(r_type):
             download_service_requests_from_crm(region=rule["region_id"], headless=True)
             sr_sec = compute_service_request_reports(region_id=rule["region_id"])
@@ -1412,6 +1423,7 @@ def download_service_request_excel_endpoint(region_id: Optional[str] = None):
     target_region = region_id or DEFAULT_REGION_ID
     report_path = sr_output_path(SR_EXCEL_REPORT_PATH.name, target_region)
     try:
+        ensure_region_directory_ready(target_region)
         download_service_requests_from_crm(region=target_region, headless=True)
         sections = compute_service_request_reports(region_id=target_region)
         create_sr_excel_output(sections, region_id=target_region)
@@ -1431,6 +1443,7 @@ async def upload_complaints_raw_endpoint(file: UploadFile = File(...)):
     if not file.filename.lower().endswith((".xls", ".xlsx")):
         raise HTTPException(status_code=400, detail="Only Excel (.xls, .xlsx) files are supported.")
     try:
+        ensure_region_directory_ready(DEFAULT_REGION_ID)
         content = await file.read()
         target_file = DATA_DIR / "Daily Complint Tracker.xls"
         target_file.write_bytes(content)
@@ -1466,14 +1479,16 @@ async def upload_complaints_raw_endpoint(file: UploadFile = File(...)):
 async def upload_service_request_raw_endpoint(file: UploadFile = File(...), region_id: Optional[str] = None):
     """Uploads a fresh raw Excel file and re-computes the reports immediately."""
     try:
+        target_region = region_id or DEFAULT_REGION_ID
+        ensure_region_directory_ready(target_region)
         suffix = Path(file.filename).suffix or ".xls"
         target_file = DATA_DIR / f"Service Request - Raw Data{suffix}"
         content = await file.read()
         target_file.write_bytes(content)
 
-        sections = compute_service_request_reports(target_file, region_id=region_id or DEFAULT_REGION_ID)
-        create_sr_excel_output(sections, region_id=region_id or DEFAULT_REGION_ID)
-        render_sr_report_images(sections, region_id=region_id or DEFAULT_REGION_ID)
+        sections = compute_service_request_reports(target_file, region_id=target_region)
+        create_sr_excel_output(sections, region_id=target_region)
+        render_sr_report_images(sections, region_id=target_region)
 
         return {
             "status": "OK",
@@ -1494,6 +1509,7 @@ def send_service_request_to_phone_endpoint(payload: GenerateAndSendPayload, regi
 
     try:
         target_region = region_id or DEFAULT_REGION_ID
+        ensure_region_directory_ready(target_region)
         download_service_requests_from_crm(region=target_region, headless=True)
         sections = compute_service_request_reports(region_id=target_region)
         create_sr_excel_output(sections, region_id=target_region)

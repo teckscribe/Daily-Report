@@ -564,6 +564,69 @@ def get_employees(region_id: str) -> List[Dict[str, Any]]:
     return rows
 
 
+def validate_region_report_directory(region_id: str) -> List[str]:
+    """Return actionable layout issues before a region report is generated.
+
+    The Employee Directory is the personnel source of truth.  Report layout
+    rows may contain CRM-specific names/codes, but each Team Leader and ACSO
+    must still be represented by the same person and center in that directory.
+    """
+    def text(value: Any) -> str:
+        return str(value or "").strip().casefold()
+
+    def code(value: Any) -> str:
+        value = str(value or "").strip()
+        return value[:-2] if value.endswith(".0") and value[:-2].isdigit() else value
+
+    issues: List[str] = []
+    centers = get_centers(region_id)
+    team_leaders = get_team_leaders(region_id)
+    acsos = get_acsos(region_id)
+    employees = get_employees(region_id)
+    center_names = {text(row.get("center_name")) for row in centers if text(row.get("center_name"))}
+
+    if not centers:
+        return [f"[{region_id}] No centers are configured in the Employee Directory."]
+    if not employees:
+        return [f"[{region_id}] Employee Directory is empty. Import the regional directory before generating reports."]
+
+    def directory_match(role_fragment: str, name: Any, center: Any, codes: tuple[Any, ...]) -> bool:
+        candidates = [
+            row for row in employees
+            if role_fragment in text(row.get("role"))
+            and text(row.get("name")) == text(name)
+            and text(row.get("center_name")) == text(center)
+        ]
+        wanted_codes = {code(value) for value in codes if code(value)}
+        return bool(candidates) and (
+            not wanted_codes or any(code(row.get("emp_code")) in wanted_codes for row in candidates)
+        )
+
+    for row in team_leaders:
+        name, center = row.get("name"), row.get("center_name")
+        label = f"Team Leader {name!r} at {center!r}"
+        if text(center) not in center_names:
+            issues.append(f"{label} references a center missing from the Center Directory.")
+        if not directory_match("team", name, center, (row.get("pp_adl_emp_code"), row.get("pp_adtv_emp_code"))):
+            issues.append(f"{label} does not match an Employee Directory Team Leader (name, center, or employee code).")
+        for field in ("pd_adl_name_key", "pd_adtv_name_key", "pp_adl_emp_code", "pp_adtv_emp_code"):
+            if not str(row.get(field) or "").strip():
+                issues.append(f"{label} is missing required report key {field}.")
+
+    for row in acsos:
+        name, center = row.get("acso_name"), row.get("center_name")
+        label = f"ACSO {name!r} at {center!r}"
+        if text(center) not in center_names:
+            issues.append(f"{label} references a center missing from the Center Directory.")
+        if not directory_match("acso", name, center, (row.get("emp_code"),)):
+            issues.append(f"{label} does not match an Employee Directory ACSO (name, center, or employee code).")
+        for field in ("pd_adl_center_key", "pd_adtv_center_key", "pp_adl_center_key", "pp_adtv_center_key"):
+            if not str(row.get(field) or "").strip():
+                issues.append(f"{label} is missing required report key {field}.")
+
+    return issues
+
+
 def add_employee(region_id: str, data: Dict[str, Any]) -> int:
     ensure_region_exists(region_id)
     conn = get_connection()
