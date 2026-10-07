@@ -214,7 +214,7 @@ WEB_API_TOKEN = os.getenv("WEB_API_TOKEN", "").strip()
 
 # --- Filter Criteria ---
 ADL_COMPLAINT_TYPE = "Network"
-ADL_PROBLEM_TYPES = ["network complaint", "onsite visit"]
+ADL_PROBLEM_TYPES = ["Network Complaints", "Onsite Visit"]
 ADTV_COMPLAINT_TYPE = "Network"
 PREPAID_COMPLAINT_TYPE = "Network"
 

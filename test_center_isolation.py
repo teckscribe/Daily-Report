@@ -40,6 +40,29 @@ class ComplaintCenterIsolationTests(unittest.TestCase):
         self.assertEqual(processor.filter_adtv(adtv, "thrissur")["SERVICEAMO"].tolist(), ["Manarkad"])
         self.assertEqual(processor.filter_prepaid(prepaid, "thrissur")["Area"].tolist(), ["Manarkad"])
 
+    @patch.object(processor.db_manager, "get_centers")
+    def test_complaint_filters_are_exact_with_portal_style_headers(self, get_centers):
+        get_centers.return_value = self.centers
+        adl = pd.DataFrame({
+            "Region": ["Thrissur"] * 3,
+            "Area": ["Manarkad"] * 3,
+            "ComplaintType": ["Network", "Network", "Billing"],
+            "ProblemType": ["Network Complaints", "Onsite Visit", "Network Complaint Extra"],
+        })
+        adtv = pd.DataFrame({
+            "Region": ["Thrissur", "Thrissur"],
+            "ServiceAMO": ["Manarkad", "Manarkad"],
+            "ComplaintType": ["Network", "Billing"],
+        })
+        prepaid = pd.DataFrame({
+            "Area": ["Manarkad", "Manarkad"],
+            "Complaint Type": ["Network", "Network Support"],
+        })
+
+        self.assertEqual(len(processor.filter_adl(adl, "thrissur")), 2)
+        self.assertEqual(len(processor.filter_adtv(adtv, "thrissur")), 1)
+        self.assertEqual(len(processor.filter_prepaid(prepaid, "thrissur")), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

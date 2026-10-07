@@ -42,6 +42,17 @@ def _casefold_eq(series: pd.Series, value: str) -> pd.Series:
     return series.astype(str).str.strip().str.casefold() == value.casefold()
 
 
+def _find_column(df: pd.DataFrame, *names: str) -> Optional[str]:
+    """Find a portal column despite harmless header case/space differences."""
+    wanted = {name.strip().casefold() for name in names}
+    return next((column for column in df.columns if str(column).strip().casefold() in wanted), None)
+
+
+def _casefold_in(series: pd.Series, values: List[str]) -> pd.Series:
+    allowed = {str(value).strip().casefold() for value in values}
+    return series.astype(str).str.strip().str.casefold().isin(allowed)
+
+
 def _filter_configured_centers(
     df: pd.DataFrame,
     region_id: Optional[str],
@@ -74,13 +85,15 @@ def filter_adl(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFrame:
         return df
     f = df.copy()
     target_reg = region or TARGET_REGION
-    if "REGION" in f.columns:
-        f = f[_casefold_eq(f["REGION"], target_reg)]
-    if "COMPLAINTTYPE" in f.columns:
-        f = f[_casefold_eq(f["COMPLAINTTYPE"], ADL_COMPLAINT_TYPE)]
-    if "PROBLEMTYPE" in f.columns:
-        pattern = "|".join(ADL_PROBLEM_TYPES)
-        f = f[f["PROBLEMTYPE"].astype(str).str.strip().str.casefold().str.contains(pattern, regex=True, na=False)]
+    region_col = _find_column(f, "REGION")
+    complaint_type_col = _find_column(f, "COMPLAINTTYPE", "Complaint Type")
+    problem_type_col = _find_column(f, "PROBLEMTYPE", "Problem Type")
+    if region_col:
+        f = f[_casefold_eq(f[region_col], target_reg)]
+    if complaint_type_col:
+        f = f[_casefold_eq(f[complaint_type_col], ADL_COMPLAINT_TYPE)]
+    if problem_type_col:
+        f = f[_casefold_in(f[problem_type_col], ADL_PROBLEM_TYPES)]
     return _filter_configured_centers(f, region, ("area", "center"), "adl_area_key")
 
 
@@ -89,10 +102,12 @@ def filter_adtv(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFrame:
         return df
     f = df.copy()
     target_reg = region or TARGET_REGION
-    if "REGION" in f.columns:
-        f = f[_casefold_eq(f["REGION"], target_reg)]
-    if "COMPLAINTTYPE" in f.columns:
-        f = f[_casefold_eq(f["COMPLAINTTYPE"], ADTV_COMPLAINT_TYPE)]
+    region_col = _find_column(f, "REGION")
+    complaint_type_col = _find_column(f, "COMPLAINTTYPE", "Complaint Type")
+    if region_col:
+        f = f[_casefold_eq(f[region_col], target_reg)]
+    if complaint_type_col:
+        f = f[_casefold_eq(f[complaint_type_col], ADTV_COMPLAINT_TYPE)]
     return _filter_configured_centers(f, region, ("serviceamo", "amo", "area"), "adtv_amo_key")
 
 
@@ -101,12 +116,12 @@ def filter_prepaid(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFra
         return df
     f = df.copy()
     target_reg = region or PREPAID_REGION
-    region_col = next((c for c in f.columns if str(c).lower() == "region"), None)
+    region_col = _find_column(f, "REGION")
     if region_col:
         f = f[_casefold_eq(f[region_col], target_reg)]
-    ct_col = next((c for c in f.columns if str(c).lower() in ("complaint type", "complainttype")), None)
+    ct_col = _find_column(f, "Complaint Type", "COMPLAINTTYPE")
     if ct_col:
-        f = f[f[ct_col].astype(str).str.strip().str.casefold().str.contains(PREPAID_COMPLAINT_TYPE.casefold(), na=False)]
+        f = f[_casefold_eq(f[ct_col], PREPAID_COMPLAINT_TYPE)]
     return _filter_configured_centers(f, region, ("area", "center", "serviceamo", "amo"), "prepaid_area_key")
 
 
