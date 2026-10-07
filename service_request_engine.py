@@ -64,6 +64,9 @@ SR_REPORT_TYPES = {
     "combined_sr",
 }
 
+SR_DISPLAY_SERVICE_TYPES = {"Shifting", "Cable Rerouting", "Reconnection"}
+PREPAID_SR_COMPLAINT_TYPE = "service request"
+
 
 def is_sr_report_type(report_type: Optional[str]) -> bool:
     """Returns True if the given report type string is any variant of Service Request reports."""
@@ -117,6 +120,35 @@ def normalize_service(value: Any) -> str:
     return service_map.get(value_str.casefold(), value_str)
 
 
+def filter_prepaid_service_request_source(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only the two operations-approved Prepaid SR complaint values.
+
+    The SMS portal export is region-scoped but can contain every complaint
+    category.  This function is deliberately applied both before saving the
+    private raw workbook and before report calculation.
+    """
+    if df.empty:
+        return df.copy()
+
+    def column_for(*names: str) -> Optional[str]:
+        wanted = {name.casefold() for name in names}
+        return next((col for col in df.columns if str(col).strip().casefold() in wanted), None)
+
+    complaint_type_col = column_for("Complaint Type", "ComplaintType")
+    complaint_col = column_for("Complaint")
+    if not complaint_type_col or not complaint_col:
+        raise ValueError(
+            "Prepaid Service Request export is missing Complaint Type or Complaint columns; "
+            "cannot verify the required SR filter."
+        )
+
+    filtered = df[
+        df[complaint_type_col].astype(str).str.strip().str.casefold() == PREPAID_SR_COMPLAINT_TYPE
+    ].copy()
+    normalised_service = filtered[complaint_col].apply(normalize_service)
+    return filtered[normalised_service.isin(SR_DISPLAY_SERVICE_TYPES)].copy()
+
+
 def is_excluded_service(value: Any) -> bool:
     """
     Returns True if the ticket should be excluded from report generation.
@@ -158,7 +190,7 @@ def prepare_source(
     data = data[~data["Service Request Type"].apply(is_excluded_service)]
     # Never allow unrelated portal records into the SR report, even if a
     # source export is broader than its intended filters.
-    data = data[data["Service Request Type"].isin({"Shifting", "Cable Rerouting", "Reconnection"})].copy()
+    data = data[data["Service Request Type"].isin(SR_DISPLAY_SERVICE_TYPES)].copy()
 
     if center_case == "title":
         data["CENTER"] = data["CENTER"].str.title()
@@ -367,19 +399,7 @@ def compute_service_request_reports(
 
     # Process Prepaid (Handle TAT or calculate from Created On)
     if not prepaid_df.empty:
-        # SMS exports can include non-SR records. Restrict to the exact
-        # Service Request complaint head before mapping its two SR labels.
-        complaint_type_col = next(
-            (c for c in prepaid_df.columns if str(c).strip().casefold() in ("complaint type", "complainttype")),
-            None,
-        )
-        if complaint_type_col:
-            prepaid_df = prepaid_df[
-                prepaid_df[complaint_type_col].astype(str).str.strip().str.casefold() == "service request"
-            ].copy()
-        for c_col in ["Complaint", "COMPLAINT"]:
-            if c_col in prepaid_df.columns:
-                prepaid_df = prepaid_df[~prepaid_df[c_col].apply(is_excluded_service)].copy()
+        prepaid_df = filter_prepaid_service_request_source(prepaid_df)
 
         prep_days_col = "DaysCalc"
         if "TAT" in prepaid_df.columns:

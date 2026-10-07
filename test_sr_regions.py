@@ -51,6 +51,7 @@ class ServiceRequestRegionTests(unittest.TestCase):
         })
         tv = adl.rename(columns={"AREA": "SERVICEAMO", "PROBLEMSUBTYPE": "PROBLEMTYPE"})
         prepaid = adl.rename(columns={"AREA": "Area", "PROBLEMSUBTYPE": "Complaint", "DAYSELAPSED": "TAT"})
+        prepaid["Complaint Type"] = "Service Request"
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "source.xlsx"
             for missing in (False, True):
@@ -127,6 +128,22 @@ class ServiceRequestRegionTests(unittest.TestCase):
         adtv_labels = set(sections["ADTv Service Request Pending"]["Service Request Type"])
         self.assertEqual(adl_labels, {"Shifting", "Cable Rerouting", "Reconnection"})
         self.assertEqual(adtv_labels, {"Shifting", "Cable Rerouting", "Reconnection"})
+
+    def test_prepaid_raw_filter_keeps_only_approved_sr_values(self):
+        raw_prepaid = pd.DataFrame({
+            "Complaint Type": ["Service Request", "Service Request", "Service Request", "Network"],
+            "Complaint": [
+                "Transfer to a New location",
+                "Cable Rerouting Required",
+                "Some Other Service Request",
+                "Cable Rerouting Required",
+            ],
+        })
+        filtered = self.sr.filter_prepaid_service_request_source(raw_prepaid)
+        self.assertEqual(
+            filtered["Complaint"].tolist(),
+            ["Transfer to a New location", "Cable Rerouting Required"],
+        )
 
     def test_service_request_centers_sort_case_insensitively(self):
         source = pd.DataFrame({

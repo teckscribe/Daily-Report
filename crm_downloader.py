@@ -473,7 +473,12 @@ def download_service_requests_from_crm(
     except Exception as exc:
         raise RuntimeError(f"Downloaded Service Request export could not be read: {exc}") from exc
 
-    from service_request_engine import sr_raw_path
+    from service_request_engine import filter_prepaid_service_request_source, sr_raw_path
+    try:
+        prepaid_df = filter_prepaid_service_request_source(prepaid_df)
+    except Exception as exc:
+        raise RuntimeError(f"Downloaded Prepaid Service Request export failed the required filter: {exc}") from exc
+
     output_path = sr_raw_path(region, ".xlsx")
     temporary_path = output_path.with_name(".Service Request - Raw Data.tmp.xlsx")
     try:
