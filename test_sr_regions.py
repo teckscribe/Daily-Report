@@ -120,6 +120,16 @@ class ServiceRequestRegionTests(unittest.TestCase):
         self.assertEqual(adl_labels, {"Shifting", "Cable Rerouting", "Reconnection"})
         self.assertEqual(adtv_labels, {"Shifting", "Cable Rerouting", "Reconnection"})
 
+    def test_service_request_centers_sort_case_insensitively(self):
+        source = pd.DataFrame({
+            "CENTER": ["Vaikom", "changancherry", "Kottayam"],
+            "Service Request Type": ["Shifting", "Cable Rerouting", "Reconnection"],
+            "Days": [1, 1, 1],
+            "Pending Bucket": ["1 day", "1 day", "1 day"],
+        })
+        report = self.sr.build_pending_report(source)
+        self.assertEqual(report["CENTER"].tolist(), ["changancherry", "Kottayam", "Vaikom"])
+
     def test_renderer_writes_only_selected_region(self):
         from PIL import Image
         browser = Mock()

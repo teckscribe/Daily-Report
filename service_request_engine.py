@@ -192,6 +192,7 @@ def build_pending_report(data: pd.DataFrame) -> pd.DataFrame:
     pivot = pivot.sort_values(
         by=["CENTER", "Service Request Type"],
         kind="stable",
+        key=lambda column: column.astype(str).str.strip().str.casefold(),
     ).reset_index(drop=True)
 
     return pivot

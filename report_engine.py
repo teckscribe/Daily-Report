@@ -169,6 +169,14 @@ def _add(a: ReportRow, b: ReportRow, center: str, name: str) -> ReportRow:
                      [x + y for x, y in zip(a.buckets, b.buckets)])
 
 
+def _alphabetical_rows(rows: List[ReportRow]) -> List[ReportRow]:
+    """Display all report centers A-Z, with staff names as a stable tie-breaker."""
+    return sorted(
+        rows,
+        key=lambda row: (str(row.center).strip().casefold(), str(row.name).strip().casefold()),
+    )
+
+
 # ---------------------------------------------------------------------------
 # 4. Sheet 'Pending Days'  (postpaid)
 # ---------------------------------------------------------------------------
@@ -279,7 +287,7 @@ def compute_report(
             center = lay.adtv_center if is_tv else lay.adl_center
             name = lay.adtv_name if is_tv else lay.adl_name
             rows.append(_add(a, b, center, name))
-        final[key] = Table(title, rows)
+        final[key] = Table(title, _alphabetical_rows(rows))
 
     for key, title in (("adl_acso", "ADL Pending (ACSO)"), ("adtv_acso", "ADTv Pending (ACSO)")):
         is_tv = key.startswith("adtv")
@@ -289,7 +297,7 @@ def compute_report(
             name = lay.adtv_acso if is_tv else lay.adl_acso
             rows.append(_add(a, b, center, name))
         total = _add(pd_[key].total, pp[key].total, "Grand Total", "")
-        final[key] = Table(title, rows, total)
+        final[key] = Table(title, _alphabetical_rows(rows), total)
 
     return ReportResult(pending_days=pd_, prepaid_pending=pp, final=final)
 
