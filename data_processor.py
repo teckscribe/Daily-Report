@@ -30,6 +30,7 @@ from config import (
 )
 from report_engine import ReportResult, compute_report, validate_inputs
 from report_layout import BUCKET_LABELS
+import db_manager
 
 BUCKET_COLUMNS = BUCKET_LABELS
 REPORT_COLUMNS = ["CENTER", "Name", "Grand Total", *BUCKET_COLUMNS]
@@ -39,6 +40,33 @@ REPORT_COLUMNS = ["CENTER", "Name", "Grand Total", *BUCKET_COLUMNS]
 
 def _casefold_eq(series: pd.Series, value: str) -> pd.Series:
     return series.astype(str).str.strip().str.casefold() == value.casefold()
+
+
+def _filter_configured_centers(
+    df: pd.DataFrame,
+    region_id: Optional[str],
+    source_columns: tuple[str, ...],
+    center_key: str,
+) -> pd.DataFrame:
+    """Keep only exact center keys belonging to the selected region when available."""
+    if df.empty or not region_id:
+        return df
+    try:
+        center_rows = db_manager.get_centers(region_id)
+    except Exception:
+        return df
+    allowed_centers = {
+        str(row.get(center_key) or row.get("center_name") or "").strip().casefold()
+        for row in center_rows
+        if str(row.get(center_key) or row.get("center_name") or "").strip()
+    }
+    source_col = next(
+        (column for column in df.columns if str(column).strip().casefold() in source_columns),
+        None,
+    )
+    if not source_col or not allowed_centers:
+        return df
+    return df[df[source_col].astype(str).str.strip().str.casefold().isin(allowed_centers)].copy()
 
 
 def filter_adl(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFrame:
@@ -53,7 +81,7 @@ def filter_adl(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFrame:
     if "PROBLEMTYPE" in f.columns:
         pattern = "|".join(ADL_PROBLEM_TYPES)
         f = f[f["PROBLEMTYPE"].astype(str).str.strip().str.casefold().str.contains(pattern, regex=True, na=False)]
-    return f
+    return _filter_configured_centers(f, region, ("area", "center"), "adl_area_key")
 
 
 def filter_adtv(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFrame:
@@ -65,7 +93,7 @@ def filter_adtv(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFrame:
         f = f[_casefold_eq(f["REGION"], target_reg)]
     if "COMPLAINTTYPE" in f.columns:
         f = f[_casefold_eq(f["COMPLAINTTYPE"], ADTV_COMPLAINT_TYPE)]
-    return f
+    return _filter_configured_centers(f, region, ("serviceamo", "amo", "area"), "adtv_amo_key")
 
 
 def filter_prepaid(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFrame:
@@ -79,7 +107,7 @@ def filter_prepaid(df: pd.DataFrame, region: Optional[str] = None) -> pd.DataFra
     ct_col = next((c for c in f.columns if str(c).lower() in ("complaint type", "complainttype")), None)
     if ct_col:
         f = f[f[ct_col].astype(str).str.strip().str.casefold().str.contains(PREPAID_COMPLAINT_TYPE.casefold(), na=False)]
-    return f
+    return _filter_configured_centers(f, region, ("area", "center", "serviceamo", "amo"), "prepaid_area_key")
 
 
 # --- Report computation ---
