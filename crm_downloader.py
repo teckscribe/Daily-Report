@@ -3,11 +3,13 @@ import sys
 import re
 import time
 import urllib.parse
+from io import BytesIO
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
 import requests
 import urllib3
+import pandas as pd
 from playwright.sync_api import sync_playwright
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -21,6 +23,8 @@ from config import (
     ADTV_EXPORT_QUERY,
     get_adl_export_query,
     get_adtv_export_query,
+    get_adl_service_request_export_query,
+    get_adtv_service_request_export_query,
     PREPAID_PORTAL_URL,
     PREPAID_REPORT_URL,
     PREPAID_EXPORT_URL,
@@ -103,7 +107,12 @@ def get_latest_local_downloads() -> Tuple[Optional[Path], Optional[Path], Option
 last_crm_error: Optional[str] = None
 
 
-def download_via_http_session(region: str = TARGET_REGION) -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
+def download_via_http_session(
+    region: str = TARGET_REGION,
+    adl_query: Optional[str] = None,
+    adtv_query: Optional[str] = None,
+    output_names: Optional[Tuple[str, str, str]] = None,
+) -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
     """
     Direct, ultra-fast headless HTTP session downloader for Softcode and Prepaid portals.
     Executes in 2-3 seconds without browser overhead or profile lock issues.
@@ -115,6 +124,13 @@ def download_via_http_session(region: str = TARGET_REGION) -> Tuple[Optional[Pat
     adtv_path = None
     prep_path = None
     ts = datetime.now().strftime("%Y-%m-%dT%H%M%S")
+    adl_query = adl_query or get_adl_export_query(region)
+    adtv_query = adtv_query or get_adtv_export_query(region)
+    adl_name, adtv_name, prep_name = output_names or (
+        f"Pending Tickets - {ts}.xlsx",
+        f"Pending Tickets DTv - {ts}.xlsx",
+        f"Pending_tickets_Report - {ts}.csv",
+    )
 
     # 1. Softcode / CRMS Download
     if SOFTCODE_USER and SOFTCODE_PWD:
@@ -159,11 +175,11 @@ def download_via_http_session(region: str = TARGET_REGION) -> Tuple[Optional[Pat
                 adl_url = "https://portal.asianet.co.in/crms/getReportData"
                 params_adl = {
                     "RptCode": "RFCRM014",
-                    "dataSql": get_adl_export_query(region),
+                    "dataSql": adl_query,
                 }
                 res_adl = s.get(adl_url, params=params_adl, timeout=60)
                 if res_adl.status_code == 200 and len(res_adl.content) > 1000:
-                    adl_path = DATA_DIR / f"Pending Tickets - {ts}.xlsx"
+                    adl_path = DATA_DIR / adl_name
                     adl_path.write_bytes(res_adl.content)
                     print(f"  [+] Saved ADL to: {adl_path.name} ({len(res_adl.content):,} bytes)")
                 else:
@@ -174,11 +190,11 @@ def download_via_http_session(region: str = TARGET_REGION) -> Tuple[Optional[Pat
                 print(f"[CRM Downloader] Downloading ADTv Digital TV Pending Tickets (RFCRM015) for region '{region}'...")
                 params_adtv = {
                     "RptCode": "RFCRM015",
-                    "dataSql": get_adtv_export_query(region),
+                    "dataSql": adtv_query,
                 }
                 res_adtv = s.get(adl_url, params=params_adtv, timeout=60)
                 if res_adtv.status_code == 200 and len(res_adtv.content) > 1000:
-                    adtv_path = DATA_DIR / f"Pending Tickets DTv - {ts}.xlsx"
+                    adtv_path = DATA_DIR / adtv_name
                     adtv_path.write_bytes(res_adtv.content)
                     print(f"  [+] Saved ADTv to: {adtv_path.name} ({len(res_adtv.content):,} bytes)")
                 else:
@@ -228,7 +244,7 @@ def download_via_http_session(region: str = TARGET_REGION) -> Tuple[Optional[Pat
                 print("[CRM Downloader] Prepaid portal authenticated successfully! Downloading pending tickets...")
                 res_export = s_prep.get(PREPAID_EXPORT_URL, timeout=60)
                 if res_export.status_code == 200 and len(res_export.content) > 100:
-                    prep_path = DATA_DIR / f"Pending_tickets_Report - {ts}.csv"
+                    prep_path = DATA_DIR / prep_name
                     prep_path.write_bytes(res_export.content)
                     print(f"  [+] Saved Prepaid to: {prep_path.name} ({len(res_export.content):,} bytes)")
                 else:
@@ -244,7 +260,13 @@ def download_via_http_session(region: str = TARGET_REGION) -> Tuple[Optional[Pat
     return adl_path, adtv_path, prep_path
 
 
-def download_via_playwright(headless: bool = False, region: str = TARGET_REGION) -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
+def download_via_playwright(
+    headless: bool = False,
+    region: str = TARGET_REGION,
+    adl_query: Optional[str] = None,
+    adtv_query: Optional[str] = None,
+    output_names: Optional[Tuple[str, str, str]] = None,
+) -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
     """
     Playwright browser automation fallback.
     Launches browser, fills login fields, clicks elements, and captures file chooser downloads.
@@ -254,6 +276,13 @@ def download_via_playwright(headless: bool = False, region: str = TARGET_REGION)
     adtv_path = None
     prep_path = None
     ts = datetime.now().strftime("%Y-%m-%dT%H%M%S")
+    adl_query = adl_query or get_adl_export_query(region)
+    adtv_query = adtv_query or get_adtv_export_query(region)
+    adl_name, adtv_name, prep_name = output_names or (
+        f"Pending Tickets - {ts}.xlsx",
+        f"Pending Tickets DTv - {ts}.xlsx",
+        f"Pending_tickets_Report - {ts}.csv",
+    )
 
     try:
         with sync_playwright() as p:
@@ -306,13 +335,13 @@ def download_via_playwright(headless: bool = False, region: str = TARGET_REGION)
                 # Download ADL
                 try:
                     print(f"[CRM Downloader] Fetching ADL report via datatable for '{region}'...")
-                    sql_adl = get_adl_export_query(region)
+                    sql_adl = adl_query
                     encoded_sql_adl = urllib.parse.quote(sql_adl)
                     direct_adl_url = f"https://portal.asianet.co.in/crms/getReportData?RptCode=RFCRM014&dataSql={encoded_sql_adl}"
                     with page.expect_download(timeout=45000) as download_info:
                         page.goto(direct_adl_url)
                     download = download_info.value
-                    adl_path = DATA_DIR / f"Pending Tickets - {ts}.xlsx"
+                    adl_path = DATA_DIR / adl_name
                     download.save_as(str(adl_path))
                     print(f"  [+] Saved ADL to: {adl_path.name}")
                 except Exception as e:
@@ -321,13 +350,13 @@ def download_via_playwright(headless: bool = False, region: str = TARGET_REGION)
                 # Download ADTv
                 try:
                     print(f"[CRM Downloader] Fetching ADTv report via datatable for '{region}'...")
-                    sql_adtv = get_adtv_export_query(region)
+                    sql_adtv = adtv_query
                     encoded_sql_adtv = urllib.parse.quote(sql_adtv)
                     direct_adtv_url = f"https://portal.asianet.co.in/crms/getReportData?RptCode=RFCRM015&dataSql={encoded_sql_adtv}"
                     with page.expect_download(timeout=45000) as download_info:
                         page.goto(direct_adtv_url)
                     download = download_info.value
-                    adtv_path = DATA_DIR / f"Pending Tickets DTv - {ts}.xlsx"
+                    adtv_path = DATA_DIR / adtv_name
                     download.save_as(str(adtv_path))
                     print(f"  [+] Saved ADTv to: {adtv_path.name}")
                 except Exception as e:
@@ -351,7 +380,7 @@ def download_via_playwright(headless: bool = False, region: str = TARGET_REGION)
                     with page.expect_download(timeout=45000) as download_info:
                         page.goto(PREPAID_EXPORT_URL)
                     download = download_info.value
-                    prep_path = DATA_DIR / f"Pending_tickets_Report - {ts}.csv"
+                    prep_path = DATA_DIR / prep_name
                     download.save_as(str(prep_path))
                     print(f"  [+] Saved Prepaid to: {prep_path.name}")
                 except Exception as e:
@@ -364,6 +393,100 @@ def download_via_playwright(headless: bool = False, region: str = TARGET_REGION)
         print(f"[CRM Downloader] Playwright automation error: {e_playwright}")
 
     return adl_path, adtv_path, prep_path
+
+
+def _read_prepaid_export(path: Path) -> pd.DataFrame:
+    """Read the SMS export whether its server labels it CSV or Excel."""
+    content = path.read_bytes()
+    try:
+        return pd.read_csv(BytesIO(content))
+    except (UnicodeDecodeError, pd.errors.ParserError):
+        return pd.read_excel(BytesIO(content))
+
+
+def download_service_requests_from_crm(
+    headless: bool = True,
+    region: str = TARGET_REGION,
+) -> Path:
+    """
+    Download the three current Service Request sources and save one private,
+    report-ready workbook. The portal queries intentionally use only the
+    operations-approved Service Request filters; Prepaid is further narrowed
+    during report preparation because its export endpoint has no filter API.
+    """
+    global last_crm_error
+    crm_region = region
+    try:
+        from db_manager import get_region_by_id
+        configured = get_region_by_id(region)
+        if configured:
+            crm_region = configured.get("softcode_region") or region
+    except Exception:
+        pass
+
+    if not ((SOFTCODE_USER and SOFTCODE_PWD) and (PREPAID_USER and PREPAID_PWD)):
+        raise RuntimeError(
+            "Automatic Service Request download requires SOFTCODE_USER/SOFTCODE_PWD "
+            "and PREPAID_USER/PREPAID_PWD in .env."
+        )
+
+    print("=" * 60)
+    print(f"[SR Downloader] Downloading fresh Service Requests for region: {crm_region}")
+    print("=" * 60)
+    source_names = (
+        "Service_Request_ADL_Source.xlsx",
+        "Service_Request_ADTv_Source.xlsx",
+        "Service_Request_Prepaid_Source.csv",
+    )
+    query_adl = get_adl_service_request_export_query(crm_region)
+    query_adtv = get_adtv_service_request_export_query(crm_region)
+    adl_path, adtv_path, prep_path = download_via_http_session(
+        region=crm_region,
+        adl_query=query_adl,
+        adtv_query=query_adtv,
+        output_names=source_names,
+    )
+
+    if not (adl_path and adtv_path and prep_path):
+        print("[SR Downloader] Direct download incomplete; trying browser fallback...")
+        b_adl, b_adtv, b_prep = download_via_playwright(
+            headless=headless,
+            region=crm_region,
+            adl_query=query_adl,
+            adtv_query=query_adtv,
+            output_names=source_names,
+        )
+        adl_path = adl_path or b_adl
+        adtv_path = adtv_path or b_adtv
+        prep_path = prep_path or b_prep
+
+    if not (adl_path and adtv_path and prep_path):
+        raise RuntimeError(
+            "Could not download all Service Request sources (ADL, ADTv, Prepaid). "
+            f"Portal error: {last_crm_error or 'one or more exports were unavailable'}."
+        )
+
+    try:
+        adl_df = pd.read_excel(adl_path)
+        adtv_df = pd.read_excel(adtv_path)
+        prepaid_df = _read_prepaid_export(prep_path)
+    except Exception as exc:
+        raise RuntimeError(f"Downloaded Service Request export could not be read: {exc}") from exc
+
+    output_path = DATA_DIR / "Service Request - Raw Data.xlsx"
+    temporary_path = DATA_DIR / ".Service Request - Raw Data.tmp.xlsx"
+    try:
+        with pd.ExcelWriter(temporary_path, engine="openpyxl") as writer:
+            adl_df.to_excel(writer, sheet_name="ADL Postpaid", index=False)
+            adtv_df.to_excel(writer, sheet_name="ADTv Postpaid", index=False)
+            prepaid_df.to_excel(writer, sheet_name="Prepaid", index=False)
+        temporary_path.replace(output_path)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+
+    print(f"[SR Downloader] Saved filtered Service Request workbook: {output_path}")
+    return output_path
 
 
 def download_from_crm(

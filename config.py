@@ -157,6 +157,45 @@ def get_adtv_export_query(region: str | None = None) -> str:
         "ORDER BY LOGINTIME DESC"
     )
 
+
+def get_adl_service_request_export_query(region: str | None = None) -> str:
+    """Return the ADL Service Request export defined by the operations team."""
+    clean_region = (region or TARGET_REGION).strip().replace("'", "''")
+    return (
+        " SELECT SubCode,NAME,'NA' AS Address, 'NA' AS MobileNo, TICKETNO, LOGINTIME,TicketStatus,subStatus, "
+        "followUpDate,followUpRemarks,modifiedBy as FollowUpBy,ComplaintType, ProblemType,ProblemSubType, "
+        "reason,ProblemDescription,problemRaisedBy,UserId,SourceOfComplaint, TicketType,OutageID,category,"
+        "WhyPendingDescription,probResolution, DescriptionByWhom, ReopenedRemarks, reopenedByWhom,NoofCalls,"
+        "FREQ_Complaints,FibreNode, Area,Center,Region, MAC,SecondMobileNo, PhoneNo, PackageName,DaysElapsed,"
+        "HoursElapsed, CallBackStatus,ASSOCIATEID, NewTicketSubCode, ClassDesc ,OutageStatus, Dues,status,"
+        "teamLeaderName, RegCode,ModemType,Technology_Type,allotEname,canvassedBy, Apprecom_Analysis, "
+        "canvassedByName,activatedOn,GPONSINO,[CRMS].[dbo].[New_AON_ADL_Table].[Age] as AON "
+        "FROM crms.dbo.Rpt_Pending_Tickets "
+        "LEFT join [CRMS].[dbo].[New_AON_ADL_Table] on [CRMS].[dbo].[New_AON_ADL_Table].BP_Code=SubCode "
+        f"where 1=1 and region in ( '{clean_region}' ) and complaintType in ( 'Network' ) "
+        "and problemType in ( 'Network - Service Request' ) "
+        "and problemSubType in ( 'Shifting Request', 'Cable Rerouting Required', 'Reconnection - Cabling to be done' ) "
+        "ORDER BY LOGINTIME DESC"
+    )
+
+
+def get_adtv_service_request_export_query(region: str | None = None) -> str:
+    """Return the ADTv Service Request export defined by the operations team."""
+    clean_region = (region or TARGET_REGION).strip().replace("'", "''")
+    return (
+        "  SELECT     Subcode,TICKETNO, CustomerNAME,'NA' as Address,SMSNo,TICKETNO,LOGINTIME,Ticketstatus,ComplaintType,  "
+        "problemType,problemSubType,ProblemRemarks,ProblemRaisedBy,WhyPendingDescription,descriptionByWhom,   "
+        "ReopenedRemarks,reopenedByWhom,FibreNode,ServiceAMO,Region,TicketType, DaysElapsed,HoursElapsed,NoOfCalls,   "
+        "MAC,AMCDueDt, 'NA' as MobileNo,'NA' as PhoneNo, teamLeaderName,SchemeName,CustomerAMO, AMOCHANGENAME,     "
+        "AMOCHANGEDATE,Dues, SubscriberStatus, FranchiseeCode,FranchiseeType,  CostDate as UpdatedDate,  "
+        "IRResPersonName as UpdatedName,CostNo,allotEname,Technology,modemType,[CRMS].[dbo].[New_AON_ACS_Table].[Age] as AON   "
+        "FROM  Rpt_DTV_Pending_Tickets  "
+        "LEFT  join [CRMS].[dbo].[New_AON_ACS_Table] on [CRMS].[dbo].[New_AON_ACS_Table].BP_Code=SubCode  "
+        f"where 1=1 and region = '{clean_region}' and complaintType in ( 'Network service request' ) "
+        "and problemType in ( 'Reconnection req with field visit', 'Shift Newconnection', 'Cable Re-routing' ) "
+        "ORDER BY LOGINTIME DESC"
+    )
+
 # Direct SQL query used by Softcode CRMS export for this installation's region.
 ADL_EXPORT_QUERY = get_adl_export_query()
 ADTV_EXPORT_QUERY = get_adtv_export_query()

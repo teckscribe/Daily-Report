@@ -80,6 +80,46 @@ class ServiceRequestRegionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "no REGION column"):
                 self.sr.compute_service_request_reports(source, "kottayam")
 
+    def test_shared_service_names_and_prepaid_service_request_filter(self):
+        adl = pd.DataFrame({
+            "REGION": ["Kottayam"] * 3,
+            "AREA": ["Kottayam"] * 3,
+            "PROBLEMSUBTYPE": [
+                "Shifting Request",
+                "Cable Rerouting Required",
+                "Reconnection - Cabling to be done",
+            ],
+            "DAYSELAPSED": [1, 2, 3],
+        })
+        tv = pd.DataFrame({
+            "REGION": ["Kottayam"] * 3,
+            "SERVICEAMO": ["Kottayam"] * 3,
+            "PROBLEMTYPE": [
+                "Shift Newconnection",
+                "Cable Re-routing",
+                "Reconnection req with field visit",
+            ],
+            "DAYSELAPSED": [1, 2, 3],
+        })
+        prepaid = pd.DataFrame({
+            "REGION": ["Kottayam"] * 3,
+            "Area": ["Kottayam"] * 3,
+            "Complaint Type": ["Service Request", "Service Request", "Network"],
+            "Complaint": ["Transfer to a New location", "Cable Rerouting Required", "Transfer to a New location"],
+            "TAT": [1, 2, 3],
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.xlsx"
+            with pd.ExcelWriter(source) as writer:
+                adl.to_excel(writer, sheet_name="ADL", index=False)
+                tv.to_excel(writer, sheet_name="ADTv", index=False)
+                prepaid.to_excel(writer, sheet_name="Prepaid", index=False)
+            sections = self.sr.compute_service_request_reports(source, "kottayam")
+        adl_labels = set(sections["ADL Service Request Pending"]["Service Request Type"])
+        adtv_labels = set(sections["ADTv Service Request Pending"]["Service Request Type"])
+        self.assertEqual(adl_labels, {"Shifting", "Cable Rerouting", "Reconnection"})
+        self.assertEqual(adtv_labels, {"Shifting", "Cable Rerouting", "Reconnection"})
+
     def test_renderer_writes_only_selected_region(self):
         from PIL import Image
         browser = Mock()

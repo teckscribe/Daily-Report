@@ -52,7 +52,7 @@ from report_engine import compute_report, load_inputs_from_workbook
 from report_image_generator import generate_report_images, generate_acso_report_images
 from whatsapp_sender import flash_report_image
 from data_processor import filter_adl, filter_adtv, filter_prepaid, write_working_copy
-from crm_downloader import download_from_crm
+from crm_downloader import download_from_crm, download_service_requests_from_crm
 import whatsapp_auth_manager
 import logger_setup
 from service_request_engine import (
@@ -914,6 +914,7 @@ def generate_reports(region_id: str, report_type: Optional[str] = "complaint"):
 
         # 2. Render Service Requests if requested
         if r_type in ("all", "suite_all", "sr", "service_request", "sr_all"):
+            download_service_requests_from_crm(region=region_id, headless=True)
             sr_sec = compute_service_request_reports(region_id=region_id)
             render_sr_report_images(sr_sec, region_id=region_id)
             rendered_images.extend([
@@ -973,6 +974,7 @@ def dispatch_whatsapp(region_id: str, report_type: Optional[str] = "complaint"):
             missing = [img for img in imgs if not img.exists()]
             if missing:
                 if is_sr_type(rule_type):
+                    download_service_requests_from_crm(region=region_id, headless=True)
                     sr_sec = compute_service_request_reports(region_id=region_id)
                     render_sr_report_images(sr_sec, region_id=region_id)
                 else:
@@ -1013,6 +1015,7 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
     try:
         # 1. Service Request only dispatch
         if is_sr_report_type(r_type):
+            download_service_requests_from_crm(region=region_id, headless=True)
             sr_sec = compute_service_request_reports(region_id=region_id)
             render_sr_report_images(sr_sec, region_id=region_id)
             imgs = get_images_for_report_type(r_type, region_id)
@@ -1056,6 +1059,7 @@ def generate_and_send_now(region_id: str, payload: GenerateAndSendPayload):
         # 6. If suite_all, generate SR cards as well
         if r_type in ("suite_all", "everything"):
             try:
+                download_service_requests_from_crm(region=region_id, headless=True)
                 sr_sec = compute_service_request_reports(region_id=region_id)
                 render_sr_report_images(sr_sec, region_id=region_id)
             except Exception as e_sr:
@@ -1237,6 +1241,7 @@ def trigger_dispatch_rule_endpoint(rule_id: int):
     missing = [i for i in imgs if not i.exists()]
     if missing:
         if is_sr_report_type(r_type):
+            download_service_requests_from_crm(region=rule["region_id"], headless=True)
             sr_sec = compute_service_request_reports(region_id=rule["region_id"])
             render_sr_report_images(sr_sec, region_id=rule["region_id"])
         else:
@@ -1255,6 +1260,7 @@ def trigger_dispatch_rule_endpoint(rule_id: int):
             generate_acso_report_images(df_sections)
             if r_type in ("suite_all", "everything"):
                 try:
+                    download_service_requests_from_crm(region=rule["region_id"], headless=True)
                     sr_sec = compute_service_request_reports(region_id=rule["region_id"])
                     render_sr_report_images(sr_sec, region_id=rule["region_id"])
                 except Exception as e_sr:
@@ -1406,6 +1412,7 @@ def download_service_request_excel_endpoint(region_id: Optional[str] = None):
     target_region = region_id or DEFAULT_REGION_ID
     report_path = sr_output_path(SR_EXCEL_REPORT_PATH.name, target_region)
     try:
+        download_service_requests_from_crm(region=target_region, headless=True)
         sections = compute_service_request_reports(region_id=target_region)
         create_sr_excel_output(sections, region_id=target_region)
     except Exception as e:
@@ -1486,19 +1493,21 @@ def send_service_request_to_phone_endpoint(payload: GenerateAndSendPayload, regi
         raise HTTPException(status_code=400, detail="Target recipient cannot be empty.")
 
     try:
-        sections = compute_service_request_reports(region_id=region_id or DEFAULT_REGION_ID)
-        create_sr_excel_output(sections, region_id=region_id or DEFAULT_REGION_ID)
-        render_sr_report_images(sections, region_id=region_id or DEFAULT_REGION_ID)
+        target_region = region_id or DEFAULT_REGION_ID
+        download_service_requests_from_crm(region=target_region, headless=True)
+        sections = compute_service_request_reports(region_id=target_region)
+        create_sr_excel_output(sections, region_id=target_region)
+        render_sr_report_images(sections, region_id=target_region)
 
         r_type = (payload.report_type or "all").lower().strip()
         if r_type in ("adl_sr", "adl"):
-            to_send = [sr_output_path(ADL_SR_REPORT_IMAGE_PATH.name, region_id or DEFAULT_REGION_ID)]
+            to_send = [sr_output_path(ADL_SR_REPORT_IMAGE_PATH.name, target_region)]
         elif r_type in ("adtv_sr", "adtv"):
-            to_send = [sr_output_path(ADTV_SR_REPORT_IMAGE_PATH.name, region_id or DEFAULT_REGION_ID)]
+            to_send = [sr_output_path(ADTV_SR_REPORT_IMAGE_PATH.name, target_region)]
         elif r_type in ("sr_combined", "sr_side_by_side", "combined_sr"):
-            to_send = [sr_output_path(SR_REPORT_IMAGE_PATH.name, region_id or DEFAULT_REGION_ID)]
+            to_send = [sr_output_path(SR_REPORT_IMAGE_PATH.name, target_region)]
         else:
-            to_send = [sr_output_path(p.name, region_id or DEFAULT_REGION_ID) for p in (ADL_SR_REPORT_IMAGE_PATH, ADTV_SR_REPORT_IMAGE_PATH)]
+            to_send = [sr_output_path(p.name, target_region) for p in (ADL_SR_REPORT_IMAGE_PATH, ADTV_SR_REPORT_IMAGE_PATH)]
 
         success = flash_report_image(to_send, target_recipients=[target])
         if success:

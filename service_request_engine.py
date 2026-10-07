@@ -105,16 +105,16 @@ def normalize_service(value: Any) -> str:
     """Standardizes disparate CRM complaint and problem text into uniform categories."""
     value_str = str(value).strip()
     service_map = {
-        "Cable Rerouting Required": "Cable Re-routing",
-        "Cable Rerouting": "Cable Re-routing",
-        "Cable Re-routing": "Cable Re-routing",
-        "Reconnection - Cabling to be done": "Reconnection",
-        "Reconnection req with field visit": "Reconnection",
-        "Shift Newconnection": "Shifting Request",
-        "Shifting Request": "Shifting Request",
-        "Transfer to a New location": "Shifting Request",
+        "cable rerouting required": "Cable Rerouting",
+        "cable rerouting": "Cable Rerouting",
+        "cable re-routing": "Cable Rerouting",
+        "reconnection - cabling to be done": "Reconnection",
+        "reconnection req with field visit": "Reconnection",
+        "shift newconnection": "Shifting",
+        "shifting request": "Shifting",
+        "transfer to a new location": "Shifting",
     }
-    return service_map.get(value_str, value_str)
+    return service_map.get(value_str.casefold(), value_str)
 
 
 def is_excluded_service(value: Any) -> bool:
@@ -156,6 +156,9 @@ def prepare_source(
 
     # Secondary check after normalization
     data = data[~data["Service Request Type"].apply(is_excluded_service)]
+    # Never allow unrelated portal records into the SR report, even if a
+    # source export is broader than its intended filters.
+    data = data[data["Service Request Type"].isin({"Shifting", "Cable Rerouting", "Reconnection"})].copy()
 
     if center_case == "title":
         data["CENTER"] = data["CENTER"].str.title()
@@ -205,9 +208,9 @@ def find_service_request_raw_file() -> Optional[Path]:
         BASE_DIR / "Service Request - Raw Data.xls",
         BASE_DIR / "Service Request - Raw Data.xlsx",
     ]
-    for p in search_locations:
-        if p.exists() and p.stat().st_size > 1000:
-            return p
+    exact_matches = [p for p in search_locations if p.exists() and p.stat().st_size > 1000]
+    if exact_matches:
+        return max(exact_matches, key=lambda f: f.stat().st_mtime)
 
     for search_dir in [DATA_DIR, DOWNLOADS_DIR, BASE_DIR]:
         matches = list(search_dir.glob("Service Request*.xls*"))
@@ -337,8 +340,17 @@ def compute_service_request_reports(
 
     # Process Prepaid (Handle TAT or calculate from Created On)
     if not prepaid_df.empty:
-        # Exclude 'STATIC IP Renewal' tickets under the service request head from https://sms.ali.asianetindia.com/
-        for c_col in ["Complaint", "COMPLAINT", "Complaint Type", "COMPLAINTTYPE"]:
+        # SMS exports can include non-SR records. Restrict to the exact
+        # Service Request complaint head before mapping its two SR labels.
+        complaint_type_col = next(
+            (c for c in prepaid_df.columns if str(c).strip().casefold() in ("complaint type", "complainttype")),
+            None,
+        )
+        if complaint_type_col:
+            prepaid_df = prepaid_df[
+                prepaid_df[complaint_type_col].astype(str).str.strip().str.casefold() == "service request"
+            ].copy()
+        for c_col in ["Complaint", "COMPLAINT"]:
             if c_col in prepaid_df.columns:
                 prepaid_df = prepaid_df[~prepaid_df[c_col].apply(is_excluded_service)].copy()
 
@@ -931,19 +943,23 @@ def execute_automated_sr_cycle(region_id: str = DEFAULT_REGION_ID) -> Dict[str, 
     print(f"[SR_CYCLE] Starting automated Service Request cycle for region '{region_id}'...")
 
     try:
-        # 1. Compute reports
+        # 1. Pull exact current SR source data before any automatic dispatch.
+        from crm_downloader import download_service_requests_from_crm
+        download_service_requests_from_crm(region=region_id, headless=True)
+
+        # 2. Compute reports
         sections = compute_service_request_reports(region_id=region_id)
 
-        # 2. Write Excel output
+        # 3. Write Excel output
         excel_path = create_excel_output(sections, region_id=region_id)
         print(f"[SR_CYCLE] Generated Service Request Excel workbook: {excel_path.name}")
 
-        # 3. Render High-DPI images
+        # 4. Render High-DPI images
         img_paths = render_sr_report_images(sections, region_id=region_id)
         ADL_SR_REPORT_IMAGE_PATH, ADTV_SR_REPORT_IMAGE_PATH, SR_REPORT_IMAGE_PATH = img_paths
         print(f"[SR_CYCLE] Generated {len(img_paths)} Service Request Retina cards")
 
-        # 4. WhatsApp Dispatch per configured rules
+        # 5. WhatsApp Dispatch per configured rules
         from whatsapp_sender import flash_report_image, normalize_recipient
 
         # Find rules matching any SR report type or entire suite
