@@ -291,14 +291,24 @@ def compute_service_request_reports(
         if frame.empty:
             return frame
         region_col = next((c for c in frame.columns if str(c).strip().casefold() == "region"), None)
+        source_center_col = next(
+            (c for c in frame.columns if str(c).strip().casefold() in center_columns),
+            None,
+        )
+        allowed_centers = _center_keys(configured_center_column)
         if region_col:
-            return frame[frame[region_col].astype(str).str.strip().str.casefold() == region_name.casefold()].copy()
+            filtered = frame[
+                frame[region_col].astype(str).str.strip().str.casefold() == region_name.casefold()
+            ].copy()
+            # Some portal exports can be labelled with the wrong region. When
+            # a known center column is present, the configured center mapping
+            # is the second required proof before a row is reported.
+            if source_center_col and allowed_centers:
+                return filtered[
+                    filtered[source_center_col].astype(str).str.strip().str.casefold().isin(allowed_centers)
+                ].copy()
+            return filtered
         if is_single_region_install:
-            source_center_col = next(
-                (c for c in frame.columns if str(c).strip().casefold() in center_columns),
-                None,
-            )
-            allowed_centers = _center_keys(configured_center_column)
             if not source_center_col or not allowed_centers:
                 raise ValueError(
                     f"Cannot verify source region {region_name!r}: this legacy Service Request "

@@ -35,7 +35,12 @@ class ServiceRequestRegionTests(unittest.TestCase):
             self.sr.sr_output_path("a.jpg", "../thrissur")
 
     def test_mixed_workbook_filters_all_sheets_and_allows_single_region_exports(self):
-        adl = pd.DataFrame({"REGION": ["Kottayam", "Thrissur"], "AREA": ["Kottayam", "Chalakudy"], "PROBLEMSUBTYPE": ["Shifting Request"] * 2, "DAYSELAPSED": [2, 2]})
+        adl = pd.DataFrame({
+            "REGION": ["Kottayam", "Kottayam", "Thrissur"],
+            "AREA": ["Kottayam", "Manarkadu", "Chalakudy"],
+            "PROBLEMSUBTYPE": ["Shifting Request"] * 3,
+            "DAYSELAPSED": [2, 2, 2],
+        })
         tv = adl.rename(columns={"AREA": "SERVICEAMO", "PROBLEMSUBTYPE": "PROBLEMTYPE"})
         prepaid = adl.rename(columns={"AREA": "Area", "PROBLEMSUBTYPE": "Complaint", "DAYSELAPSED": "TAT"})
         with tempfile.TemporaryDirectory() as directory:
@@ -50,11 +55,13 @@ class ServiceRequestRegionTests(unittest.TestCase):
                     for frame in sections.values():
                         self.assertIsInstance(frame, pd.DataFrame)
                         self.assertNotIn("Chalakudy", frame.to_string())
+                        self.assertNotIn("Manarkadu", frame.to_string())
                         self.assertIn("Kottayam", frame.to_string())
                 else:
                     sections = self.sr.compute_service_request_reports(source, "kottayam")
                     for frame in sections.values():
                         self.assertNotIn("Chalakudy", frame.to_string())
+                        self.assertNotIn("Manarkadu", frame.to_string())
                         self.assertIn("Kottayam", frame.to_string())
                     with patch.object(self.sr, "OUTPUT_DIR", Path(directory)):
                         excel = self.sr.create_excel_output(sections, region_id="kottayam")
