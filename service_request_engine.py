@@ -336,13 +336,29 @@ def compute_service_request_reports(
         == str(region_id).strip().casefold()
     )
     center_rows = db_manager.get_centers(region_id)
+    acso_rows = db_manager.get_acsos(region_id)
 
     def _center_keys(column: str) -> set[str]:
-        return {
+        center_keys = {
             str(row.get(column) or row.get("center_name") or "").strip().casefold()
             for row in center_rows
             if str(row.get(column) or row.get("center_name") or "").strip()
         }
+        # The report itself groups postpaid and prepaid tickets by the ACSO
+        # CRM keys.  Keep those source keys valid even when a friendly Center
+        # Directory label has not yet been updated to the portal's coded name.
+        acso_fields = {
+            "adl_area_key": ("pd_adl_center_key",),
+            "adtv_amo_key": ("pd_adtv_center_key",),
+            "prepaid_area_key": ("pp_adl_center_key", "pp_adtv_center_key"),
+        }
+        report_keys = {
+            str(row.get(field) or "").strip().casefold()
+            for row in acso_rows
+            for field in acso_fields.get(column, ())
+            if str(row.get(field) or "").strip()
+        }
+        return center_keys | report_keys
 
     def _filter_region(
         frame: pd.DataFrame,

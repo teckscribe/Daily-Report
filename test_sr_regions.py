@@ -25,6 +25,7 @@ class ServiceRequestRegionTests(unittest.TestCase):
             "adtv_amo_key": "Kottayam",
             "prepaid_area_key": "Kottayam",
         }])
+        db.get_acsos = Mock(return_value=[])
         self.db = db
         with patch.dict(sys.modules, {"db_manager": db}):
             spec.loader.exec_module(self.sr)
@@ -88,6 +89,31 @@ class ServiceRequestRegionTests(unittest.TestCase):
                 tv.to_excel(writer, sheet_name="ADTv", index=False)
             with self.assertRaisesRegex(ValueError, "no REGION column"):
                 self.sr.compute_service_request_reports(source, "kottayam")
+
+    def test_adtv_report_keeps_acso_crm_center_key(self):
+        self.db.get_acsos.return_value = [{
+            "pd_adtv_center_key": "KOTTAYAM (DA01)",
+        }]
+        adl = pd.DataFrame({
+            "REGION": ["Kottayam"], "AREA": ["Kottayam"],
+            "PROBLEMSUBTYPE": ["Shifting Request"], "DAYSELAPSED": [1],
+        })
+        adtv = pd.DataFrame({
+            "REGION": ["Kottayam"], "SERVICEAMO": ["KOTTAYAM (DA01)"],
+            "PROBLEMTYPE": ["Shift Newconnection"], "DAYSELAPSED": [1],
+        })
+        prepaid = pd.DataFrame({
+            "REGION": ["Kottayam"], "Area": ["Kottayam"],
+            "Complaint Type": ["Service Request"], "Complaint": ["Transfer to a New location"], "TAT": [1],
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.xlsx"
+            with pd.ExcelWriter(source) as writer:
+                adl.to_excel(writer, sheet_name="ADL", index=False)
+                adtv.to_excel(writer, sheet_name="ADTv", index=False)
+                prepaid.to_excel(writer, sheet_name="Prepaid", index=False)
+            sections = self.sr.compute_service_request_reports(source, "kottayam")
+        self.assertEqual(sections["ADTv Service Request Pending"]["Grand Total"].sum(), 1)
 
     def test_shared_service_names_and_prepaid_service_request_filter(self):
         adl = pd.DataFrame({
