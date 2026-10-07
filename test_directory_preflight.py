@@ -46,13 +46,13 @@ class DirectoryPreflightTests(unittest.TestCase):
     @patch.object(db_manager, "get_acsos")
     @patch.object(db_manager, "get_team_leaders")
     @patch.object(db_manager, "get_centers")
-    def test_missing_or_mismatched_staff_is_reported(self, get_centers, get_team_leaders, get_acsos, get_employees):
+    def test_prepaid_code_not_in_directory_is_reported(self, get_centers, get_team_leaders, get_acsos, get_employees):
         get_centers.return_value = [self.center]
-        get_team_leaders.return_value = [self.tl]
+        get_team_leaders.return_value = [{**self.tl, "pp_adl_emp_code": "9999", "pp_adtv_emp_code": "9999"}]
         get_acsos.return_value = [self.acso]
-        get_employees.return_value = [{"name": "Wrong Name", "role": "Team Leader", "center_name": "Kottayam", "emp_code": "1607"}]
+        get_employees.return_value = self.employees
         issues = db_manager.validate_region_report_directory("kottayam")
-        self.assertTrue(any("Jitto George" in issue for issue in issues))
+        self.assertTrue(any("employee-code key" in issue for issue in issues))
 
     @patch.object(db_manager, "get_employees")
     @patch.object(db_manager, "get_acsos")
@@ -94,34 +94,18 @@ class DirectoryPreflightTests(unittest.TestCase):
     @patch.object(db_manager, "get_acsos")
     @patch.object(db_manager, "get_team_leaders")
     @patch.object(db_manager, "get_centers")
-    def test_postpaid_name_and_prepaid_code_must_identify_same_tl(self, get_centers, get_team_leaders, get_acsos, get_employees):
-        get_centers.return_value = [self.center]
-        get_team_leaders.return_value = [self.tl]
-        get_acsos.return_value = [self.acso]
-        get_employees.return_value = [
-            *self.employees,
-            {"name": "Second TL", "role": "Team Leader", "center_name": "Kottayam", "emp_code": "9999"},
-        ]
-        get_team_leaders.return_value = [{**self.tl, "pp_adl_emp_code": "9999", "pp_adtv_emp_code": "9999"}]
-        issues = db_manager.validate_region_report_directory("kottayam")
-        self.assertTrue(any("do not identify the same" in issue for issue in issues))
-
-    @patch.object(db_manager, "get_employees")
-    @patch.object(db_manager, "get_acsos")
-    @patch.object(db_manager, "get_team_leaders")
-    @patch.object(db_manager, "get_centers")
-    def test_crm_name_formatting_does_not_create_false_mismatch(self, get_centers, get_team_leaders, get_acsos, get_employees):
+    def test_custom_display_name_does_not_replace_postpaid_crm_name(self, get_centers, get_team_leaders, get_acsos, get_employees):
         get_centers.return_value = [self.center]
         get_team_leaders.return_value = [{
             **self.tl,
-            "name": "Shyam Kumar",
-            "pd_adl_name_key": "SHYAMKUMAR",
-            "pd_adtv_name_key": "SHYAM KUMAR",
+            "name": "Custom Dashboard Name",
+            "pd_adl_name_key": "SINJO JOSEPH",
+            "pd_adtv_name_key": "SINJO JOSEPH",
         }]
         get_acsos.return_value = [self.acso]
-        get_employees.return_value = [
-            {"name": "Shyam Kumar", "role": "Team Leader", "center_name": "Kottayam", "emp_code": "1607"},
-        ]
+        get_employees.return_value = [{
+            "name": "Custom Dashboard Name", "role": "Team Leader", "center_name": "Kottayam", "emp_code": "1607",
+        }]
         self.assertEqual(db_manager.validate_region_report_directory("kottayam"), [])
 
 

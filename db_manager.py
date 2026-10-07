@@ -568,16 +568,13 @@ def validate_region_report_directory(region_id: str) -> List[str]:
     """Return actionable layout issues before a region report is generated.
 
     The Employee Directory is the source of truth only for the identifiers
-    used by each report: TL complaints use the TL name and employee code;
-    center-wise complaints and Service Requests use the center name.  CRM
-    lookup keys remain report-specific and are checked only for presence.
+    used by each report.  A TL's Postpaid CRM name is a separate lookup field
+    and may differ from their customised display name; its Prepaid employee
+    code must exist in the Employee Directory.  Center-wise complaints and
+    Service Requests use the center name.
     """
     def text(value: Any) -> str:
         return str(value or "").strip().casefold()
-
-    def person_name(value: Any) -> str:
-        """Compare CRM/personnel names despite harmless spacing or punctuation."""
-        return "".join(character for character in text(value) if character.isalnum())
 
     def code(value: Any) -> str:
         value = str(value or "").strip()
@@ -595,53 +592,31 @@ def validate_region_report_directory(region_id: str) -> List[str]:
     if team_leaders and not employees:
         return [f"[{region_id}] Employee Directory is empty. Import the regional directory before generating reports."]
 
-    team_leaders_in_directory = [row for row in employees if "team" in text(row.get("role"))]
-
-    def matching_tl_records(name: Any = None, emp_code: Any = None) -> List[Dict[str, Any]]:
-        return [
-            row for row in team_leaders_in_directory
-            if (name is None or person_name(row.get("name")) == person_name(name))
-            and (emp_code is None or code(row.get("emp_code")) == code(emp_code))
-        ]
+    team_leader_codes = {
+        code(row.get("emp_code"))
+        for row in employees
+        if "team" in text(row.get("role")) and code(row.get("emp_code"))
+    }
 
     for row in team_leaders:
         name = row.get("name")
         label = f"Team Leader {name!r}"
-        if not matching_tl_records(name=name):
-            issues.append(f"{label} does not match an Employee Directory Team Leader name.")
 
-        # Postpaid sources identify the TL by TeamLeaderName.  Prepaid
-        # sources identify the same TL by employee code; validate both against
-        # the Directory and then require one Directory row to satisfy both.
+        # Postpaid sources identify the TL by the dedicated CRM-name field.
+        # It intentionally is not compared with Employee Display Name, which
+        # users may customise.  Prepaid identifies the TL by employee code.
         postpaid_name_fields = ("pd_adl_name_key", "pd_adtv_name_key")
         prepaid_code_fields = ("pp_adl_emp_code", "pp_adtv_emp_code")
-        postpaid_names = []
-        prepaid_codes = []
         for field in postpaid_name_fields:
             value = row.get(field)
             if not str(value or "").strip():
                 issues.append(f"{label} is missing required postpaid TL-name key {field}.")
-            elif not matching_tl_records(name=value):
-                issues.append(f"{label} postpaid TL-name key {field}={value!r} is not in the Employee Directory.")
-            else:
-                postpaid_names.append(value)
         for field in prepaid_code_fields:
             value = row.get(field)
             if not str(value or "").strip():
                 issues.append(f"{label} is missing required prepaid employee-code key {field}.")
-            elif not matching_tl_records(emp_code=value):
+            elif code(value) not in team_leader_codes:
                 issues.append(f"{label} prepaid employee-code key {field}={value!r} is not in the Employee Directory.")
-            else:
-                prepaid_codes.append(value)
-
-        if postpaid_names and prepaid_codes:
-            matches_both = [
-                record for record in team_leaders_in_directory
-                if all(person_name(record.get("name")) == person_name(value) for value in postpaid_names)
-                and all(code(record.get("emp_code")) == code(value) for value in prepaid_codes)
-            ]
-            if not matches_both:
-                issues.append(f"{label} postpaid TL-name and prepaid employee-code keys do not identify the same Directory Team Leader.")
 
     for row in acsos:
         center = row.get("center_name")
