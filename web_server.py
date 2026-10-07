@@ -65,6 +65,7 @@ from service_request_engine import (
     compute_service_request_reports,
     create_excel_output as create_sr_excel_output,
     render_sr_report_images,
+    sr_raw_path,
     sr_output_path,
     execute_automated_sr_cycle,
     is_sr_report_type,
@@ -891,7 +892,7 @@ def generate_reports(region_id: str, report_type: Optional[str] = "complaint"):
                 if not local_workbook.exists():
                     raise RuntimeError(
                         "Could not download fresh complaint data and no local complaint workbook is available. "
-                        "Check CRM credentials/connectivity or upload a Kottayam complaint workbook. "
+                        f"Check CRM credentials/connectivity or upload a {region_id} complaint workbook. "
                         f"Download error: {download_error}"
                     ) from download_error
                 df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(local_workbook)
@@ -1399,6 +1400,10 @@ def get_service_request_reports_endpoint(region_id: Optional[str] = None):
             "adtv": sections["ADTv Service Request Pending"].to_dict(orient="records"),
             "last_updated": datetime.now().isoformat(),
         }
+    except FileNotFoundError as e:
+        # No cached SR workbook on a newly installed region is normal.  The
+        # Render SR button downloads fresh data; do not show it as a failure.
+        return {"status": "NO_DATA", "adl": [], "adtv": [], "message": str(e)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1482,7 +1487,8 @@ async def upload_service_request_raw_endpoint(file: UploadFile = File(...), regi
         target_region = region_id or DEFAULT_REGION_ID
         ensure_region_directory_ready(target_region)
         suffix = Path(file.filename).suffix or ".xls"
-        target_file = DATA_DIR / f"Service Request - Raw Data{suffix}"
+        target_file = sr_raw_path(target_region, suffix)
+        target_file.parent.mkdir(parents=True, exist_ok=True)
         content = await file.read()
         target_file.write_bytes(content)
 

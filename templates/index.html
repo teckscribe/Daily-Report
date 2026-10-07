@@ -3646,6 +3646,15 @@
             badge.style.background = "#dcfce7";
             badge.style.color = "#15803d";
           }
+        } else if (data.status === "NO_DATA") {
+          srReportData = data;
+          renderSRTable('tbody-adl-sr', []);
+          renderSRTable('tbody-adtv-sr', []);
+          if (badge) {
+            badge.innerText = "No SR data yet";
+            badge.style.background = "#f1f5f9";
+            badge.style.color = "#64748b";
+          }
         } else {
           showToast(data.detail || data.message || "Failed to load SR data", "error");
         }

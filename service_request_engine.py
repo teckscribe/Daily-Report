@@ -200,33 +200,57 @@ def build_pending_report(data: pd.DataFrame) -> pd.DataFrame:
 
 # --- Data Ingestion ---
 
-def find_service_request_raw_file() -> Optional[Path]:
-    """Finds the most recent Service Request raw data Excel file."""
+def _safe_region_id(region_id: str) -> str:
+    """Validate a region ID before using it in an on-disk path."""
+    clean = str(region_id or "").strip().casefold()
+    if not re.fullmatch(r"[a-z0-9_-]+", clean):
+        raise ValueError("Invalid region ID")
+    return clean
+
+
+def sr_raw_path(region_id: str = DEFAULT_REGION_ID, suffix: str = ".xlsx") -> Path:
+    """Return the private, region-isolated Service Request workbook path."""
+    if suffix not in (".xls", ".xlsx"):
+        raise ValueError("Service Request raw workbook must be .xls or .xlsx")
+    return DATA_DIR / "regions" / _safe_region_id(region_id) / f"Service Request - Raw Data{suffix}"
+
+
+def find_service_request_raw_file(region_id: str = DEFAULT_REGION_ID) -> Optional[Path]:
+    """Find a Service Request workbook only for the selected region."""
     search_locations = [
-        DATA_DIR / "Service Request - Raw Data.xls",
-        DATA_DIR / "Service Request - Raw Data.xlsx",
-        # Compatibility only for existing manual installations.
-        BASE_DIR / "Service Request - Raw Data.xls",
-        BASE_DIR / "Service Request - Raw Data.xlsx",
+        sr_raw_path(region_id, ".xls"),
+        sr_raw_path(region_id, ".xlsx"),
     ]
     exact_matches = [p for p in search_locations if p.exists() and p.stat().st_size > 1000]
     if exact_matches:
         return max(exact_matches, key=lambda f: f.stat().st_mtime)
 
-    for search_dir in [DATA_DIR, DOWNLOADS_DIR, BASE_DIR]:
-        matches = list(search_dir.glob("Service Request*.xls*"))
-        if matches:
-            return max(matches, key=lambda f: f.stat().st_mtime)
+    # A single-region installation may continue using an older global file
+    # after upgrading.  Multi-region installations must never fall back to a
+    # shared workbook because it could belong to another region.
+    configured_regions = db_manager.get_all_regions()
+    is_single_region_install = (
+        len(configured_regions) == 1
+        and str(configured_regions[0].get("id") or "").strip().casefold()
+        == _safe_region_id(region_id)
+    )
+    if is_single_region_install:
+        legacy_locations = [
+            DATA_DIR / "Service Request - Raw Data.xls",
+            DATA_DIR / "Service Request - Raw Data.xlsx",
+            BASE_DIR / "Service Request - Raw Data.xls",
+            BASE_DIR / "Service Request - Raw Data.xlsx",
+        ]
+        legacy_matches = [p for p in legacy_locations if p.exists() and p.stat().st_size > 1000]
+        if legacy_matches:
+            return max(legacy_matches, key=lambda f: f.stat().st_mtime)
 
     return None
 
 
 def sr_output_path(filename: str, region_id: str = DEFAULT_REGION_ID) -> Path:
     """Keep output isolated by validated region ID, including for concurrent regions."""
-    import re
-    if not re.fullmatch(r"[a-z0-9_-]+", region_id):
-        raise ValueError("Invalid region ID")
-    return OUTPUT_DIR / "regions" / region_id / filename
+    return OUTPUT_DIR / "regions" / _safe_region_id(region_id) / filename
 
 
 def compute_service_request_reports(
@@ -237,11 +261,13 @@ def compute_service_request_reports(
     Reads the raw Excel workbook (ADL Postpaid, ADTv, Prepaid) and returns
     both computed pivot DataFrames.
     """
-    file_path = raw_path or find_service_request_raw_file()
+    file_path = raw_path or find_service_request_raw_file(region_id)
     if not file_path or not file_path.exists():
+        region_row = db_manager.get_region_by_id(region_id) or {}
+        region_name = str(region_row.get("name") or region_row.get("softcode_region") or region_id).strip()
         raise FileNotFoundError(
-            "Service Request raw data file not found. Use 'Upload Raw SR' to upload a current "
-            "Kottayam Service Request workbook; it will be stored privately in data/."
+            f"No Service Request raw data is available for {region_name}. Click 'Render SR' to download "
+            "fresh data, or use 'Upload Raw SR' to upload that region's workbook."
         )
 
     with pd.ExcelFile(file_path) as xl:

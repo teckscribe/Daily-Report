@@ -31,8 +31,16 @@ class ServiceRequestRegionTests(unittest.TestCase):
 
     def test_region_paths_are_separate_and_reject_traversal(self):
         self.assertNotEqual(self.sr.sr_output_path("a.jpg", "kottayam"), self.sr.sr_output_path("a.jpg", "thrissur"))
+        self.assertNotEqual(self.sr.sr_raw_path("kottayam"), self.sr.sr_raw_path("thrissur"))
         with self.assertRaises(ValueError):
             self.sr.sr_output_path("a.jpg", "../thrissur")
+        with self.assertRaises(ValueError):
+            self.sr.sr_raw_path("../thrissur")
+
+    def test_missing_raw_workbook_names_the_selected_region(self):
+        with patch.object(self.sr, "find_service_request_raw_file", return_value=None):
+            with self.assertRaisesRegex(FileNotFoundError, "Kottayam"):
+                self.sr.compute_service_request_reports(region_id="kottayam")
 
     def test_mixed_workbook_filters_all_sheets_and_allows_single_region_exports(self):
         adl = pd.DataFrame({

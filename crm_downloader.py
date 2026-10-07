@@ -473,9 +473,11 @@ def download_service_requests_from_crm(
     except Exception as exc:
         raise RuntimeError(f"Downloaded Service Request export could not be read: {exc}") from exc
 
-    output_path = DATA_DIR / "Service Request - Raw Data.xlsx"
-    temporary_path = DATA_DIR / ".Service Request - Raw Data.tmp.xlsx"
+    from service_request_engine import sr_raw_path
+    output_path = sr_raw_path(region, ".xlsx")
+    temporary_path = output_path.with_name(".Service Request - Raw Data.tmp.xlsx")
     try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         with pd.ExcelWriter(temporary_path, engine="openpyxl") as writer:
             adl_df.to_excel(writer, sheet_name="ADL Postpaid", index=False)
             adtv_df.to_excel(writer, sheet_name="ADTv Postpaid", index=False)
