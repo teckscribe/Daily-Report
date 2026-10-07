@@ -26,8 +26,9 @@ class DirectoryPreflightTests(unittest.TestCase):
             "pp_adtv_center_key": "KOTTAYAM",
         }
         self.employees = [
-            {"name": "Jitto George", "role": "Team Leader", "center_name": "Kottayam", "emp_code": "1607"},
-            {"name": "Jobin Chacko", "role": "ACSO", "center_name": "Kottayam", "emp_code": "2428"},
+            # TL complaint mapping intentionally does not depend on its
+            # current center: name + employee code are the report keys.
+            {"name": "Jitto George", "role": "Team Leader", "center_name": "Another Center", "emp_code": "1607"},
         ]
 
     @patch.object(db_manager, "get_employees")
@@ -52,7 +53,6 @@ class DirectoryPreflightTests(unittest.TestCase):
         get_employees.return_value = [{"name": "Wrong Name", "role": "Team Leader", "center_name": "Kottayam", "emp_code": "1607"}]
         issues = db_manager.validate_region_report_directory("kottayam")
         self.assertTrue(any("Jitto George" in issue for issue in issues))
-        self.assertTrue(any("Jobin Chacko" in issue for issue in issues))
 
     @patch.object(db_manager, "get_employees")
     @patch.object(db_manager, "get_acsos")
@@ -66,6 +66,29 @@ class DirectoryPreflightTests(unittest.TestCase):
         get_employees.return_value = self.employees
         issues = db_manager.validate_region_report_directory("kottayam")
         self.assertTrue(any("pd_adtv_name_key" in issue for issue in issues))
+
+    @patch.object(db_manager, "get_employees")
+    @patch.object(db_manager, "get_acsos")
+    @patch.object(db_manager, "get_team_leaders")
+    @patch.object(db_manager, "get_centers")
+    def test_center_reports_use_center_not_acso_personnel_fields(self, get_centers, get_team_leaders, get_acsos, get_employees):
+        get_centers.return_value = [self.center]
+        get_team_leaders.return_value = [self.tl]
+        get_acsos.return_value = [{**self.acso, "acso_name": "Different Person", "emp_code": "9999"}]
+        get_employees.return_value = self.employees
+        self.assertEqual(db_manager.validate_region_report_directory("kottayam"), [])
+
+    @patch.object(db_manager, "get_employees")
+    @patch.object(db_manager, "get_acsos")
+    @patch.object(db_manager, "get_team_leaders")
+    @patch.object(db_manager, "get_centers")
+    def test_unlisted_report_center_is_reported(self, get_centers, get_team_leaders, get_acsos, get_employees):
+        get_centers.return_value = [self.center]
+        get_team_leaders.return_value = [self.tl]
+        get_acsos.return_value = [{**self.acso, "center_name": "Unknown Center"}]
+        get_employees.return_value = self.employees
+        issues = db_manager.validate_region_report_directory("kottayam")
+        self.assertTrue(any("Unknown Center" in issue for issue in issues))
 
 
 if __name__ == "__main__":
