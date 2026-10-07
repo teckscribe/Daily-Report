@@ -870,10 +870,28 @@ def generate_reports(region_id: str, report_type: Optional[str] = "complaint"):
 
         # 1. Render Complaints if requested
         if r_type in ("all", "suite_all", "complaint", "complaints"):
-            df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(resolve_target_excel_path())
-            df_adl = filter_adl(df_adl, region=region_id)
-            df_adtv = filter_adtv(df_adtv, region=region_id)
-            df_prepaid = filter_prepaid(df_prepaid, region=region_id)
+            try:
+                adl_path, adtv_path, prep_path = download_from_crm(region=region_id, headless=True)
+                raw_adl = pd.read_excel(adl_path)
+                raw_adtv = pd.read_excel(adtv_path)
+                raw_prep = pd.read_csv(prep_path) if str(prep_path).endswith(".csv") else pd.read_excel(prep_path)
+                df_adl = filter_adl(raw_adl, region=region_id)
+                df_adtv = filter_adtv(raw_adtv, region=region_id)
+                df_prepaid = filter_prepaid(raw_prep, region=region_id)
+                complaint_source = "fresh CRM downloads"
+            except Exception as download_error:
+                local_workbook = Path(resolve_target_excel_path())
+                if not local_workbook.exists():
+                    raise RuntimeError(
+                        "Could not download fresh complaint data and no local complaint workbook is available. "
+                        "Check CRM credentials/connectivity or upload a Kottayam complaint workbook. "
+                        f"Download error: {download_error}"
+                    ) from download_error
+                df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(local_workbook)
+                df_adl = filter_adl(df_adl, region=region_id)
+                df_adtv = filter_adtv(df_adtv, region=region_id)
+                df_prepaid = filter_prepaid(df_prepaid, region=region_id)
+                complaint_source = f"local workbook ({local_workbook.name})"
             result = compute_report(df_adl, df_adtv, df_prepaid, region_id=region_id)
 
             df_sections = {
@@ -891,6 +909,8 @@ def generate_reports(region_id: str, report_type: Optional[str] = "complaint"):
                 "/output/ADL_ACSO_Complaint_Pending.jpg",
                 "/output/ADTv_ACSO_Complaint_Pending.jpg",
             ])
+        else:
+            complaint_source = None
 
         # 2. Render Service Requests if requested
         if r_type in ("all", "suite_all", "sr", "service_request", "sr_all"):
@@ -904,7 +924,11 @@ def generate_reports(region_id: str, report_type: Optional[str] = "complaint"):
 
         return {
             "status": "OK",
-            "message": f"Reports rendered successfully ({r_type})",
+            "message": (
+                f"Reports rendered successfully ({r_type}; {complaint_source}; "
+                f"ADL: {len(df_adl)}, ADTv: {len(df_adtv)}, Prepaid: {len(df_prepaid)})"
+                if complaint_source else f"Reports rendered successfully ({r_type})"
+            ),
             "images": rendered_images
         }
     except Exception as e:
