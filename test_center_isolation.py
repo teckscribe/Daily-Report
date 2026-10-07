@@ -16,8 +16,9 @@ class ComplaintCenterIsolationTests(unittest.TestCase):
             "prepaid_area_key": "Manarkad",
         }]
 
+    @patch.object(processor.db_manager, "get_acsos", return_value=[])
     @patch.object(processor.db_manager, "get_centers")
-    def test_similar_center_names_remain_region_isolated(self, get_centers):
+    def test_similar_center_names_remain_region_isolated(self, get_centers, _get_acsos):
         get_centers.return_value = self.centers
         adl = pd.DataFrame({
             "REGION": ["Thrissur", "Thrissur"],
@@ -40,8 +41,9 @@ class ComplaintCenterIsolationTests(unittest.TestCase):
         self.assertEqual(processor.filter_adtv(adtv, "thrissur")["SERVICEAMO"].tolist(), ["Manarkad"])
         self.assertEqual(processor.filter_prepaid(prepaid, "thrissur")["Area"].tolist(), ["Manarkad"])
 
+    @patch.object(processor.db_manager, "get_acsos", return_value=[])
     @patch.object(processor.db_manager, "get_centers")
-    def test_complaint_filters_are_exact_with_portal_style_headers(self, get_centers):
+    def test_complaint_filters_are_exact_with_portal_style_headers(self, get_centers, _get_acsos):
         get_centers.return_value = self.centers
         adl = pd.DataFrame({
             "Region": ["Thrissur"] * 3,
@@ -62,6 +64,35 @@ class ComplaintCenterIsolationTests(unittest.TestCase):
         self.assertEqual(len(processor.filter_adl(adl, "thrissur")), 2)
         self.assertEqual(len(processor.filter_adtv(adtv, "thrissur")), 1)
         self.assertEqual(len(processor.filter_prepaid(prepaid, "thrissur")), 1)
+
+    @patch.object(processor.db_manager, "get_acsos")
+    @patch.object(processor.db_manager, "get_centers")
+    def test_report_specific_acso_keys_are_accepted_before_filtering(self, get_centers, get_acsos):
+        get_centers.return_value = [{
+            "center_name": "Kottayam",
+            "adl_area_key": "Kottayam",
+            "adtv_amo_key": "Kottayam",
+            "prepaid_area_key": "Kottayam",
+        }]
+        get_acsos.return_value = [{
+            "center_name": "Kottayam",
+            "pd_adl_center_key": "Kottayam",
+            "pd_adtv_center_key": "KOTTAYAM (DA01)",
+            "pp_adl_center_key": "KOTTAYAM (PP01)",
+            "pp_adtv_center_key": "KOTTAYAM (PP01)",
+        }]
+        adtv = pd.DataFrame({
+            "REGION": ["Kottayam", "Kottayam"],
+            "SERVICEAMO": ["KOTTAYAM (DA01)", "UNMAPPED (ZZ99)"],
+            "COMPLAINTTYPE": ["Network", "Network"],
+        })
+        prepaid = pd.DataFrame({
+            "Area": ["KOTTAYAM (PP01)", "UNMAPPED (ZZ99)"],
+            "Complaint Type": ["Network", "Network"],
+        })
+
+        self.assertEqual(processor.filter_adtv(adtv, "kottayam")["SERVICEAMO"].tolist(), ["KOTTAYAM (DA01)"])
+        self.assertEqual(processor.filter_prepaid(prepaid, "kottayam")["Area"].tolist(), ["KOTTAYAM (PP01)"])
 
 
 if __name__ == "__main__":

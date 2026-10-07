@@ -59,24 +59,58 @@ def _filter_configured_centers(
     source_columns: tuple[str, ...],
     center_key: str,
 ) -> pd.DataFrame:
-    """Keep only exact center keys belonging to the selected region when available."""
+    """Keep only source keys explicitly mapped to the selected region.
+
+    A report can be configured with a CRM-specific ACSO key such as
+    ``KOTTAYAM (DA01)`` while the editable center directory still contains the
+    friendly name ``Kottayam``.  Both are valid mappings for the same region;
+    accepting their union prevents a stale duplicate center key from silently
+    dropping current tickets before report calculation.
+    """
     if df.empty or not region_id:
         return df
     try:
         center_rows = db_manager.get_centers(region_id)
     except Exception:
         return df
-    allowed_centers = {
+    center_keys = {
         str(row.get(center_key) or row.get("center_name") or "").strip().casefold()
         for row in center_rows
         if str(row.get(center_key) or row.get("center_name") or "").strip()
     }
+
+    # The final report maps its postpaid/prepaid source fields through ACSO
+    # keys. Treat those keys as first-class allowed source values too, so new
+    # regional installations remain correct even if their duplicate Centers
+    # row has not yet been edited with the portal's coded name.
+    acso_fields_by_center_key = {
+        "adl_area_key": ("pd_adl_center_key",),
+        "adtv_amo_key": ("pd_adtv_center_key",),
+        "prepaid_area_key": ("pp_adl_center_key", "pp_adtv_center_key"),
+    }
+    report_keys = set()
+    try:
+        acso_rows = db_manager.get_acsos(region_id)
+        for row in acso_rows:
+            for field in acso_fields_by_center_key.get(center_key, ()):
+                value = str(row.get(field) or "").strip()
+                if value:
+                    report_keys.add(value.casefold())
+    except Exception:
+        pass
+
+    allowed_centers = center_keys | report_keys
     source_col = next(
         (column for column in df.columns if str(column).strip().casefold() in source_columns),
         None,
     )
     if not source_col or not allowed_centers:
         return df
+    if report_keys - center_keys:
+        print(
+            f"[Center Mapping] {region_id}: accepting {len(report_keys - center_keys)} "
+            f"report-specific {center_key} value(s) while the Center directory is updated."
+        )
     return df[df[source_col].astype(str).str.strip().str.casefold().isin(allowed_centers)].copy()
 
 
