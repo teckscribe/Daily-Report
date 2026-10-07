@@ -17,7 +17,7 @@ If the Excel template is changed (new Team Leader, new Emp Code ...), update thi
 run `python verify_engine.py` to prove the engine still matches the workbook.
 """
 from dataclasses import dataclass
-from typing import List, Union
+from typing import Union
 
 from config import DEFAULT_REGION_ID
 
@@ -72,53 +72,6 @@ class AcsoRow:
     pp_adl_center_key: str   # 'Prepaid Pending'!A -> Prepaid!Z (Area)
     pp_adtv_center_key: str  # 'Prepaid Pending'!S -> Prepaid!Z (Area)
 
-
-# fmt: off
-TEAM_LEADER_ROWS: List[TeamLeaderRow] = [
-    TeamLeaderRow(4,  "Chalakudy",      "SHYAMKUMAR",        "CHALAKKUDY",            "SHYAMKUMAR",        "SHYAMKUMAR",        "SHYAMKUMAR",        980,  980),
-    TeamLeaderRow(5,  "Chalakudy",      "SIJU K.J",          "CHALAKKUDY",            "SIJU K.J",          "SIJU K.J",          "SIJU K.J",          2874, 2874),
-    # NOTE: row 6 displays "Remesh.R" but the intermediate sheets still count "Anil V.U" / Emp 656.
-    TeamLeaderRow(6,  "Guruvayoor",     "Remesh.R",          "GURUVAYUR (HE01)",      "Remesh.R",          "Anil V.U",          "Anil V.U",          656,  656),
-    TeamLeaderRow(7,  "Irinjalakuda",   "Nithin Hari",       "IRINJALAKUDA",          "Nithin Hari",       "Nithin Hari",       "Nithin Hari",       882,  882),
-    TeamLeaderRow(8,  "Irinjalakuda",   "SHIBIN K B",        "IRINJALAKUDA",          "SHIBIN K B",        "SHIBIN K B",        "SHIBIN K B",        1423, 1423),
-    TeamLeaderRow(9,  "kodungalloor",   "LINU E A",          "KODUNGALLUR",           "LINU E A",          "LINU E A",          "LINU E A",          1462, 1462),
-    TeamLeaderRow(10, "kodungalloor",   "SINJO JOSEPH",      "KODUNGALLUR",           "SINJO JOSEPH",      "SINJO JOSEPH",      "SINJO JOSEPH",      1680, 1680),
-    TeamLeaderRow(11, "Kunnamkulam",    "RAJU K K",          "KUNNAMKULAM (HE02)",    "RAJU K K",          "RAJU K K",          "RAJU K K",          1800, 1800),
-    TeamLeaderRow(12, "Kunnamkulam",    "RAKESH.V.R",        "KUNNAMKULAM (HE02)",    "RAKESH.V.R",        "RAKESH.V.R",        "RAKESH.V.R",        2614, 2614),
-    TeamLeaderRow(13, "Manarkad",       "Santhosh E.B",      "MANARKAD",              "Santhosh E.B",      "Santhosh E.B",      "Santhosh E.B",      1780, 1780),
-    TeamLeaderRow(14, "Olavakkod",      "Sreenath K.S",      "Olavakkod",             "Sreenath K.S",      "Sreenath K.S",      "Sreenath K.S",      2354, 2354),
-    TeamLeaderRow(15, "Ottapalam",      "Muhammed Kabeer  ", "OTTAPALAM",             "Muhammed Kabeer  ", "Muhammed Kabeer  ", "Muhammed Kabeer  ", 2810, 2810),
-    TeamLeaderRow(16, "Ottapalam",      "Shameer P.M",       "OTTAPALAM",             "Shameer P.M",       "Shameer P.M",       "Shameer P.M",       2130, 2130),
-    TeamLeaderRow(17, "Palakkad",       "Praveen Kumar P",   "PALAKKAD 1 (JA01)",     "Praveen Kumar P",   "Praveen Kumar P",   "Praveen Kumar P",   1877, 1877),
-    TeamLeaderRow(18, "Palakkad",       "Rajeev C",          "PALAKKAD 1 (JA01)",     "Rajeev C",          "Rajeev C",          "Rajeev C",          1428, 1428),
-    TeamLeaderRow(19, "Pattambi",       "Prasanth P.V",      "PATTAMBI",              "Prasanth P.V",      "Prasanth P.V",      "Prasanth P.V",      2041, 2041),
-    TeamLeaderRow(20, "Thathamangalam", "Pradeep U N",       "THATHAMANGALAM",        "Pradeep U N",       "Pradeep U N",       "Pradeep U N",       2049, 2049),
-    TeamLeaderRow(21, "Trichur North",  "Jithin .P  ",       "THRISSUR NORTH (HA01)", "Jithin .P  ",       "Jithin .P  ",       "Jithin .P  ",       2699, 2699),
-    TeamLeaderRow(22, "Trichur North",  "JUDITH JOSEPH",     "THRISSUR NORTH (HA01)", "JUDITH JOSEPH",     "JUDITH JOSEPH",     "JUDITH JOSEPH",     2728, 2728),
-    TeamLeaderRow(23, "Trichur North",  "VISAL N.V",         "THRISSUR NORTH (HA01)", "VISAL N.V",         "VISAL N.V",         "VISAL N.V",         2577, 2577),
-    TeamLeaderRow(24, "Trichur South",  "BINEESH BABU",      "THRISSUR SOUTH (HA02)", "BINEESH BABU",      "BINEESH BABU",      "BINEESH BABU",      2598, 2598),
-    TeamLeaderRow(25, "Trichur South",  "Sony Joseph",       "THRISSUR SOUTH (HA02)", "Sony Joseph",       "Sony Joseph",       "Sony Joseph",       2215, 2215),
-]
-
-ACSO_ROWS: List[AcsoRow] = [
-    #      pd  fin  ADL center        ADL ACSO                ADTv center              ADTv ACSO               PD ADL key        PD ADTv key              PP ADL key        PP ADTv key
-    AcsoRow(32, 33, "Chalakudy",      "Arun .A.R",            "CHALAKKUDY",            "Arun .A.R",            "Chalakudy",      "CHALAKKUDY",            "Chalakudy",      "Chalakudy"),
-    AcsoRow(33, 34, "Guruvayoor",     "Abhilash .P.Verghese", "GURUVAYUR (HE01)",      "Abhilash .P.Verghese", "Guruvayoor",     "GURUVAYUR (HE01)",      "Guruvayoor",     "Guruvayoor"),
-    AcsoRow(34, 35, "Irinjalakuda",   "Midhun Mohan",         "IRINJALAKUDA",          "Midhun Mohan",         "Irinjalakuda",   "IRINJALAKUDA",          "Irinjalakuda",   "Irinjalakuda"),
-    AcsoRow(35, 36, "kodungalloor",   "Sunilraj",             "KODUNGALLUR",           "Sunilraj",             "kodungalloor",   "KODUNGALLUR",           "kodungalloor",   "kodungalloor"),
-    AcsoRow(36, 37, "Kunnamkulam",    "Remesh.R",             "KUNNAMKULAM (HE02)",    "Remesh.R",             "Kunnamkulam",    "KUNNAMKULAM (HE02)",    "Kunnamkulam",    "Kunnamkulam"),
-    AcsoRow(37, 38, "Manarkad",       "Manikandan .M.P",      "MANARKAD",              "Manikandan .M.P",      "Manarkad",       "MANARKAD",              "Manarkad",       "Manarkad"),
-    # NOTE rows 38-40: ADL and ADTv tables list centres in a different order, and the ADTv
-    # prepaid keys (Prepaid Pending col S) differ from the ADTv postpaid keys (Pending Days col Q).
-    AcsoRow(38, 39, "Olavakkod",      "Mohammed Navaf",       "OTTAPALAM",             "Binoy .B",             "Olavakkod",      "OTTAPALAM",             "Olavakkod",      "Ottapalam"),
-    AcsoRow(39, 40, "Ottapalam",      "Binoy .B",             "PALAKKAD 1 (JA01)",     "Mohammed Navaf",       "Ottapalam",      "PALAKKAD 1 (JA01)",     "Ottapalam",      "Palakkad"),
-    AcsoRow(40, 41, "Palakkad",       "Mohammed Navaf",       "PALAKKAD 2 (JA02)",     "Mohammed Navaf",       "Palakkad",       "PALAKKAD 2 (JA02)",     "Palakkad",       "Olavakkod"),
-    AcsoRow(41, 42, "Pattambi",       "Haridasan .T.P",       "PATTAMBI",              "Haridasan .T.P",       "Pattambi",       "PATTAMBI",              "Pattambi",       "Pattambi"),
-    AcsoRow(42, 43, "Thathamangalam", "Mohammed Navaf",       "THATHAMANGALAM",        "Mohammed Navaf",       "Thathamangalam", "THATHAMANGALAM",        "Thathamangalam", "Thathamangalam"),
-    AcsoRow(43, 44, "Trichur North",  "Johnson K.C",          "THRISSUR NORTH (HA01)", "Johnson K.C",          "Trichur North",  "THRISSUR NORTH (HA01)", "Trichur North",  "Trichur North"),
-    AcsoRow(44, 45, "Trichur South",  "Narayanan .P",         "THRISSUR SOUTH (HA02)", "Narayanan .P",         "Trichur South",  "THRISSUR SOUTH (HA02)", "Trichur South",  "Trichur South"),
-]
-# fmt: on
 
 # Source column headers (row 1 of each input sheet) and their Excel letters in the template.
 ADL_COLS = {"team": "TEAMLEADERNAME", "center": "AREA", "days": "DAYSELAPSED"}            # AU, AE, AL
