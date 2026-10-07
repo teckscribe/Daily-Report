@@ -64,7 +64,7 @@ def resolve_target_excel_path() -> str:
     """
     Robustly resolves a valid, existing Excel master workbook path.
     1. Checks TARGET_EXCEL_PATH in .env (if it exists on current filesystem).
-    2. Checks repo root 'Daily Complint Tracker.xls' (the primary master source tracked in git).
+    2. Checks the installation-local data folder for the uploaded master workbook.
     3. Checks output and fallback locations.
     Prevents [Errno 2] No such file or directory when running across Windows and Linux.
     """
@@ -82,11 +82,12 @@ def resolve_target_excel_path() -> str:
                 return str(rel_p)
 
     candidates = [
-        BASE_DIR / "Daily Complint Tracker.xls",
+        DATA_DIR / "Daily Complint Tracker.xls",
         OUTPUT_DIR / "Daily_Complaint_Pending_Report.xlsx",
         OUTPUT_DIR / "Daily_Complaint_Pending_Report.xls",
         BASE_DIR / "output" / "Daily_Complaint_Pending_Report.xlsx",
-        DATA_DIR / "Daily Complint Tracker.xls",
+        # Compatibility only for existing installations. New uploads are stored in data/.
+        BASE_DIR / "Daily Complint Tracker.xls",
         BASE_DIR / "Daily Complint pending Report.xls",
     ]
     if sys.platform == "win32":
@@ -101,7 +102,7 @@ def resolve_target_excel_path() -> str:
         if c.exists():
             return str(c.resolve())
 
-    return str((BASE_DIR / "Daily Complint Tracker.xls").resolve())
+    return str((DATA_DIR / "Daily Complint Tracker.xls").resolve())
 
 TARGET_EXCEL_PATH = resolve_target_excel_path()
 

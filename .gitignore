@@ -25,9 +25,11 @@ data/*Pending*
 *Complaint*.xls*
 Employee_Directory_*.xlsx
 *Directory_Thrissur*.xlsx
-!Daily Complint Tracker.xls
-!Employee_Directory_Template.xlsx
-!Service Request - Raw Data.xls
+# Installation-specific Excel files. Never restore another region's data on pull.
+Daily Complint Tracker.xls
+Service Request - Raw Data.xls
+Service Request - Raw Data.xlsx
+Employee_Directory_Template.xlsx
 
 # Temporary generated reports & working copies
 output/*.jpg

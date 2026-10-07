@@ -36,7 +36,7 @@ from config import (
 import db_manager
 
 # --- Paths ---
-SR_RAW_EXCEL_PATH = BASE_DIR / "Service Request - Raw Data.xls"
+SR_RAW_EXCEL_PATH = DATA_DIR / "Service Request - Raw Data.xls"
 SR_EXCEL_REPORT_PATH = OUTPUT_DIR / "Daily_Service_Request_Pending_Report.xlsx"
 ADL_SR_REPORT_IMAGE_PATH = OUTPUT_DIR / "ADL_SR_Pending.jpg"
 ADTV_SR_REPORT_IMAGE_PATH = OUTPUT_DIR / "ADTv_SR_Pending.jpg"
@@ -199,10 +199,11 @@ def build_pending_report(data: pd.DataFrame) -> pd.DataFrame:
 def find_service_request_raw_file() -> Optional[Path]:
     """Finds the most recent Service Request raw data Excel file."""
     search_locations = [
-        BASE_DIR / "Service Request - Raw Data.xls",
-        BASE_DIR / "Service Request - Raw Data.xlsx",
         DATA_DIR / "Service Request - Raw Data.xls",
         DATA_DIR / "Service Request - Raw Data.xlsx",
+        # Compatibility only for existing manual installations.
+        BASE_DIR / "Service Request - Raw Data.xls",
+        BASE_DIR / "Service Request - Raw Data.xlsx",
     ]
     for p in search_locations:
         if p.exists() and p.stat().st_size > 1000:

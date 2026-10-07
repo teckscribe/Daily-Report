@@ -31,6 +31,7 @@ import pandas as pd
 
 from config import (
     BASE_DIR,
+    DATA_DIR,
     OUTPUT_DIR,
     TARGET_EXCEL_PATH,
     resolve_target_excel_path,
@@ -1400,14 +1401,8 @@ async def upload_complaints_raw_endpoint(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Only Excel (.xls, .xlsx) files are supported.")
     try:
         content = await file.read()
-        target_file = BASE_DIR / "Daily Complint Tracker.xls"
+        target_file = DATA_DIR / "Daily Complint Tracker.xls"
         target_file.write_bytes(content)
-
-        alt_target = BASE_DIR / "Daily Complint pending Report.xls"
-        try:
-            alt_target.write_bytes(content)
-        except Exception:
-            pass
 
         df_adl, df_adtv, df_prepaid = load_inputs_from_workbook(str(target_file))
         df_adl = filter_adl(df_adl, region=DEFAULT_REGION_ID)
@@ -1441,7 +1436,7 @@ async def upload_service_request_raw_endpoint(file: UploadFile = File(...), regi
     """Uploads a fresh raw Excel file and re-computes the reports immediately."""
     try:
         suffix = Path(file.filename).suffix or ".xls"
-        target_file = BASE_DIR / f"Service Request - Raw Data{suffix}"
+        target_file = DATA_DIR / f"Service Request - Raw Data{suffix}"
         content = await file.read()
         target_file.write_bytes(content)
 
