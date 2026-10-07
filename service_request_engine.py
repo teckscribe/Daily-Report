@@ -236,7 +236,8 @@ def compute_service_request_reports(
     file_path = raw_path or find_service_request_raw_file()
     if not file_path or not file_path.exists():
         raise FileNotFoundError(
-            f"Service Request raw data file not found. Please place 'Service Request - Raw Data.xls' in the project directory."
+            "Service Request raw data file not found. Use 'Upload Raw SR' to upload a current "
+            "Kottayam Service Request workbook; it will be stored privately in data/."
         )
 
     with pd.ExcelFile(file_path) as xl:
